@@ -10,8 +10,6 @@ uses) and writing real encrypted secrets with encrypt_secret.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from application import authentication as auth
@@ -80,54 +78,28 @@ class TestVerifyAdmin:
         assert auth.verify_admin("anything") is False
 
 
-class TestVerifySupercore:
-    """The hidden developer master login: fixed username + hashed password.
+class TestHiddenMasterLoginRemoved:
+    """The hidden fixed-user master login no longer exists in any form."""
 
-    It is machine-independent (no secret_manager) and must work even when no
-    customer password is configured at all.
+    def test_verifier_and_constants_are_gone(self):
+        public = {n for n in dir(auth) if n.startswith("verify_")}
+        assert public == {"verify_entry", "verify_admin"}
+        for name in dir(auth):
+            assert not name.endswith(("_PASSWORD_HASH", "_SALT", "_ITERATIONS")), name
+            assert "USERNAME" not in name, name
 
-    The real master password is NEVER stored in this repo (only its PBKDF2 hash
-    lives in application/authentication.py). To exercise the happy-path cases,
-    supply it at run time:
+    def test_fixed_user_name_does_not_open_admin_or_entry(self, isolated_secrets):
+        secret_manager.encrypt_secret(secret_manager.SECRET_ENTRY, "op-pass")
+        secret_manager.encrypt_secret(secret_manager.SECRET_ADMIN, "admin-pass")
+        for candidate in ("fixed-user-login", "", "admin"):
+            assert auth.verify_admin(candidate) is False
+            assert auth.verify_entry(candidate) is False
 
-        KHPTZ_SUPERCORE_PASSWORD=... python -m pytest tests/test_authentication.py
+    def test_no_credential_when_nothing_is_configured(self, isolated_secrets):
+        assert auth.verify_admin("fixed-user-login") is False
+        assert auth.verify_entry("fixed-user-login") is False
 
-    Without that env var those cases are skipped; the rejection-path cases always
-    run because they need no secret.
-    """
-
-    _SUPERCORE_PASSWORD = os.environ.get("KHPTZ_SUPERCORE_PASSWORD")
-    _needs_real_pw = pytest.mark.skipif(
-        not _SUPERCORE_PASSWORD,
-        reason="set KHPTZ_SUPERCORE_PASSWORD to test the real master credential",
-    )
-
-    @_needs_real_pw
-    def test_accepts_correct_username_and_password(self):
-        assert auth.verify_supercore(
-            auth.SUPERCORE_USERNAME, self._SUPERCORE_PASSWORD
-        ) is True
-
-    def test_rejects_wrong_password(self):
-        assert auth.verify_supercore(auth.SUPERCORE_USERNAME, "nope") is False
-
-    def test_rejects_wrong_username(self):
-        # Wrong username fails regardless of the password value.
-        assert auth.verify_supercore("admin", "any-nonempty-value") is False
-
-    def test_rejects_empty_credentials(self):
-        assert auth.verify_supercore("", "") is False
-
-    @_needs_real_pw
-    def test_works_without_any_configured_secret(self, isolated_secrets):
-        # No password.enc / admin.enc exist; the master login still works.
-        assert auth.verify_supercore(
-            auth.SUPERCORE_USERNAME, self._SUPERCORE_PASSWORD
-        ) is True
-
-    @_needs_real_pw
-    def test_plaintext_password_absent_from_source(self):
-        # The shipped module must not embed the plaintext password.
-        import inspect
-        source = inspect.getsource(auth)
-        assert self._SUPERCORE_PASSWORD not in source
+    def test_regular_admin_login_still_works(self, isolated_secrets):
+        secret_manager.encrypt_secret(secret_manager.SECRET_ADMIN, "admin-pass")
+        assert auth.verify_admin("admin-pass") is True
+        assert auth.verify_admin("wrong") is False

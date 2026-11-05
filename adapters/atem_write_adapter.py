@@ -25,6 +25,8 @@
 #   Each call is a deliberate operator action.
 
 from __future__ import annotations
+from adapters.atem_values import source_number
+
 
 import logging
 import threading
@@ -168,7 +170,7 @@ class ATEMWriteAdapter:
         if atem is None:
             return None
         try:
-            return int(atem.programInput[0].videoSource)
+            return source_number(atem.programInput[0].videoSource)
         except Exception as exc:
             # Transient read error — do NOT disconnect; connection may be fine.
             logger.debug("[ATEM-write] get_program_input transient error: %s", exc)
@@ -179,7 +181,7 @@ class ATEMWriteAdapter:
         if atem is None:
             return None
         try:
-            return int(atem.previewInput[0].videoSource)
+            return source_number(atem.previewInput[0].videoSource)
         except Exception as exc:
             logger.debug("[ATEM-write] get_preview_input transient error: %s", exc)
             return None
@@ -195,7 +197,7 @@ class ATEMWriteAdapter:
                 message=self._last_error,
             )
         try:
-            _ = int(atem.programInput[0].videoSource)
+            _ = source_number(atem.programInput[0].videoSource)
             return AtemCommandResult.success(
                 "test_connection",
                 duration_ms=(time.monotonic() - t0) * 1000,
@@ -234,8 +236,7 @@ class ATEMWriteAdapter:
                 target=input_id,
             )
         try:
-            PyATEMMax = self._pyatemmax
-            atem.setPreviewInputVideoSource(0, PyATEMMax.ATEMVideoSources(input_id))
+            atem.setPreviewInputVideoSource(0, input_id)
             logger.info("[ATEM-write] set_preview_input → %d", input_id)
             return AtemCommandResult.success(
                 "set_preview_input", target=input_id,

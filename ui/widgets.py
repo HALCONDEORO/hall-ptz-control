@@ -37,7 +37,7 @@
 
 import logging
 import math
-import os
+from pathlib import Path
 from typing import ClassVar, Optional  # reemplaza `int | None` (sintaxis 3.10+)
 
 logger = logging.getLogger(__name__)
@@ -52,9 +52,10 @@ from PyQt5.QtWidgets import (
 from config import BUTTON_COLOR
 
 # Comprobación única al arranque — seat.svg es un asset estático
-_SEAT_SVG_EXISTS = os.path.exists("seat.svg")
+_UI_ASSET_DIR = Path(__file__).resolve().parent
+_SEAT_SVG_EXISTS = (_UI_ASSET_DIR / "seat.svg").exists()
 _SEAT_SVG_BG     = (
-    "background-image: url(seat.svg); background-repeat: no-repeat; background-position: center;"
+    f"background-image: url('{(_UI_ASSET_DIR / 'seat.svg').as_posix()}'); background-repeat: no-repeat; background-position: center;"
     if _SEAT_SVG_EXISTS else ""
 )
 
@@ -554,8 +555,8 @@ class GoButton(PresetActionMixin, DragDropButton, QPushButton):
         Usa seat.svg como fondo si existe; falla silenciosamente a color sólido.
         """
         if self._call_mode:
-            svg = "seat_occupied.svg" if self.assigned_name else "seat_call.svg"
-            bg = f"background-image: url({svg}); background-repeat: no-repeat; background-position: center;"
+            svg = (_UI_ASSET_DIR / ("seat_occupied.svg" if self.assigned_name else "seat_call.svg")).as_posix()
+            bg = f"background-image: url('{svg}'); background-repeat: no-repeat; background-position: center;"
             border = "border: none;"
             text_color = "white" if self.assigned_name else BUTTON_COLOR
         elif _SEAT_SVG_EXISTS:

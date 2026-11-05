@@ -151,7 +151,7 @@ class SessionService:
         t.start()
         return t
 
-    def _power_on_all(self) -> None:
+    def _power_on_all(self, session_id: Optional[str] = None) -> None:
         """Power ON secuencial de todas las cámaras (logging por fallo).
 
         Contrato de cancelación del arranque: un STOP del operador (o un fallo
@@ -161,7 +161,7 @@ class SessionService:
         comandos de encendido sobre una cámara en estado desconocido.
         """
         for cam_id in self._camera_ids:
-            if not self._active:
+            if not self._active or (session_id is not None and self._session_id != session_id):
                 # Sesión terminada (o STOP global) mientras encendía la anterior.
                 logger.info("SessionService: arranque cancelado antes de %s", cam_id)
                 return
@@ -186,7 +186,8 @@ class SessionService:
         esperarlo con join().
         """
         t = threading.Thread(
-            target=self._power_on_all, daemon=True, name="SessionPowerOn")
+            target=self._power_on_all, args=(self._session_id,),
+            daemon=True, name="SessionPowerOn")
         t.start()
         return t
 

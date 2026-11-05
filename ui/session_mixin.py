@@ -55,6 +55,7 @@ class SessionController:
 
     def __init__(self, window):
         self._w = window
+        self._session_generation = 0
 
     def ToggleSession(self):
         """
@@ -73,6 +74,8 @@ class SessionController:
         """
         if not self._w.session_active:
             # ── Arrancar sesión ───────────────────────────────────────────
+            self._session_generation += 1
+            generation = self._session_generation
             self._w.session_active = True
             self._w._record_activity()       # resetea el contador de inactividad
             self._w._reset_watchdog_state()  # restaura caps y reintentos
@@ -93,7 +96,7 @@ class SessionController:
             # para inicializarse. En sim las cámaras son falsas → 1 s es suficiente.
             import adapters.sim_mode as _sm
             delay_ms = 1000 if _sm.is_active() else 8000
-            QtCore.QTimer.singleShot(delay_ms, self._session_home)
+            QtCore.QTimer.singleShot(delay_ms, lambda: self._session_home(generation))
 
         else:
             # ── Terminar sesión ───────────────────────────────────────────
@@ -111,6 +114,7 @@ class SessionController:
         Single shutdown path shared by manual End Session and inactivity auto
         power-off (#194). reason is logged so operators can distinguish the two.
         """
+        self._session_generation += 1
         logger.info("Session shutdown: reason=%s", reason)
 
         # Standby via bus → Controller → SessionService.end(reason)
@@ -126,11 +130,13 @@ class SessionController:
         self._w.SessionStatus.setText('OFF')
         self._w.SessionStatus.setStyleSheet("font: bold 12px; color: #8b1a1a")
 
-    def _session_home(self):
+    def _session_home(self, generation=None):
         """
         Llamado por QTimer 8 s después del Power ON.
         Cam1 → posición chairman (preset 1). Cam2 → Home.
         """
+        if generation is not None and generation != self._session_generation:
+            return
         if not self._w.session_active or getattr(self._w, "_shutting_down", False):
             return
 

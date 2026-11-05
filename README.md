@@ -74,12 +74,16 @@ On a fresh Raspberry Pi OS Bullseye system (the Pi 5 path is untested, see [Requ
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
-sudo bash install_khptz_rpi.sh --wizard-user khptz
+sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
 
+Run this from the Pi desktop as your normal user. `--wizard-user` names that
+existing desktop user, not the service account created by the installer.
+
 The installer creates the `khptz` service user, installs dependencies, sets up the
-systemd service and the autostart session, and finishes with the first-run setup
-wizard (camera IPs, seat layout, operator password).
+systemd service and the autostart session, and prints the next action: reboot and log into the desktop, or run
+`khptz setup` there. The first-run wizard collects camera IPs, seat layout
+and login settings. Follow the current wizard prompts; do not use a default password.
 
 The full guide — prerequisites, validation, backup/restore, rollback and
 troubleshooting — is [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).
@@ -184,12 +188,17 @@ En un sistema Raspberry Pi OS Bullseye recién instalado (el camino Pi 5 está s
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
-sudo bash install_khptz_rpi.sh --wizard-user khptz
+sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
 
+Ejecuta la orden en el escritorio de la Pi como tu usuario normal.
+`--wizard-user` es ese usuario de escritorio ya existente, no la cuenta
+de servicio que crea el instalador.
+
 El instalador crea el usuario de servicio `khptz`, instala dependencias, configura el
-servicio systemd y el arranque automático, y termina con el asistente de primera
-configuración (IPs de cámaras, plano de asientos, contraseña de operador).
+servicio systemd y el arranque automático, e indica el siguiente paso: reiniciar e iniciar sesión en el escritorio,
+o ejecutar allí `khptz setup`. El asistente recoge las IPs, el plano de asientos
+y las opciones de acceso. Sigue sus indicaciones; no uses una contraseña por defecto.
 
 La guía completa — requisitos, validación, copia de seguridad/restauración, rollback y
 resolución de problemas — está en [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).

@@ -109,7 +109,7 @@ class CameraManager:
                 else:
                     self._cam2_ip = new_ip
                 if old_ip != new_ip:
-                    self._zoom_cache[cam_key] = None
+                    self._reset_camera_state(cam_key)
             old_worker = self._workers.pop(old_ip, None)
         if old_worker is not None:
             old_worker.stop()
@@ -119,6 +119,26 @@ class CameraManager:
         # until the operator happened to trigger a camera action.
         if new_ip:
             self.worker(new_ip)
+
+    def _reset_camera_state(self, key: int) -> None:
+        """Discard observations belonging to a different endpoint identity."""
+        self._zoom_cache[key] = None
+        self.backlight_on[key] = False
+        self.focus_mode[key] = "auto"
+        self.exposure_level[key] = 0
+        self.ae_mode[key] = "auto"
+
+    def update_camera_visca_id(self, key: int, new_id: str) -> None:
+        if key not in (1, 2):
+            raise ValueError("Unknown camera key")
+        with self._workers_lock, self._inflight_lock:
+            old_id = self.cam_id_for_key(key)
+            if key == 1:
+                self._cam1_id = new_id
+            else:
+                self._cam2_id = new_id
+            if old_id != new_id:
+                self._reset_camera_state(key)
 
     def reconnect_all(self) -> None:
         """Cierra los sockets activos; los workers reconectan solos en el próximo heartbeat."""

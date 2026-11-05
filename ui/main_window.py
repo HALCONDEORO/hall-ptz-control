@@ -64,6 +64,7 @@ from adapters.atem_dispatcher import ATEMDispatcher
 from ptz.visca import CameraManager
 from ui.widgets import GoButton, SpecialDragButton, PlatformPresetButton
 from ui.names_panel import NamesPanel
+from ui.camera_display_mixin import CameraDisplayMixin
 from ui.session_mixin import SessionController
 from ui.dialogs_mixin import DialogsController
 from ui.config_dialog import ConfigDialog
@@ -122,7 +123,7 @@ def _load_second_platform_enabled() -> bool:
         return False
 
 
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, CameraDisplayMixin):
     """Ventana principal 1920x1080 px."""
 
     atem_state_changed = pyqtSignal(object)
@@ -272,11 +273,6 @@ class MainWindow(QMainWindow):
         # True sólo tras completar splash: en login/splash no se ofrece opción
         # de apagar cámaras porque la sesión de trabajo no ha comenzado.
         self._normal_work_active = False
-        # True cuando la sesión se autenticó con la credencial maestra Supercore.
-        # Supercore (rol dev oculto) y Admin son ambos SYSTEM_ADMIN, así que este
-        # flag es la única forma de distinguirlos en runtime (p.ej. para permitir
-        # que Supercore gestione todas las contraseñas sin poner la actual).
-        self._session_is_supercore = False
         self._supervisor = self._build_supervisor()
 
     # ─────────────────────────────────────────────────────────────────────
@@ -323,9 +319,9 @@ class MainWindow(QMainWindow):
         from runtime.path_resolver import RuntimePathResolver as _rpr
 
         # Determinar rol post-login:
-        # • Login real (operador por cuenta atrás, admin o supercore) → el rol lo
+        # • Login real (operador por cuenta atrás o admin) → el rol lo
         #   decide la credencial usada, expuesto en login_overlay.authenticated_role
-        #   (Operador→CAMERA_OPERATOR, Admin/Supercore→SYSTEM_ADMIN).
+        #   (Operador→CAMERA_OPERATOR, Admin→SYSTEM_ADMIN).
         # • Sim / sin login real → respeta el rol persistido en access_mode.json.
         # El flag legacy de 'restart as admin' solo se consume aquí; el modo de
         # login inicial ya lo decidió LoginScreen a partir de ese flag.
@@ -337,11 +333,6 @@ class MainWindow(QMainWindow):
                 pass
         if getattr(self._login_overlay, 'authenticated', False):
             self._access_mode_svc.set_mode(self._login_overlay.authenticated_role)
-        # Recordar si la sesión entró como Supercore (maestro) para toda su vida.
-        self._session_is_supercore = (
-            getattr(self._login_overlay, '_mode', '') == 'supercore'
-        )
-
         # Sincronizar visibilidad de botones de panel con el modo efectivo.
         # Necesario aquí porque el modo puede haber cambiado respecto al que
         # leyó _update_mode_buttons() durante la construcción del panel.
@@ -768,26 +759,6 @@ class MainWindow(QMainWindow):
             return
         (self.Cam1 if cam_key == 1 else self.Cam2).set_connected(ok)
         self._update_controls_visibility()
-
-    def _refresh_zoom(self) -> None:
-        """Refresh the zoom slider from cache or network query via CameraPort."""
-        from PyQt5.QtCore import QMetaObject, Qt, Q_ARG  # noqa: PLC0415
-        cam_key = 1 if self.Cam1.isChecked() else 2
-        self._camera_port.refresh_zoom_display(
-            cam_key,
-            lambda pct: QMetaObject.invokeMethod(
-                self, "_set_zoom_feedback", Qt.QueuedConnection, Q_ARG(int, pct)
-            ),
-        )
-
-    def _on_cam_connected(self, ok: bool, ip: str) -> None:
-        if not ok:
-            return
-        try:
-            cam_key = self._cameras.cam_key(ip)
-        except ValueError:
-            cam_key = 1  # safe fallback for unexpected IPs
-        self._camera_port.async_refresh_ae_mode(cam_key, self._update_exposure_ui)
 
     def _on_visca_speed_error(self, ip: str, cmd_type: str) -> None:
         if cmd_type not in self._watchdog_state:

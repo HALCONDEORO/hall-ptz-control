@@ -52,13 +52,18 @@ class TestVersionCommand:
         out = capsys.readouterr().out
         assert APP_NAME in out
 
-    def test_prints_version_number(self, capsys):
+    @pytest.mark.parametrize("commit", ["123abcd", "fbdcdbc"])
+    def test_prints_version_number(self, capsys, monkeypatch, commit):
+        from app_version import read_version
+
+        monkeypatch.setattr("runtime.build_info._read_git_commit", lambda _root: commit)
         main(["version"])
         out = capsys.readouterr().out
-        # Version should look like digits-and-dots, e.g. 3.7.0
-        parts = out.strip().split()
-        version = parts[-1]
-        assert any(c.isdigit() for c in version)
+        # The final token is build metadata, which may contain no digits.
+        version = out.removeprefix(APP_NAME).strip().split()[0]
+        assert version == read_version()
+        assert any(char.isdigit() for char in version)
+        assert f"({commit})" in out
 
     def test_profile_flag_is_applied_to_version(self, capsys, monkeypatch):
         monkeypatch.delenv("KHPTZ_PROFILE", raising=False)

@@ -62,7 +62,7 @@ class ChangePasswordDialog(QDialog):
             raise ValueError(f"Unknown password target: {target!r}")
         self._target = target
         # La contraseña actual solo se pide al cambiar la PROPIA. Cuando se resetea
-        # (admin sobre el operador, o supercore sobre cualquiera) no hay campo
+        # (admin sobre el operador) no hay campo
         # "Current" ni verificación.
         self._require_current = require_current
         self.setWindowTitle(self._LABELS[target][0])
@@ -302,7 +302,6 @@ class DialogsController:
         """Open the change-password dialog for *target* and persist on accept.
 
         La contraseña actual solo se exige al cambiar la PROPIA credencial:
-          • Supercore (maestro) gestiona todas sin poner la actual.
           • Admin resetea la del operador sin conocerla; para la suya (admin) sí.
         """
         if target == "admin" and not admin_password_change_available():
@@ -313,8 +312,7 @@ class DialogsController:
                 'in docs/HARDENING2.md during approved maintenance.',
             )
             return
-        is_supercore = getattr(self._w, '_session_is_supercore', False)
-        require_current = (not is_supercore) and (target == "admin")
+        require_current = target == "admin"
         dlg = ChangePasswordDialog(self._w, target=target, require_current=require_current)
         if dlg.exec_() != QDialog.Accepted:
             return

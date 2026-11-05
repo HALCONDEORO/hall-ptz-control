@@ -18,7 +18,7 @@ from app_version import APP_NAME
 from config import Contact
 from domain.call_set_policy import OperatingMode
 from runtime.secret_manager import password_is_configured
-from application.authentication import verify_admin, verify_entry, verify_supercore
+from application.authentication import verify_admin, verify_entry
 from application.login_audit import record_login_event, read_last_login_timestamp
 
 logger = logging.getLogger(__name__)
@@ -26,15 +26,10 @@ logger = logging.getLogger(__name__)
 # Login mode → persistent role granted on success.
 #   operator   → CAMERA_OPERATOR (limited: PTZ, names, reconnect)
 #   admin      → SYSTEM_ADMIN    (full access)
-#   supercore  → SYSTEM_ADMIN    (hidden developer master; full access)
 _MODE_ROLE = {
     'operator':  OperatingMode.CAMERA_OPERATOR,
     'admin':     OperatingMode.SYSTEM_ADMIN,
-    'supercore': OperatingMode.SYSTEM_ADMIN,
 }
-
-# Number of quick taps on the logo that reveals the hidden Supercore login.
-_SUPERCORE_TAPS = 5
 
 
 # Persistent login-audit read/write lives in application/login_audit.py so the
@@ -71,14 +66,10 @@ class LoginScreen(QWidget):
         # Modo de login y rol resultante.
         #   'operator'  (defecto) → CAMERA_OPERATOR
         #   'admin'               → SYSTEM_ADMIN
-        #   'supercore' (oculto)  → SYSTEM_ADMIN
         self._mode = 'operator'
         self.authenticated_role = OperatingMode.CAMERA_OPERATOR
         # True solo tras una autenticación manual real (no en sim/bypass).
         self.authenticated = False
-        # Contador de toques sobre el logo para revelar el login Supercore.
-        self._logo_taps = 0
-        self._logo_tap_timer = None
 
         # Cuenta atrás de auto-entrada como Operador (#login-countdown).
         # El operador no necesita contraseña: la app entra sola tras N segundos,
@@ -193,9 +184,6 @@ class LoginScreen(QWidget):
         logo_shadow.setOffset(0, 4)
         logo_shadow.setColor(QColor(26, 51, 24, 90))
         logo_mark.setGraphicsEffect(logo_shadow)
-        # Gesto oculto: varios toques sobre el logo revelan el login Supercore.
-        logo_mark.installEventFilter(self)
-        self._logo_mark = logo_mark
         logo_wrap.addStretch()
         logo_wrap.addWidget(logo_mark)
         logo_wrap.addStretch()
@@ -231,42 +219,6 @@ class LoginScreen(QWidget):
         card_layout.addWidget(subtitle)
         self._subtitle = subtitle
         card_layout.addSpacing(44)
-
-        # ── Username (solo visible en login Supercore oculto) ─────────────────
-        self.username_label = QLabel('User')
-        self.username_label.setStyleSheet(
-            "QLabel {"
-            "  font: 600 15px 'Inter Tight', 'Segoe UI', sans-serif;"
-            "  color: #444444; background: transparent; border: none;"
-            "}"
-        )
-        card_layout.addWidget(self.username_label)
-        card_layout.addSpacing(10)
-
-        self.username_input = QLineEdit()
-        self.username_input.setPlaceholderText('Username')
-        self.username_input.setFont(QFont('Segoe UI', 18))
-        self.username_input.setAlignment(Qt.AlignCenter)
-        self.username_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #FAFAFA;
-                border: 2px solid #4A7A44;
-                border-radius: 8px;
-                padding: 0 20px;
-                color: #111111;
-            }
-            QLineEdit:focus {
-                border: 2px solid #2E5229;
-                background-color: #FFFFFF;
-            }
-        """)
-        self.username_input.setMinimumHeight(64)
-        self.username_input.returnPressed.connect(lambda: self.password_input.setFocus())
-        card_layout.addWidget(self.username_input)
-        card_layout.addSpacing(12)
-        # Oculto por defecto — solo el gesto del logo lo revela.
-        self.username_label.setVisible(False)
-        self.username_input.setVisible(False)
 
         # ── Password label ────────────────────────────────────────────────────
         pwd_label = QLabel('Password')
@@ -431,7 +383,7 @@ class LoginScreen(QWidget):
     def _show_help(self):
         QMessageBox.information(self, 'For Technical Assistance', Contact, QMessageBox.Ok)
 
-    # ── Cambio de modo (Operador / Administrador / Supercore oculto) ───────────
+    # ── Cambio de modo (Operador / Administrador) ──────────────────────────────
 
     def _set_mode(self, mode: str, *, operator_bypass: bool = True) -> None:
         """Cambia el modo de login y actualiza la UI (subtítulo, campos, botón).
@@ -442,23 +394,20 @@ class LoginScreen(QWidget):
                       reloj no fiable), pide la contraseña de operador como en
                       modo Admin.
         - admin     → contraseña de administrador.
-        - supercore → usuario + contraseña maestra (oculto).
         """
+        if mode not in _MODE_ROLE:
+            raise ValueError(f"Unknown login mode: {mode!r}")
         self._mode = mode
         self.attempts = 0
-        self.username_input.clear()
         self.password_input.clear()
         self._set_status('', 'hidden')
         self._cancel_countdown()
 
         is_operator = mode == 'operator'
-        is_supercore = mode == 'supercore'
         # El operador entra sin contraseña solo si el horario lo permite.
         self._operator_auto = is_operator and operator_bypass
 
         # Campos visibles según el modo. El operador en bypass no teclea contraseña.
-        self.username_label.setVisible(is_supercore)
-        self.username_input.setVisible(is_supercore)
         self._pwd_label.setVisible(not self._operator_auto)
         self.password_input.setVisible(not self._operator_auto)
 
@@ -470,10 +419,6 @@ class LoginScreen(QWidget):
             self._subtitle.setText('Administrator Access')
             self.switch_btn.setText('← Operator login')
             self.switch_btn.setVisible(True)
-        else:  # supercore
-            self._subtitle.setText('Developer Access')
-            self.switch_btn.setText('← Operator login')
-            self.switch_btn.setVisible(True)
 
         if self._operator_auto:
             # Auto-entrada con cuenta atrás: sin contraseña (dentro de horario).
@@ -481,14 +426,6 @@ class LoginScreen(QWidget):
             self.login_btn.setEnabled(True)
             self._start_operator_countdown()
             self.login_btn.setFocus()
-        elif is_supercore:
-            # Credencial maestra independiente de password.enc: reactivar el
-            # formulario incluso si el cliente nunca configuró contraseña.
-            self.is_locked = False
-            self.password_input.setEnabled(True)
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText('ACCESS')
-            self.username_input.setFocus()
         else:  # admin, u operador fuera de horario (pide contraseña de operador)
             self.login_btn.setText('ACCESS')
             self._check_password_configured()
@@ -539,41 +476,14 @@ class LoginScreen(QWidget):
             self._verify_password()
 
     def _on_switch_user(self) -> None:
-        """Operador ⇄ Administrador. Desde Supercore vuelve a Operador."""
+        """Operador ⇄ Administrador."""
         if self._mode == 'operator':
             self._set_mode('admin')
         else:
             self._enter_operator_mode()
 
-    def eventFilter(self, obj, event):
-        """Detecta toques repetidos sobre el logo para revelar Supercore."""
-        from PyQt5.QtCore import QEvent
-        if obj is getattr(self, '_logo_mark', None) and event.type() == QEvent.MouseButtonPress:
-            self._register_logo_tap()
-            return False
-        return super().eventFilter(obj, event)
-
-    def _register_logo_tap(self) -> None:
-        """Cuenta toques sobre el logo; al alcanzar el umbral abre Supercore."""
-        if self._mode == 'supercore':
-            return
-        self._logo_taps += 1
-        if self._logo_tap_timer is None:
-            self._logo_tap_timer = QTimer(self)
-            self._logo_tap_timer.setSingleShot(True)
-            self._logo_tap_timer.timeout.connect(self._reset_logo_taps)
-        self._logo_tap_timer.start(2000)  # ventana de 2s para completar la secuencia
-        if self._logo_taps >= _SUPERCORE_TAPS:
-            self._reset_logo_taps()
-            self._set_mode('supercore')
-
-    def _reset_logo_taps(self) -> None:
-        self._logo_taps = 0
-        if self._logo_tap_timer is not None:
-            self._logo_tap_timer.stop()
-
     def _verify_password(self):
-        """Verificar credenciales según el modo activo (operador/admin/supercore)."""
+        """Verificar credenciales según el modo activo (operador/admin)."""
         # No hacer nada si está bloqueado
         if self.is_locked:
             return
@@ -583,19 +493,6 @@ class LoginScreen(QWidget):
         # Validar que no esté vacía
         if not pwd:
             self._set_status('✗ Password required', 'warning')
-            return
-
-        # Supercore: credencial maestra hasheada en el binario (no depende del
-        # password.enc del cliente). Se valida usuario + contraseña.
-        if self._mode == 'supercore':
-            user = self.username_input.text()
-            if not user:
-                self._set_status('✗ Username required', 'warning')
-                return
-            if verify_supercore(user, pwd):
-                self._on_login_success()
-            else:
-                self._on_login_failure()
             return
 
         # Administrador: requiere password.enc configurado (el Operador entra por
@@ -658,7 +555,6 @@ class LoginScreen(QWidget):
         self.authenticated = True
         _record_login_event(success=True, attempts=self.attempts)
         self.password_input.clear()
-        self.username_input.clear()
         self._set_status('✓ Access granted', 'success')
         self.login_btn.setEnabled(False)
         self.password_input.setEnabled(False)

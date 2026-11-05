@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 
 from PyQt5 import QtCore, QtGui
@@ -69,7 +70,7 @@ def _load_svg_pixmap(svg_data: Optional[str], svg_file: Optional[str],
     if svg_data:
         renderer = QSvgRenderer(QtCore.QByteArray(svg_data.encode('utf-8')))
     elif svg_file:
-        renderer = QSvgRenderer(svg_file)
+        renderer = QSvgRenderer(str(Path(__file__).resolve().parent / svg_file))
         if not renderer.isValid():
             logger.warning("%s no encontrado o inválido", svg_file)
             return None

@@ -139,21 +139,16 @@ class TestResetWithoutCurrent:
 class TestRequireCurrentPolicy:
     """Who must type the current password: only when changing your OWN one.
 
-    Supercore (master) never needs it; an admin resets the operator password
-    freely but must confirm the current admin password to change its own.
+    An admin resets the operator password freely but must confirm the current
+    admin password to change its own. No session skips that check.
     """
 
-    @pytest.mark.parametrize("is_supercore,target,expected", [
-        (True,  "admin", False),   # supercore → master, no current
-        (True,  "entry", False),
-        (False, "entry", False),   # admin resets operator pw freely
-        (False, "admin", True),    # admin changing its OWN pw → current required
+    @pytest.mark.parametrize("target,expected", [
+        ("entry", False),   # admin resets operator pw freely
+        ("admin", True),    # admin changing its OWN pw → current required
     ])
-    def test_current_required_only_for_own_admin_password(
-        self, is_supercore, target, expected
-    ):
+    def test_current_required_only_for_own_admin_password(self, target, expected):
         win = MagicMock()
-        win._session_is_supercore = is_supercore
         ctrl = _dm.DialogsController(win)
 
         captured = {}
