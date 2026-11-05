@@ -272,11 +272,6 @@ class MainWindow(QMainWindow):
         # True sólo tras completar splash: en login/splash no se ofrece opción
         # de apagar cámaras porque la sesión de trabajo no ha comenzado.
         self._normal_work_active = False
-        # True cuando la sesión se autenticó con la credencial maestra Supercore.
-        # Supercore (rol dev oculto) y Admin son ambos SYSTEM_ADMIN, así que este
-        # flag es la única forma de distinguirlos en runtime (p.ej. para permitir
-        # que Supercore gestione todas las contraseñas sin poner la actual).
-        self._session_is_supercore = False
         self._supervisor = self._build_supervisor()
 
     # ─────────────────────────────────────────────────────────────────────
@@ -323,9 +318,9 @@ class MainWindow(QMainWindow):
         from runtime.path_resolver import RuntimePathResolver as _rpr
 
         # Determinar rol post-login:
-        # • Login real (operador por cuenta atrás, admin o supercore) → el rol lo
+        # • Login real (operador por cuenta atrás o admin) → el rol lo
         #   decide la credencial usada, expuesto en login_overlay.authenticated_role
-        #   (Operador→CAMERA_OPERATOR, Admin/Supercore→SYSTEM_ADMIN).
+        #   (Operador→CAMERA_OPERATOR, Admin→SYSTEM_ADMIN).
         # • Sim / sin login real → respeta el rol persistido en access_mode.json.
         # El flag legacy de 'restart as admin' solo se consume aquí; el modo de
         # login inicial ya lo decidió LoginScreen a partir de ese flag.
@@ -337,11 +332,6 @@ class MainWindow(QMainWindow):
                 pass
         if getattr(self._login_overlay, 'authenticated', False):
             self._access_mode_svc.set_mode(self._login_overlay.authenticated_role)
-        # Recordar si la sesión entró como Supercore (maestro) para toda su vida.
-        self._session_is_supercore = (
-            getattr(self._login_overlay, '_mode', '') == 'supercore'
-        )
-
         # Sincronizar visibilidad de botones de panel con el modo efectivo.
         # Necesario aquí porque el modo puede haber cambiado respecto al que
         # leyó _update_mode_buttons() durante la construcción del panel.

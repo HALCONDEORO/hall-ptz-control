@@ -20,32 +20,13 @@ When no admin secret is configured yet, verify_admin() falls back to the entry
 password so Technician mode stays reachable until an admin password is set (via
 the wizard or a future change-password flow). Once admin.enc exists the entry
 password no longer elevates — the two logins are then fully independent.
-
-Supercore (developer master): a hidden, factory-fixed login for our own support
-access — never set by the customer wizard. Unlike the entry/admin secrets it is
-NOT machine-bound; it is a global master credential baked into the app as a
-salted PBKDF2 hash (never plaintext). verify_supercore() grants full access on
-any install. Rotating it means changing the constants below and rebuilding.
 """
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 
 from runtime import secret_manager
-
-# ── Supercore developer master credential (hidden login) ──────────────────────
-# Fixed username + a salted PBKDF2-HMAC-SHA256 hash of the password. The
-# plaintext password is intentionally absent from the source; only its hash
-# lives here, so reading the binary does not reveal the credential.
-SUPERCORE_USERNAME = "supercore"
-_SUPERCORE_SALT = b"khptz-supercore-v1"
-_SUPERCORE_ITERATIONS = 200_000
-_SUPERCORE_PASSWORD_HASH = (
-    "30eefce22d625f9910f63f80d34f9ee7c5d4ae5b5efedeae2e9ecb533c8ebeef"
-)
-
 
 def _matches(candidate: str, actual: str) -> bool:
     """Constant-time equality on the UTF-8 bytes of two passwords."""
@@ -94,25 +75,3 @@ def verify_admin(candidate: str) -> bool:
             return False
         return _matches(candidate, actual)
     return verify_entry(candidate)
-
-
-def verify_supercore(username: str, password: str) -> bool:
-    """Return True iff *username*/*password* match the developer master login.
-
-    Both the username and the PBKDF2 hash of the password are compared in
-    constant time (hmac.compare_digest) so neither can be narrowed by timing.
-    This is a global, machine-independent backdoor for our own support access
-    and grants full (administrator) privileges; it is never configured by the
-    customer setup wizard.
-    """
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        _SUPERCORE_SALT,
-        _SUPERCORE_ITERATIONS,
-    ).hex()
-    user_ok = hmac.compare_digest(
-        username.encode("utf-8"), SUPERCORE_USERNAME.encode("utf-8")
-    )
-    pass_ok = hmac.compare_digest(derived, _SUPERCORE_PASSWORD_HASH)
-    return user_ok and pass_ok
