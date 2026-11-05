@@ -23,6 +23,8 @@
 #   tests; no añadir aquí nueva lógica de simulación — usar FakeATEM.
 
 from __future__ import annotations
+from adapters.atem_values import source_number, video_sources
+
 
 import logging
 import time
@@ -211,14 +213,14 @@ class ATEMMonitor(QThread):
         """
         names: dict = {}
         try:
-            all_sources = list(PyATEMMax.ATEMVideoSources)
+            all_sources = list(video_sources(PyATEMMax))
         except Exception as exc:  # noqa: BLE001
             logger.warning("[ATEM] no se pudo iterar ATEMVideoSources: %s", exc)
             return names
 
         for source in all_sources:
             try:
-                source_id = int(source)
+                source_id = source_number(source)
                 prop = atem.inputProperties[source]
                 name = (getattr(prop, "longName", None) or
                         getattr(prop, "shortName", None) or "").strip()
@@ -236,7 +238,7 @@ class ATEMMonitor(QThread):
         prev_input = None
         while not self.isInterruptionRequested():
             try:
-                cur = int(atem.programInput[0].videoSource)
+                cur = source_number(atem.programInput[0].videoSource)
                 if self._state == ATEMState.ERROR:
                     logger.info("ATEM: poll recovered from ERROR — marking CONNECTED")
                     self._emit_state(ATEMState.CONNECTED)
@@ -263,7 +265,7 @@ class ATEMMonitor(QThread):
             enabled = bool(getattr(pip_block, "enabled", False))
             source_raw = getattr(pip_block, "source", None)
             try:
-                source = int(source_raw) if source_raw is not None else None
+                source = source_number(source_raw) if source_raw is not None else None
             except (ValueError, TypeError):
                 source = None
         except Exception:  # noqa: BLE001

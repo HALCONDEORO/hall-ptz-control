@@ -100,18 +100,20 @@ _SAFE_PREFIXES: tuple[str, ...] = (
     "config.example/",   # legacy example directory
     "tests/",            # test files contain fake sample key headers
     "docs/",
-    "scripts/",          # this script's own regex patterns are not real keys
 )
 
 
 # ── Content scanning patterns ─────────────────────────────────────────────────
 
+# Build header patterns in parts so this scanner can scan its own source.
+_KEY_BEGIN = "-----" + "BEGIN "
+
 # High-confidence: file contains these → fail.
 _FAIL_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("SSH/TLS private key block",    re.compile(r"-----BEGIN [A-Z ]* PRIVATE KEY-----", re.IGNORECASE)),
-    ("OPENSSH private key block",    re.compile(r"-----BEGIN OPENSSH PRIVATE KEY-----", re.IGNORECASE)),
-    ("Generic PEM private key block",re.compile(r"-----BEGIN RSA PRIVATE KEY-----", re.IGNORECASE)),
-    ("PGP private key block",        re.compile(r"-----BEGIN PGP PRIVATE KEY BLOCK-----", re.IGNORECASE)),
+    ("SSH/TLS private key block",    re.compile(_KEY_BEGIN + r"[A-Z ]* PRIVATE KEY-----", re.IGNORECASE)),
+    ("OPENSSH private key block",    re.compile(_KEY_BEGIN + r"OPENSSH PRIVATE KEY-----", re.IGNORECASE)),
+    ("Generic PEM private key block",re.compile(_KEY_BEGIN + r"RSA PRIVATE KEY-----", re.IGNORECASE)),
+    ("PGP private key block",        re.compile(_KEY_BEGIN + r"PGP PRIVATE KEY BLOCK-----", re.IGNORECASE)),
 ]
 
 # Lower-confidence: warn but do not fail.
