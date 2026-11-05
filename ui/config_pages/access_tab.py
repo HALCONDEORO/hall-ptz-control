@@ -197,12 +197,16 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
     )
     layout.addWidget(auth_desc)
 
-    btn_pwd = dialog._btn('Change Operator Password →', variant='ghost', icon='lock')
+    btn_pwd = dialog._btn('Change Operator Password →', variant='ghost', icon='lock', width='row')
+    btn_pwd.ensurePolished()
+    btn_pwd.setMinimumWidth(btn_pwd.sizeHint().width())
     btn_pwd.setToolTip('Change the operator (entry) login password')
     btn_pwd.clicked.connect(lambda: (mw._dialogs.ChangePassword(), dialog._try_close()))
     layout.addWidget(btn_pwd, 0, Qt.AlignRight)
 
-    btn_admin_pwd = dialog._btn('Change Admin Password →', variant='ghost', icon='lock')
+    btn_admin_pwd = dialog._btn('Change Admin Password →', variant='ghost', icon='lock', width='row')
+    btn_admin_pwd.ensurePolished()
+    btn_admin_pwd.setMinimumWidth(btn_admin_pwd.sizeHint().width())
     btn_admin_pwd.setToolTip('Change the administrator password (required for Technician mode)')
     btn_admin_pwd.clicked.connect(lambda: (mw._dialogs.ChangeAdminPassword(), dialog._try_close()))
     layout.addWidget(btn_admin_pwd, 0, Qt.AlignRight)

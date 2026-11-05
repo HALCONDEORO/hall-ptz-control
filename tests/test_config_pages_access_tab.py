@@ -195,3 +195,11 @@ def test_protected_admin_password_button_disabled_and_explained(monkeypatch):
     assert "privileged offline reset" in notes(layout)
     button.click()
     assert "ChangeAdminPassword" not in mw._dialogs.calls
+
+
+@pytest.mark.parametrize("text", ["Change Operator Password", "Change Admin Password"])
+def test_password_button_has_room_for_its_complete_label(text):
+    dialog, mw, layout = build()
+    button = button_named(layout, text)
+    assert button.minimumWidth() >= button.sizeHint().width()
+    assert button.maximumWidth() > 210
