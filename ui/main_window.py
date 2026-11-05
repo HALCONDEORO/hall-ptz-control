@@ -64,6 +64,7 @@ from adapters.atem_dispatcher import ATEMDispatcher
 from ptz.visca import CameraManager
 from ui.widgets import GoButton, SpecialDragButton, PlatformPresetButton
 from ui.names_panel import NamesPanel
+from ui.camera_display_mixin import CameraDisplayMixin
 from ui.session_mixin import SessionController
 from ui.dialogs_mixin import DialogsController
 from ui.config_dialog import ConfigDialog
@@ -122,7 +123,7 @@ def _load_second_platform_enabled() -> bool:
         return False
 
 
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, CameraDisplayMixin):
     """Ventana principal 1920x1080 px."""
 
     atem_state_changed = pyqtSignal(object)
@@ -768,26 +769,6 @@ class MainWindow(QMainWindow):
             return
         (self.Cam1 if cam_key == 1 else self.Cam2).set_connected(ok)
         self._update_controls_visibility()
-
-    def _refresh_zoom(self) -> None:
-        """Refresh the zoom slider from cache or network query via CameraPort."""
-        from PyQt5.QtCore import QMetaObject, Qt, Q_ARG  # noqa: PLC0415
-        cam_key = 1 if self.Cam1.isChecked() else 2
-        self._camera_port.refresh_zoom_display(
-            cam_key,
-            lambda pct: QMetaObject.invokeMethod(
-                self, "_set_zoom_feedback", Qt.QueuedConnection, Q_ARG(int, pct)
-            ),
-        )
-
-    def _on_cam_connected(self, ok: bool, ip: str) -> None:
-        if not ok:
-            return
-        try:
-            cam_key = self._cameras.cam_key(ip)
-        except ValueError:
-            cam_key = 1  # safe fallback for unexpected IPs
-        self._camera_port.async_refresh_ae_mode(cam_key, self._update_exposure_ui)
 
     def _on_visca_speed_error(self, ip: str, cmd_type: str) -> None:
         if cmd_type not in self._watchdog_state:

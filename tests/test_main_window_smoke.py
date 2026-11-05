@@ -122,3 +122,74 @@ def test_config_dialog_opens_from_main_window(main_window):
         assert dialog.findChild(object) is not None
     finally:
         dialog.close()
+
+
+def test_queued_zoom_rechecks_generation_on_qt_delivery(main_window, _qapp):
+    from unittest.mock import Mock
+    from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+
+    current = [1]
+    main_window._camera_port.display_generation = lambda key: current[0]
+    main_window._selected_cam_key = lambda: 1
+    main_window._set_zoom_feedback = Mock()
+    QMetaObject.invokeMethod(main_window, "_apply_zoom_feedback", Qt.QueuedConnection,
+                             Q_ARG(int, 1), Q_ARG(int, 1), Q_ARG(int, 75))
+    current[0] = 2  # Change after enqueue, before Qt delivers.
+    _qapp.processEvents()
+    main_window._set_zoom_feedback.assert_not_called()
+
+
+def test_queued_zoom_drops_result_after_camera_selection_changes(main_window, _qapp):
+    from unittest.mock import Mock
+    from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+
+    main_window._camera_port.display_generation = lambda key: 0
+    selected = [1]
+    main_window._selected_cam_key = lambda: selected[0]
+    main_window._set_zoom_feedback = Mock()
+    QMetaObject.invokeMethod(main_window, "_apply_zoom_feedback", Qt.QueuedConnection,
+                             Q_ARG(int, 1), Q_ARG(int, 0), Q_ARG(int, 75))
+    selected[0] = 2
+    _qapp.processEvents()
+    main_window._set_zoom_feedback.assert_not_called()
+
+
+def test_queued_exposure_rechecks_generation_on_qt_delivery(main_window, _qapp):
+    from unittest.mock import Mock
+    from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+
+    current = [1]
+    main_window._camera_port.display_generation = lambda key: current[0]
+    main_window._selected_cam_key = lambda: 1
+    main_window._update_exposure_ui = Mock()
+    QMetaObject.invokeMethod(main_window, "_apply_exposure_update", Qt.QueuedConnection,
+                             Q_ARG(int, 1), Q_ARG(int, 1))
+    current[0] = 2
+    _qapp.processEvents()
+    main_window._update_exposure_ui.assert_not_called()
+
+
+def test_retired_worker_connection_does_not_query_camera_one(main_window):
+    from unittest.mock import Mock
+
+    main_window._camera_port.async_refresh_ae_mode = Mock()
+    main_window._cameras.cam_key = Mock(side_effect=ValueError("retired endpoint"))
+    main_window._on_cam_connected(True, "192.0.2.99")
+    main_window._camera_port.async_refresh_ae_mode.assert_not_called()
+
+
+def test_current_queued_display_updates_are_delivered(main_window, _qapp):
+    from unittest.mock import Mock
+    from PyQt5.QtCore import QMetaObject, Qt, Q_ARG
+
+    main_window._camera_port.display_generation = lambda key: 3
+    main_window._selected_cam_key = lambda: 1
+    main_window._set_zoom_feedback = Mock()
+    main_window._update_exposure_ui = Mock()
+    QMetaObject.invokeMethod(main_window, "_apply_zoom_feedback", Qt.QueuedConnection,
+                             Q_ARG(int, 1), Q_ARG(int, 3), Q_ARG(int, 75))
+    QMetaObject.invokeMethod(main_window, "_apply_exposure_update", Qt.QueuedConnection,
+                             Q_ARG(int, 1), Q_ARG(int, 3))
+    _qapp.processEvents()
+    main_window._set_zoom_feedback.assert_called_once_with(75)
+    main_window._update_exposure_ui.assert_called_once()

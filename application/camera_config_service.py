@@ -23,11 +23,14 @@
 from __future__ import annotations
 
 import logging
+import re
+
+import yaml
 from pathlib import Path
-from typing import Callable, Optional, Protocol
+from typing import Callable, Optional, Protocol, cast
 
 import config as _config
-from config import is_valid_cam_id, is_valid_ip
+from config import is_valid_ip
 from config.writer import patch_config_yaml
 from domain.supportability import OperationCode, OperationResult
 
@@ -38,6 +41,8 @@ class _CameraRuntime(Protocol):
     """Minimal shape the service needs from CameraManager / CameraPort."""
 
     def update_camera_ip(self, camera_index: int, new_ip: str) -> object: ...
+
+    def update_camera_visca_id(self, camera_index: int, new_id: str) -> object: ...
 
 
 # Providers may legitimately return None (runtime not built yet, or absent in a
@@ -86,6 +91,9 @@ class CameraConfigService:
                 "Enter a valid IPv4 address (e.g. 172.16.1.11).",
             )
 
+        if clean == self._other_camera_value(cam_num, "ip"):
+            return self._invalid("set_camera_ip", target, "Each camera must have a distinct IP.")
+
         self._camera(cam_num).ip = clean
         self._repoint_runtime(cam_num, clean)
         return self._persist(
@@ -100,13 +108,16 @@ class CameraConfigService:
                 "set_camera_visca_id", target, f"Unknown camera number: {cam_num!r}"
             )
         clean = (visca_id or "").strip()
-        if not is_valid_cam_id(clean):
+        if not re.fullmatch(r"[0-9A-Fa-f]{2}", clean):
             return self._invalid(
                 "set_camera_visca_id", target,
                 'Enter a hex VISCA id such as "81" or "82".',
             )
 
+        if clean.upper() == self._other_camera_value(cam_num, "visca_id").upper():
+            return self._invalid("set_camera_visca_id", target, "Each camera must have a distinct VISCA id.")
         self._camera(cam_num).cam_id = clean
+        self._repoint_runtime(cam_num, clean, method="update_camera_visca_id")
         return self._persist(
             "set_camera_visca_id", target, cam_index=cam_num - 1, cam_visca_id=clean
         )
@@ -138,7 +149,42 @@ class CameraConfigService:
     def _camera(self, cam_num: int):
         return self._config.CAM1 if cam_num == 1 else self._config.CAM2
 
-    def _repoint_runtime(self, cam_num: int, ip: str) -> None:
+    @staticmethod
+    def _nonempty_string(value: object) -> str:
+        return value if isinstance(value, str) and value else ""
+
+    def _saved_camera_value(self, camera: int, field: str) -> str:
+        path = self._config_path()
+        if path is None or not path.exists():
+            return ""
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return ""
+        cameras = raw.get("cameras", []) if isinstance(raw, dict) else []
+        if not isinstance(cameras, list) or len(cameras) < camera:
+            return ""
+        entry = cameras[camera - 1]
+        if not isinstance(entry, dict):
+            return ""
+        return self._nonempty_string(entry.get(field))
+
+    def _other_camera_value(self, cam_num: int, field: str) -> str:
+        """Read peer identity from active runtime, saved settings, then globals."""
+        other = 2 if cam_num == 1 else 1
+        runtime = self._camera_manager()
+        method = "ip_for_key" if field == "ip" else "cam_id_for_key"
+        getter = getattr(runtime, method, None)
+        if callable(getter):
+            read_value = cast(Callable[[int], object], getter)
+            value = self._nonempty_string(read_value(other))
+            if value:
+                return value
+        return self._saved_camera_value(other, field) or getattr(
+            self._camera(other), "ip" if field == "ip" else "cam_id", ""
+        )
+
+    def _repoint_runtime(self, cam_num: int, ip: str, *, method: str = "update_camera_ip") -> None:
         """Update the live CameraManager and CameraPort, if present.
 
         A runtime that is absent or raises must not fail the config change: the
@@ -152,13 +198,13 @@ class CameraConfigService:
             runtime = provider()
             if runtime is None:
                 continue
-            update = getattr(runtime, "update_camera_ip", None)
+            update = getattr(runtime, method, None)
             if update is None:
                 continue
             try:
                 update(cam_num, ip)
             except Exception:  # noqa: BLE001 — runtime repoint is best-effort
-                logger.exception("%s.update_camera_ip failed for cam %s", label, cam_num)
+                logger.exception("%s.%s failed for cam %s", label, method, cam_num)
 
     def _persist(self, operation: str, target: str, **fields) -> OperationResult:
         """Write the change to config.yaml; report partial success on failure."""
