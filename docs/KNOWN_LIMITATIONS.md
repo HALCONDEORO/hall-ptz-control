@@ -129,9 +129,10 @@ operator recovers it by hand:
 Rehearse this once before relying on it. Deliberate: an aggressive restart
 loop can hide a crash loop behind a flickering display.
 
-### Python 3.11 / 3.13 support level
-The installer warns (does not refuse) on interpreters other than the tested
-baseline. Python 3.13 removed stdlib modules and ships different PyQt5 builds.
+### Python 3.10+ support level
+The supported and tested baseline is Python 3.9.2 (Raspberry Pi OS Bullseye; CI
+runs on 3.9). The installer warns (does not refuse) on any other interpreter,
+including the Python 3.11 that ships with Bookworm. Python 3.13 removed stdlib modules and ships different PyQt5 builds.
 Before running on an OS with a non-baseline Python, validate by hand:
 `khptz doctor` and a full GUI session. The VISCA layer itself is 3.9-safe.
 
