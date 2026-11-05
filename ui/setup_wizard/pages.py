@@ -97,7 +97,7 @@ class WelcomePage(_BasePage):
         lay = QVBoxLayout(self)
         msg = QLabel(
             "This assistant gets the room ready in a few minutes.\n"
-            "Every screen is pre-filled — you can just tap Next."
+            "Review each screen, confirm the camera addresses, and choose your login settings."
         )
         msg.setWordWrap(True)
         lay.addWidget(msg)
