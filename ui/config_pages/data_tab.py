@@ -76,6 +76,13 @@ def build_data_tab(dialog, data_layout, mw, panel_layout):
             return
         try:
             result = RestoreService().restore(Path(src))
+            if result.failed:
+                QMessageBox.warning(
+                    dialog, "Import incomplete",
+                    "Some files could not be restored. Do not treat this import as complete.\n\n"
+                    + result.summary(),
+                )
+                return
             names_str = '\n'.join(f"  ✓ {n}" for n in result.restored)
             pre_backup_msg = (
                 f"\n\nPre-restore backup en:\n{result.pre_restore_backup}"

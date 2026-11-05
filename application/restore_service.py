@@ -149,9 +149,10 @@ class RestoreService:
             self._record_event("RestoreFailed", error=str(exc), zip_path=str(zip_path))
             raise
         self._record_event(
-            "RestoreSucceeded",
+            "RestoreFailed" if result.failed else "RestoreSucceeded",
             zip_path=str(zip_path),
             files_restored=len(result.restored),
+            files_failed=len(result.failed),
         )
         return result
 
