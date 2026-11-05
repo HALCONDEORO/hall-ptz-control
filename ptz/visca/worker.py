@@ -68,7 +68,7 @@ from domain.retry_policy import RetryPolicy, CAMERA_RETRY_POLICY, CAMERA_COMMAND
 # STOP y comandos confirmados no gastan el presupuesto largo de reconexión
 # (backoffs 5/15/30 s): tres intentos inmediatos sin esperas entre ellos.
 _PRIORITY_RETRY_POLICY = RetryPolicy(backoffs=(0, 0))
-from .parser import contains_completion, contains_final_response
+from .parser import contains_completion, contains_final_response, validate_visca_response
 
 
 @dataclass
@@ -842,14 +842,17 @@ class CameraWorker:
                             break  # _succeeded permanece False
                         continue  # comando normal: reintento con backoff
 
-                    if not CameraWorker._has_completion_frame(response):
+                    response_ok, response_reason = validate_visca_response(response)
+                    if not response_ok:
+                        # An Error frame wins even when a Completion is present
+                        # in the same received buffer. Never report false success.
                         # Trama final recibida pero es Error, no Completion:
                         # la cámara respondió — el watchdog de respuestas se resetea.
                         self._consecutive_no_response = 0
                         self.signals.visca_error.emit(self.ip, cmd_type)
                         logger.warning(
-                            "%s cam=%s VISCA error response [%s] %s",
-                            cmd.cmd_id, self.ip, cmd_type, response.hex(),
+                            "%s cam=%s VISCA error response [%s] %s: %s",
+                            cmd.cmd_id, self.ip, cmd_type, response.hex(), response_reason,
                         )
                         break  # _succeeded permanece False
 
