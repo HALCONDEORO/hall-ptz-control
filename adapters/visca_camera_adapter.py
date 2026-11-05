@@ -150,10 +150,10 @@ class ViscaCameraAdapter:
         pan_abs  = 0 if pan_dir  == 0x03 else max(1, min(self.pan_cap,  abs(pan_speed)))
         tilt_abs = 0 if tilt_dir == 0x03 else max(1, min(self.tilt_cap, abs(tilt_speed)))
         ip, cam_id_hex = self._cam_info(camera_id)
-        self._send_queued(camera_id, ip, bytes.fromhex(
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(
             cam_id_hex + f"010601{pan_abs:02X}{tilt_abs:02X}{pan_dir:02X}{tilt_dir:02X}FF"
         ), coalesce=True)
-        return self._result("move", camera_id, True, None)
+        return self._queued_result("move", camera_id, queued)
 
     def stop_move(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -169,9 +169,9 @@ class ViscaCameraAdapter:
         # STOP always sends its own zoom-stop. Pan/tilt stop first, zoom stop
         # second; both priority. CameraWorker.send_priority keeps already
         # queued priority STOP frames, so this ordering is preserved.
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01060100000303FF"), priority=True)
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01040700FF"), priority=True)
-        return self._result("stop_move", camera_id, True, None)
+        pan_queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01060100000303FF"), priority=True)
+        zoom_queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01040700FF"), priority=True)
+        return self._queued_result("stop_move", camera_id, pan_queued and zoom_queued)
 
     def zoom(self, camera_id: str, speed: int) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -183,8 +183,8 @@ class ViscaCameraAdapter:
             zoom_byte = 0x20 | min(0x7, self.zoom_drive_cap, abs(speed))
         else:
             zoom_byte = 0x30 | min(0x7, self.zoom_drive_cap, abs(speed))
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + f"010407{zoom_byte:02X}FF"), coalesce=True)
-        return self._result("zoom", camera_id, True, None)
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + f"010407{zoom_byte:02X}FF"), coalesce=True)
+        return self._queued_result("zoom", camera_id, queued)
 
     def power_on(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -200,8 +200,8 @@ class ViscaCameraAdapter:
 
     def home(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "010604FF"), priority=True)
-        return self._result("home", camera_id, True, None)
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "010604FF"), priority=True)
+        return self._queued_result("home", camera_id, queued)
 
     def focus_auto(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -458,6 +458,8 @@ class ViscaCameraAdapter:
         """
         from ptz.visca import ViscaCommand  # noqa: PLC0415
 
+        if not ip or not ip.strip():
+            return False
         try:
             payload = binascii.unhexlify(cam_id_hex + cmd_hex)
         except (binascii.Error, ValueError) as exc:
@@ -477,16 +479,17 @@ class ViscaCameraAdapter:
         payload: bytes,
         priority: bool = False,
         coalesce: bool = False,
-    ) -> None:
-        """Enqueue on the CameraWorker (non-blocking)."""
+    ) -> bool:
+        """Return queue admission, not camera execution confirmation."""
+        if not ip or not ip.strip():
+            return False
         from ptz.visca import ViscaCommand  # noqa: PLC0415
         idx = self._index(camera_id)
         worker = self._mgr.worker(ip)
         cmd = ViscaCommand(camera=idx, payload=payload, coalesce=coalesce)
         if priority:
-            worker.send_priority(cmd)
-        else:
-            worker.send(cmd)
+            return worker.send_priority(cmd)
+        return worker.send(cmd)
 
     # ── Private ───────────────────────────────────────────────────────────────
 
@@ -564,6 +567,13 @@ class ViscaCameraAdapter:
         except (socket.timeout, socket.error, OSError) as exc:
             logger.warning("_query_ae_and_exp_comp %s: %s", ip, exc)
         return ae_mode, exp_level
+
+    def _queued_result(self, command: str, camera_id: str, queued: bool) -> CommandResult:
+        return self._result(
+            command, camera_id, queued, None,
+            message=("Queued; camera execution is not confirmed" if queued else
+                     "Command not queued: check camera configuration, connection and queue"),
+        )
 
     def _result(
         self,
