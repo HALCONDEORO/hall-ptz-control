@@ -34,6 +34,7 @@ class _RestoreResult:
     def __init__(self, restored, pre_restore_backup=None):
         self.restored = restored
         self.pre_restore_backup = pre_restore_backup
+        self.failed = []
 
 
 @pytest.fixture
@@ -278,3 +279,24 @@ class TestImport:
         button_named(layout, "Import").click()
         assert messages["warning"]
         assert "not a zip file" in messages["warning"][0][1]
+
+
+def test_partial_import_warns_and_never_shows_import_ok(monkeypatch, file_dialog, messages):
+    from application import restore_service
+    from pathlib import Path
+
+    result = restore_service.RestoreResult(
+        Path("pre-restore.zip"), ["seat_names.json"], [], ["config.yaml (denied)"]
+    )
+
+    class Service:
+        def restore(self, src):
+            return result
+
+    monkeypatch.setattr(restore_service, "RestoreService", Service)
+    _dialog, _mw, layout = build()
+    button_named(layout, "Import").click()
+    assert not messages["information"]
+    assert messages["warning"][0][0] == "Import incomplete"
+    assert "config.yaml" in messages["warning"][0][1]
+    assert "pre-restore.zip" in messages["warning"][0][1]

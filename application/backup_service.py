@@ -119,12 +119,17 @@ class BackupService:
         included: list[str] = []
         skipped:  list[str] = []
         file_records: list[dict] = []
+        snapshots: dict[str, bytes] = {}
 
         for arc_name, path in candidates:
             if path.exists():
                 included.append(arc_name)
-                size = path.stat().st_size
-                digest = _sha256_of_path(path)
+                # Hash and archive the same immutable bytes, not two reads of
+                # a file another thread may replace while backup is running.
+                payload = path.read_bytes()
+                snapshots[arc_name] = payload
+                size = len(payload)
+                digest = hashlib.sha256(payload).hexdigest()
                 file_records.append({
                     "path": arc_name,
                     "sha256": digest,
@@ -149,9 +154,8 @@ class BackupService:
         try:
             with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("manifest.json", json.dumps(manifest, indent=2))
-                for arc_name, path in candidates:
-                    if path.exists():
-                        zf.write(path, arc_name)
+                for arc_name, payload in snapshots.items():
+                    zf.writestr(arc_name, payload)
         except Exception as exc:
             self._record_event("BackupFailed", error=str(exc))
             raise

@@ -269,3 +269,22 @@ class TestToggleSession:
             SessionController.ToggleSession(ctrl)
         ctrl.shutdown.assert_called_once_with("manual")
 
+
+
+def test_home_callback_from_previous_session_is_discarded():
+    ctrl, window = _make_ctrl(session_active=True)
+    window._shutting_down = False
+    previous = ctrl._session_generation
+    ctrl.shutdown()
+    window.session_active = True  # a new session is now running
+    ctrl._session_generation += 1
+    window._bus.emit.reset_mock()
+    ctrl._session_home(previous)
+    window._bus.emit.assert_not_called()
+
+
+def test_home_callback_for_current_session_is_allowed():
+    ctrl, window = _make_ctrl(session_active=True)
+    window._shutting_down = False
+    ctrl._session_home(ctrl._session_generation)
+    assert window._bus.emit.called
