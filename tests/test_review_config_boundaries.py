@@ -40,19 +40,19 @@ def test_visca_id_change_reaches_live_manager_and_adapter(tmp_path):
 
 
 def test_service_rejects_id_that_loader_cannot_reload(tmp_path):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, _mgr, _adapter, svc = rig(tmp_path)
     assert not svc.set_camera_visca_id(1, "8182").ok
 
 
 def test_service_rejects_duplicate_ip_before_collapsing_slots(tmp_path):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, mgr, _adapter, svc = rig(tmp_path)
     result = svc.set_camera_ip(1, "192.0.2.2")
     assert not result.ok
     assert mgr.ip_for_key(1) != mgr.ip_for_key(2)
 
 
 def test_new_endpoint_does_not_inherit_exposure_or_backlight(tmp_path):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, mgr, adapter, svc = rig(tmp_path)
     mgr.ae_mode[1] = "manual"
     mgr.exposure_level[1] = 6
     mgr.focus_mode[1] = "manual"
@@ -69,14 +69,14 @@ def test_new_endpoint_does_not_inherit_exposure_or_backlight(tmp_path):
 
 
 def test_duplicate_visca_id_is_rejected(tmp_path):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    path, _cfg, _mgr, _adapter, svc = rig(tmp_path)
     before = path.read_bytes()
     assert not svc.set_camera_visca_id(1, "82").ok
     assert path.read_bytes() == before
 
 
 def test_peer_identity_comes_from_active_runtime_not_empty_globals(tmp_path):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, cfg, _mgr, _adapter, svc = rig(tmp_path)
     cfg.CAM2.ip = ""
     cfg.CAM2.cam_id = ""
     assert not svc.set_camera_ip(1, "192.0.2.2").ok
@@ -84,7 +84,7 @@ def test_peer_identity_comes_from_active_runtime_not_empty_globals(tmp_path):
 
 
 def test_id_change_retires_delayed_display_query(tmp_path, monkeypatch):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, mgr, adapter, svc = rig(tmp_path)
     pending = []
 
     class DeferredThread:
@@ -107,7 +107,7 @@ def test_id_change_retires_delayed_display_query(tmp_path, monkeypatch):
 
 
 def test_confirmed_absolute_zoom_invalidates_previous_observation(tmp_path):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, mgr, adapter, _svc = rig(tmp_path)
     mgr.set_zoom("192.0.2.1", 20)
     adapter._send_confirmed = Mock(return_value=True)
     assert adapter.zoom_absolute("cam1", 80).ok
@@ -117,7 +117,7 @@ def test_confirmed_absolute_zoom_invalidates_previous_observation(tmp_path):
 def test_failed_ae_query_does_not_publish_invented_auto(tmp_path, monkeypatch):
     import socket
 
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, mgr, adapter, _svc = rig(tmp_path)
     mgr.ae_mode[1] = "manual"
     mgr.exposure_level[1] = 4
     pending = []
@@ -141,7 +141,7 @@ def test_failed_ae_query_does_not_publish_invented_auto(tmp_path, monkeypatch):
 
 
 def test_confirmed_zoom_retires_inflight_observation(tmp_path, monkeypatch):
-    path, cfg, mgr, adapter, svc = rig(tmp_path)
+    _path, _cfg, mgr, adapter, _svc = rig(tmp_path)
     pending = []
 
     class DeferredThread:

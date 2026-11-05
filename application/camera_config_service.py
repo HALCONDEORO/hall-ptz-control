@@ -27,7 +27,7 @@ import re
 
 import yaml
 from pathlib import Path
-from typing import Callable, Optional, Protocol
+from typing import Callable, Optional, Protocol, cast
 
 import config as _config
 from config import is_valid_ip
@@ -149,28 +149,40 @@ class CameraConfigService:
     def _camera(self, cam_num: int):
         return self._config.CAM1 if cam_num == 1 else self._config.CAM2
 
+    @staticmethod
+    def _nonempty_string(value: object) -> str:
+        return value if isinstance(value, str) and value else ""
+
+    def _saved_camera_value(self, camera: int, field: str) -> str:
+        path = self._config_path()
+        if path is None or not path.exists():
+            return ""
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return ""
+        cameras = raw.get("cameras", []) if isinstance(raw, dict) else []
+        if not isinstance(cameras, list) or len(cameras) < camera:
+            return ""
+        entry = cameras[camera - 1]
+        if not isinstance(entry, dict):
+            return ""
+        return self._nonempty_string(entry.get(field))
+
     def _other_camera_value(self, cam_num: int, field: str) -> str:
-        """Read the active peer identity, not the possibly empty legacy globals."""
+        """Read peer identity from active runtime, saved settings, then globals."""
         other = 2 if cam_num == 1 else 1
         runtime = self._camera_manager()
         method = "ip_for_key" if field == "ip" else "cam_id_for_key"
         getter = getattr(runtime, method, None)
         if callable(getter):
-            value = getter(other)
-            if isinstance(value, str) and value:
+            read_value = cast(Callable[[int], object], getter)
+            value = self._nonempty_string(read_value(other))
+            if value:
                 return value
-        path = self._config_path()
-        if path is not None and path.exists():
-            try:
-                raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            except (OSError, yaml.YAMLError):
-                raw = {}
-            cameras = raw.get("cameras", []) if isinstance(raw, dict) else []
-            if isinstance(cameras, list) and len(cameras) >= other and isinstance(cameras[other - 1], dict):
-                value = cameras[other - 1].get(field, "")
-                if isinstance(value, str) and value:
-                    return value
-        return getattr(self._camera(other), "ip" if field == "ip" else "cam_id", "")
+        return self._saved_camera_value(other, field) or getattr(
+            self._camera(other), "ip" if field == "ip" else "cam_id", ""
+        )
 
     def _repoint_runtime(self, cam_num: int, ip: str, *, method: str = "update_camera_ip") -> None:
         """Update the live CameraManager and CameraPort, if present.

@@ -612,6 +612,31 @@ class CameraWorker:
     _has_final_visca_frame = staticmethod(contains_final_response)
     _has_completion_frame  = staticmethod(contains_completion)
 
+    def _correlate_response_frame(
+        self, frame: bytes, ack_identity: "tuple[int, int] | None"
+    ) -> "tuple[bool, tuple[int, int] | None]":
+        """Filter terminal frames for a different acknowledged command socket."""
+        if len(frame) < 2 or (frame[0] & 0xF0) != 0x90:
+            return True, ack_identity
+        kind = frame[1] & 0xF0
+        identity = (frame[0], frame[1] & 0x0F)
+        if kind == 0x40 and ack_identity is None:
+            return True, identity
+        if (kind in (0x50, 0x60) and ack_identity is not None
+                and identity != ack_identity
+                and not (kind == 0x60 and identity[1] == 0)):
+            # Socket-zero errors can reject a command before its ACK.
+            logger.warning("CameraWorker %s: ignored unrelated VISCA frame %s",
+                           self.ip, (frame + b"\xff").hex())
+            return False, ack_identity
+        return True, ack_identity
+
+    @staticmethod
+    def _command_outdated(cmd: ViscaCommand) -> bool:
+        return cmd.cancelled.is_set() or bool(
+            cmd.expires_at and time.monotonic() > cmd.expires_at
+        )
+
     def _read_visca_response(self, sock: socket.socket) -> bytes:
         """
         Lee la respuesta completa de la cámara (Completion o Error).
@@ -640,21 +665,9 @@ class CameraWorker:
             while b"\xff" in pending:
                 frame, pending = pending.split(b"\xff", 1)
                 framed = frame + b"\xff"
-                if len(frame) >= 2 and (frame[0] & 0xF0) == 0x90:
-                    kind = frame[1] & 0xF0
-                    identity = (frame[0], frame[1] & 0x0F)
-                    if kind == 0x40 and ack_identity is None:
-                        ack_identity = identity
-                    elif (kind in (0x50, 0x60) and ack_identity is not None
-                          and identity != ack_identity
-                          and not (kind == 0x60 and identity[1] == 0)):
-                        # VISCA assigns a command socket in its ACK. A final
-                        # response for another socket cannot confirm this
-                        # command. Socket-zero errors can reject before ACK.
-                        logger.warning("CameraWorker %s: ignored unrelated VISCA frame %s",
-                                       self.ip, framed.hex())
-                        continue
-                buf += framed
+                accepted, ack_identity = self._correlate_response_frame(frame, ack_identity)
+                if accepted:
+                    buf += framed
             if CameraWorker._has_final_visca_frame(buf):
                 break
         return buf
@@ -709,7 +722,7 @@ class CameraWorker:
             # Un comando cancelado (timeout de send_confirmed) o vencido en
             # cola nunca llega a la cámara. El vencido sin cancelar aún tiene
             # llamante esperando: recibe fallo inmediato.
-            if cmd.cancelled.is_set() or (cmd.expires_at and time.monotonic() > cmd.expires_at):
+            if CameraWorker._command_outdated(cmd):
                 if not cmd.cancelled.is_set() and cmd.on_failure is not None:
                     _notify_failure()
                 continue
@@ -765,7 +778,7 @@ class CameraWorker:
                             _notify_failure()
                         break
                     # Vencido o cancelado durante el backoff: no se reenvía.
-                    if cmd.cancelled.is_set() or (cmd.expires_at and time.monotonic() > cmd.expires_at):
+                    if CameraWorker._command_outdated(cmd):
                         if not cmd.cancelled.is_set() and cmd.on_failure is not None:
                             _notify_failure()
                         break
@@ -803,7 +816,7 @@ class CameraWorker:
                     break
 
                 # Vencido o cancelado durante la (re)conexión: no se envía.
-                if cmd.cancelled.is_set() or (cmd.expires_at and time.monotonic() > cmd.expires_at):
+                if CameraWorker._command_outdated(cmd):
                     if not cmd.cancelled.is_set() and cmd.on_failure is not None:
                         _notify_failure()
                     break
@@ -830,7 +843,7 @@ class CameraWorker:
                     # send_confirmed may expire/cancel while recv is in
                     # progress. Never publish a late completion as success or
                     # reuse a session with an ambiguous response tail.
-                    if cmd.cancelled.is_set() or (cmd.expires_at and time.monotonic() > cmd.expires_at):
+                    if CameraWorker._command_outdated(cmd):
                         self._close_socket()
                         _notify_failure()
                         break
