@@ -37,6 +37,7 @@ from config import (
 from runtime.secret_manager import (
     encrypt_password as _save_password,
     encrypt_secret,
+    admin_password_change_available,
     SECRET_ADMIN,
 )
 
@@ -304,6 +305,14 @@ class DialogsController:
           • Supercore (maestro) gestiona todas sin poner la actual.
           • Admin resetea la del operador sin conocerla; para la suya (admin) sí.
         """
+        if target == "admin" and not admin_password_change_available():
+            QMessageBox.information(
+                self._w, 'Administrator password managed offline',
+                'Administrator password changes are unavailable in this GUI.\n'
+                'A privileged administrator must use the offline reset procedure '
+                'in docs/HARDENING2.md during approved maintenance.',
+            )
+            return
         is_supercore = getattr(self._w, '_session_is_supercore', False)
         require_current = (not is_supercore) and (target == "admin")
         dlg = ChangePasswordDialog(self._w, target=target, require_current=require_current)
