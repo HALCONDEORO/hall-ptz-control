@@ -3,4 +3,7 @@
 # Install this only on systems that use a real Blackmagic ATEM switcher.
 # If this package is missing, atem_monitor.py disables ATEM monitoring and
 # the rest of the application continues to run.
-PyATEMMax
+# Technical baseline only: upstream distribution is GPLv3, not MIT.
+# Distribution/licence review and real ATEM validation remain release gates.
+# PyPI currently publishes prereleases only; the old >=0.9,<1 range resolves none.
+PyATEMMax==1.0b9

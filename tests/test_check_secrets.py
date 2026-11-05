@@ -472,3 +472,30 @@ class TestNoSecretsInLogCalls:
             encoding="utf-8",
         )
         assert self._check_file(f) == []
+
+
+class TestScriptsAreScanned:
+    def test_script_with_key_header_is_blocked(self, tmp_path):
+        script = tmp_path / "scripts" / "deploy.py"
+        script.parent.mkdir()
+        script.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nFAKE-ONLY\n")
+        assert _scan_content(script, tmp_path)
+
+    def test_script_credential_filename_is_blocked(self, tmp_path):
+        path = tmp_path / "scripts" / "password.enc"
+        assert _is_blocked_name(path, tmp_path)
+
+    def test_scanner_source_has_no_false_positive(self):
+        root = Path(__file__).resolve().parents[1]
+        assert _scan_content(root / "scripts" / "check_secrets.py", root) == []
+
+    def test_tracked_script_reports_category_without_content(self, tmp_path):
+        import subprocess
+        subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+        script = tmp_path / "scripts" / "deploy.py"
+        script.parent.mkdir()
+        script.write_text("-----BEGIN RSA PRIVATE KEY-----\nFAKE-CANARY-ONLY\n")
+        subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+        errors, _ = run_scan(tmp_path, scan_tracked=True)
+        assert any("scripts/deploy.py" in error for error in errors)
+        assert all("FAKE-CANARY" not in error for error in errors)

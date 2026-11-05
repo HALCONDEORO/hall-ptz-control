@@ -59,16 +59,18 @@ installations do not require a build step.
 
 ## PyATEMMax (optional ATEM dependency)
 
-| Field    | Value                                                          |
-|----------|----------------------------------------------------------------|
-| Name     | PyATEMMax                                                      |
-| Usage    | Optional Blackmagic ATEM network control (ATEM-equipped sites) |
-| Licence  | MIT                                                            |
-| Version  | >=0.9,<1 (must be pinned in customer install lockfile)         |
-| Source   | https://github.com/clvLabs/PyATEMMax                          |
-| Notes    | Not an official Blackmagic product. Install via requirements-atem.txt only on ATEM-equipped sites. See docs/ATEM_DEPENDENCY_DECISION.md. |
+| Field | Value |
+|---|---|
+| Name | PyATEMMax |
+| Technical baseline | 1.0b9 (prerelease; not a hardware validation result) |
+| Licence in published sdist | GNU GPL version 3, see upstream LICENSE.md |
+| Package | https://pypi.org/project/PyATEMMax/ |
+| Source | https://github.com/clvLabs/PyATEMMax |
 
-PyATEMMax is an optional dependency. If not installed, ATEM monitoring is
-disabled and PTZ camera control continues unaffected. The MIT licence is
-compatible with proprietary product distribution. Include this MIT licence
-notice in any product distribution package that ships PyATEMMax.
+The previous MIT attribution was incorrect for the published 1.0b9 distribution.
+Do not rely on it as permission to ship a proprietary bundle. A qualified licence
+review must settle distribution obligations before shipping this optional package.
+No legal compatibility decision is made here. Preserve upstream licence notices.
+
+Without this optional dependency, ATEM monitoring is unavailable; PTZ control
+continues. Real-device validation remains a separate release gate.
