@@ -521,6 +521,18 @@ class TestResponseClassification(unittest.TestCase):
         _, _, err = self._run_command(b'\x90\x60\x02\xFF')
         self.assertTrue(err)
 
+    def test_error_then_completion_is_failure(self):
+        ok, fail, err = self._run_command(b'\x90\x60\x02\xFF\x90\x50\xFF')
+        self.assertFalse(ok)
+        self.assertTrue(fail)
+        self.assertTrue(err)
+
+    def test_completion_then_error_is_failure(self):
+        ok, fail, err = self._run_command(b'\x90\x50\xFF\x90\x60\x02\xFF')
+        self.assertFalse(ok)
+        self.assertTrue(fail)
+        self.assertTrue(err)
+
     def test_completion_does_not_emit_visca_error(self):
         _, _, err = self._run_command(b'\x90\x50\xFF')
         self.assertFalse(err)
