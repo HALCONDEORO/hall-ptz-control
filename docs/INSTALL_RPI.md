@@ -45,7 +45,7 @@ Confirm:
 Recommended:
 
 ```text
-Raspberry Pi 4 or newer
+Raspberry Pi 4 Model B (software target; physical validation still required)
 1920x1080 display, preferably touchscreen
 VISCA-over-IP PTZ cameras (TCP port 5678)
 Stable local network
@@ -78,7 +78,9 @@ USB drive for offline backup/restore testing
 
 Recommended baseline for current MVP validation:
 
-- Raspberry Pi OS Bullseye (Debian 11) 64-bit on target hardware;
+- Raspberry Pi 4 with Raspberry Pi OS Bullseye (Debian 11) 64-bit is the target;
+- Raspberry Pi 5 cannot run Bullseye. Bookworm/Trixie require a separate,
+  unvalidated path. See the [manufacturer compatibility note](https://www.raspberrypi.com/products/raspberry-pi-5/);
 - **Python 3.9.2** (the supported target) available through the OS package
   manager — this is the system Python on Bullseye. Newer 3.10+ may work but is
   not validated;
@@ -86,7 +88,7 @@ Recommended baseline for current MVP validation:
 - local network access to cameras;
 - SSH access only when authorised for installation/support.
 
-Known limits on newer OS releases (Bullseye is the validated path):
+Known limits on newer OS releases (Bullseye is the software target, not a recorded hardware PASS):
 
 - **Bookworm/Trixie default to Wayland** (wayfire/labwc). The GUI units assume
   X11 (`DISPLAY=:0`, `xhost`). Switch the session to X11
@@ -244,8 +246,9 @@ so it deliberately will **not** start until the wizard has finished.
    - **Passwords:** the operator (entry) and administrator passwords are
      independent and must differ.
 3. On Review, confirm. The wizard hands the answers to the privileged
-   `khptz-provision` oneshot, which writes `/etc/khptz/config.yaml`, both
-   encrypted secrets in `/var/lib/khptz/`, the `.provisioned` marker, and then
+   `khptz-provision` oneshot, which writes `/etc/khptz/config.yaml`, the
+   encrypted credentials at the paths defined by the reviewed release, the
+   `.provisioned` marker, and then
    starts `khptz-control`.
 4. Verify:
 
@@ -270,7 +273,9 @@ autostart entry can fire on every login and quietly do nothing.
 > Product installs set both passwords through the setup wizard above. Use this
 > only for a developer install (`install.sh --dev`) or the manual fallback flow.
 
-Create or verify the admin/operator password.
+This fallback configures the operator entry password only. It does not create
+or reset a separate administrator identity. Never use it to bypass the wizard
+or a protected administrator-store migration gate.
 
 **Development / manual run** (writes under the current user's data dir):
 
@@ -326,7 +331,7 @@ Run the installer in check mode to validate all prerequisites without writing
 any files:
 
 ```bash
-sudo ./runtime/installer/install.sh --check
+sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 ```
 
 This outputs a PASS/WARN/FAIL report. Resolve any FAIL items before proceeding.
@@ -335,14 +340,22 @@ This outputs a PASS/WARN/FAIL report. Resolve any FAIL items before proceeding.
 
 ## Install the runtime service
 
-Use the canonical installer script (add `--atem` for ATEM support, `--dev` for
-a development checkout):
+Use the top-level wrapper from the existing normal desktop account, not a root
+login. `$USER` must name that desktop account, never the `khptz` service account.
+The wrapper runs readiness checks and prints the next action. Do not add `--atem`
+until its dependency licence and hardware gates are reviewed; do not use `--atem`
+or `--dev` on Bookworm/Trixie.
 
 ```bash
-sudo ./runtime/installer/install.sh
+sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
 
-After install:
+Exit 20 means installation needs configuration, not a healthy completed install.
+Exit 30 means failure: retain the output and stop before a rerun. Reboot and log
+back into the desktop so new group membership takes effect. Complete the wizard
+before expecting the provision-gated GUI service to be active.
+
+After the wizard completes:
 
 ```bash
 khptz verify-install
@@ -358,14 +371,24 @@ If the `khptz` command is not on `PATH` yet, use the module form
 ### systemd autostart validation
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable khptz-control.service
-sudo systemctl start khptz-control.service
+# Default system GUI mode, after wizard completion:
 sudo systemctl status khptz-control --no-pager
 journalctl -u khptz-control -n 100 --no-pager
 ```
 
-Reboot validation:
+For `--gui-mode user`, check the user unit from the desktop session instead:
+
+```bash
+systemctl --user status khptz-gui.service --no-pager
+journalctl --user -u khptz-gui -n 100 --no-pager
+```
+
+The system GUI service is intentionally disabled in user mode. Do not enable
+both units to fix a missing window. User-mode administrator elevation may be
+unavailable until the privileged verification broker exists; check the release's
+hardening notes before selecting that mode.
+
+Reboot validation (default system mode):
 
 ```bash
 sudo reboot
@@ -438,10 +461,12 @@ Current legacy-compatible default path:
 ~/.config/khptz/
 ```
 
-This legacy path is still documented because existing code and migration paths
-depend on it. Do not rename it casually during customer work; a future
-KHPTZ-branded path (`~/.config/khptz/`) must only be introduced through an
-explicit migration PR with backup, migration and rollback. See
+This is the standalone/development default, not the installed product data
+directory. Product runtime data is `/var/lib/khptz`, configuration is
+`/etc/khptz/config.yaml`, logs are `/var/log/khptz` and backups are
+`/var/backups/khptz`. Administrator credentials may use a separate protected
+store in hardened releases. Do not move or copy credentials by hand; use that
+release's explicit migration/reset procedure. See
 [Runtime path contract](RUNTIME_PATH_CONTRACT.md).
 
 Common files:
@@ -474,10 +499,10 @@ python3 -m runtime.cli --profile demo demo reset
 Legacy simulation helper still exists:
 
 ```bash
-python3 sim_mode.py on
+python3 adapters/sim_mode.py on
 python3 main.py
-python3 sim_mode.py off
-python3 sim_mode.py show
+python3 adapters/sim_mode.py off
+python3 adapters/sim_mode.py show
 ```
 
 Important: legacy simulation can touch legacy IP files. Confirm it is disabled
@@ -514,12 +539,13 @@ For MVP release-candidate evidence, copy the relevant result into
 ### One-command deployment validator
 
 `scripts/validate_rpi_deployment.sh` gathers the on-device evidence needed
-before an installation can be called done. It is **read-only**: it changes
-nothing on the appliance (the legacy cleanup it calls runs in `--dry-run`).
+before an installation can be called done. It does not change configuration or
+services, but it creates a report directory and writes a timestamped report;
+diagnostics may also write logs. Legacy cleanup runs in `--dry-run`.
 Run it once per reboot so the "after two reboots" criterion is satisfied:
 
 ```bash
-sudo bash scripts/validate_rpi_deployment.sh --wizard-user khptz
+sudo bash scripts/validate_rpi_deployment.sh --wizard-user "$USER"
 ```
 
 Every run also writes a timestamped report under `/var/log/khptz/validation/`
@@ -540,8 +566,8 @@ What each section confirms:
 | X11 / systemd session | Display/D-Bus session error, GUI running as root, or a restart loop |
 
 Do not sign off on "the code exists". Sign off only after two clean reboots
-on the room Pi show exactly one KH PTZ Control GUI, `khptz-control`
-active, no legacy controller, and no `[FAIL]` — then record the result in
+on the approved test Pi show exactly one KH PTZ Control GUI, the selected GUI
+unit active, no legacy controller, and no `[FAIL]` — then record the result in
 `docs/MVP_VALIDATION_REPORT.md`.
 
 ### MVP validation gate
@@ -597,7 +623,7 @@ Wizard failure summary:
 ### 4. Run official Pi-side commands
 
 ```bash
-sudo ./runtime/installer/install.sh
+sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 khptz version
 khptz status
 khptz doctor
@@ -649,8 +675,8 @@ python3 -m runtime.cli doctor
 
 ```bash
 python3 -m runtime.cli --profile demo doctor
-python3 sim_mode.py show
-python3 sim_mode.py off
+python3 adapters/sim_mode.py show
+python3 adapters/sim_mode.py off
 ```
 
 Check whether `sim_ip_backup.json` exists.
