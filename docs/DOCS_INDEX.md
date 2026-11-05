@@ -23,6 +23,12 @@ Do not treat the MVP as customer-ready until #381 and docs/MVP_VALIDATION_REPORT
 
 ---
 
+## Raspberry Pi installation
+
+- [Detailed installation guide](INSTALL_RPI.md)
+- [Lista de instalación y entrega en español](INSTALL_RPI_ES.md)
+- [Runtime targets and limitations](RPI_RUNTIME_BASELINE.md)
+
 ## For MVP/release validation
 
 | Document / issue | Use it for |
@@ -43,7 +49,7 @@ Do not treat the MVP as customer-ready until #381 and docs/MVP_VALIDATION_REPORT
 | [Technical decisions](DECISIONS.md) | Product and architecture decisions that should not be repeatedly debated. |
 | [Startup Gate UX direction](STARTUP_GATE.md) | Unified splash/status/readiness UX direction for post-MVP work. |
 | [ATEM manual integration plan](ATEM_MANUAL_INTEGRATION_PLAN.md) | Phase 1 manual ATEM scope, safety policy, architecture boundary, validation gate and future issue split. |
-| [ATEM dependency decision](ATEM_DEPENDENCY_DECISION.md) | Evaluated options, chosen library (PyATEMMax MIT), version/range, fallback path and revalidation policy. |
+| [ATEM dependency decision](ATEM_DEPENDENCY_DECISION.md) | Published dependency baseline, GPL licence correction, distribution review and hardware validation gates. |
 | [ATEM auto-preview future design](ATEM_AUTOMATION_FUTURE.md) | Design-only architecture for a future opt-in ATEM auto-preview feature (Phase 2+); no automation enabled. |
 | [Definition of Ready](DEFINITION_OF_READY.md) | Readiness rules before implementation starts. |
 | [Definition of Done](DEFINITION_OF_DONE.md) | Completion rules for issues and pull requests. |

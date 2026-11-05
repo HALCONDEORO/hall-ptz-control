@@ -8,7 +8,9 @@ cameras frame that person, so friends commenting from the audience can be seen o
 hall's displays and on the video stream during the meeting.
 
 Free and open-source (MIT). Built for a real hall and tested in live meetings; the
-Raspberry Pi installation is still pending. Any hall may use it freely.
+Raspberry Pi installation is still pending. Any hall may use the MIT-licensed application. Optional dependencies have
+separate licences; review the [ATEM dependency gate](docs/ATEM_DEPENDENCY_DECISION.md)
+before bundling or deploying ATEM support.
 
 ![KH PTZ Control banner](docs/screenshots/banner.png)
 
@@ -74,11 +76,16 @@ On a fresh Raspberry Pi OS Bullseye system (the Pi 5 path is untested, see [Requ
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
+sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
 
 Run this from the Pi desktop as your normal user. `--wizard-user` names that
 existing desktop user, not the service account created by the installer.
+Run the second command only if readiness passes. For a pilot, first check out
+the approved tag; `main` and CI passing are not a physical Pi validation result.
+Exit 20 means configuration is still required; exit 30 means stop and inspect
+the failure. Keep the installer output and never paste passwords into reports.
 
 The installer creates the `khptz` service user, installs dependencies, sets up the
 systemd service and the autostart session, and prints the next action: reboot and log into the desktop, or run
@@ -132,7 +139,9 @@ vean en las pantallas del salón y en la transmisión durante la reunión.
 
 Libre y de código abierto (MIT). Construido para un salón real y probado en reuniones
 en directo; la instalación en la Raspberry Pi aún está pendiente. Cualquier salón puede
-usarlo gratis.
+usar la aplicación bajo MIT. Las dependencias opcionales tienen licencias propias;
+revisa el [gate de ATEM](docs/ATEM_DEPENDENCY_DECISION.md) antes de distribuir o
+desplegar ese componente.
 
 ## Qué hace
 
@@ -188,17 +197,25 @@ En un sistema Raspberry Pi OS Bullseye recién instalado (el camino Pi 5 está s
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
+sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
 
 Ejecuta la orden en el escritorio de la Pi como tu usuario normal.
 `--wizard-user` es ese usuario de escritorio ya existente, no la cuenta
 de servicio que crea el instalador.
+Ejecuta la segunda orden solo si pasa la comprobación previa. Para una prueba
+piloto, selecciona primero la etiqueta aprobada: `main` y CI en verde no validan
+una Pi física. El código 20 indica configuración pendiente; el 30 exige parar
+y revisar el fallo. Conserva la salida sin incluir contraseñas en los informes.
 
 El instalador crea el usuario de servicio `khptz`, instala dependencias, configura el
 servicio systemd y el arranque automático, e indica el siguiente paso: reiniciar e iniciar sesión en el escritorio,
 o ejecutar allí `khptz setup`. El asistente recoge las IPs, el plano de asientos
 y las opciones de acceso. Sigue sus indicaciones; no uses una contraseña por defecto.
+
+La [lista de instalación en español](docs/INSTALL_RPI_ES.md) cubre preparación,
+asistente y entrega.
 
 La guía completa — requisitos, validación, copia de seguridad/restauración, rollback y
 resolución de problemas — está en [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).

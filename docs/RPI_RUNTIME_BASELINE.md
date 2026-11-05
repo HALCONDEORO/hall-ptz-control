@@ -10,13 +10,13 @@ for MVP installations and Raspberry Pi release-candidate validation.
 
 ---
 
-## Supported hardware
+## Hardware targets, not physical validation results
 
 | Hardware | Status | Notes |
 |---|---|---|
-| Raspberry Pi 4 Model B (2 GB RAM) | **Supported** — minimum spec | Tested target for MVP. |
-| Raspberry Pi 4 Model B (4 GB / 8 GB RAM) | Supported | Preferred for production installs. |
-| Raspberry Pi 5 | Supported — not yet validated | Expected to work; #381 validation needed. |
+| Raspberry Pi 4 Model B (2 GB RAM) | Software target, physical validation pending | Minimum target for MVP. |
+| Raspberry Pi 4 Model B (4 GB / 8 GB RAM) | Software target, physical validation pending | Preferred validation target. |
+| Raspberry Pi 5 | Not validated | Requires Bookworm/Trixie, not Bullseye. X11 and packaging checks required. |
 | Raspberry Pi 3 Model B+ | Not supported | Insufficient RAM for PyQt5 UI reliably. |
 | Raspberry Pi Zero / CM | Not supported | Insufficient performance. |
 
@@ -29,13 +29,13 @@ for MVP installations and Raspberry Pi release-candidate validation.
 
 | OS | Status | Notes |
 |---|---|---|
-| Raspberry Pi OS Bullseye (Debian 11) 64-bit | **Supported** — recommended | Ships **Python 3.9.2** (the supported target); PyQt5 available via `apt`. |
-| Raspberry Pi OS Bookworm (Debian 12) 64-bit | Supported — not validated | Ships Python 3.11; PyQt5 available via `apt`. May work, but 3.9.2 is the validated target. |
+| Raspberry Pi OS Bullseye (Debian 11) 64-bit | Software target | Ships **Python 3.9.2** (the supported target); PyQt5 available via `apt`. |
+| Raspberry Pi OS Bookworm (Debian 12) 64-bit | Not validated | Ships Python 3.11; PyQt5 available via `apt`. May work, but 3.9.2 is the software target. |
 | Raspberry Pi OS Bookworm 32-bit | Not validated | May work; not a test target. |
 | Ubuntu 22.04 (Pi edition) | Not validated | May work for development; not a support target. |
 | Generic Debian 12 (non-Pi) | CI approximation only | Used in GitHub Actions CI; not a customer deployment target. |
 
-**Recommended image**: Raspberry Pi OS Bullseye (Debian 11), 64-bit, **Lite** or **Desktop** depending on display requirements. Bullseye ships the supported Python 3.9.2 target.  
+**Recommended image**: Raspberry Pi OS Bullseye (Debian 11), 64-bit, **Desktop with an X11 session** for this GUI workflow. Lite needs a separately reviewed display/session setup. Bullseye ships the supported Python 3.9.2 target.
 Use the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) to write the image.
 
 ---
@@ -49,7 +49,7 @@ runtime syntax (no `match`/`case`, no runtime `X | Y` unions) to stay compatible
 
 | Python version | Status | Notes |
 |---|---|---|
-| **3.9.2** | **Supported** — target | Ships with Raspberry Pi OS Bullseye; used in CI. The version the product is built and validated for. |
+| **3.9.2** | **Supported** — target | Ships with Raspberry Pi OS Bullseye; used in CI. The software compatibility target, not a physical validation result. |
 | 3.9.x (> 3.9.2) | Supported | Same minor line; expected to behave identically. |
 | 3.10 / 3.11 / 3.12 | Not validated | May work (code is 3.9-compatible), but not the validated target. Do not assume pilot readiness without re-validating. |
 | 3.8 and below | Not supported | Uses `from __future__ import annotations` and other 3.9+ syntax. |
@@ -65,7 +65,7 @@ Required on all installs:
 
 ```bash
 sudo apt update
-sudo apt install -y git rsync python3-pyqt5 python3-pyqt5.qtsvg
+sudo apt install -y git rsync python3-pyqt5 python3-pyqt5.qtsvg python3-yaml x11-xserver-utils
 ```
 
 | Package | Version (Bullseye) | Purpose |
@@ -75,7 +75,8 @@ sudo apt install -y git rsync python3-pyqt5 python3-pyqt5.qtsvg
 | `git` | 2.39.x | Repository clone and update |
 | `rsync` | 3.2.x | Application file installation |
 
-Optional for ATEM installs:
+Optional for ATEM installs, only after licence/dependency review and on the
+Bullseye target (do not run system pip on Bookworm/Trixie):
 
 ```bash
 sudo apt install -y python3-pip
@@ -101,10 +102,11 @@ use the `apt` versions above instead.
 **Optional ATEM** (`requirements-atem.txt`):
 
 ```text
-PyATEMMax    # Blackmagic ATEM library — MIT licence
+PyATEMMax    # optional; see requirements-atem.txt and licence review gate
 ```
 
-Install only if `features.atem_enabled: true` in `config.yaml`. If the package is absent,
+Install only for a reviewed ATEM-enabled deployment. The published distribution
+is GPL, not the previously documented MIT. See [dependency review](ATEM_DEPENDENCY_DECISION.md). If the package is absent,
 ATEM monitoring is disabled and the application continues to run.
 
 ---
