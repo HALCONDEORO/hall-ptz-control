@@ -64,6 +64,8 @@ class ViscaCameraAdapter:
     ) -> None:
         self._mgr = manager
         self._cam_configs = cam_configs
+        self._display_query_lock = threading.RLock()
+        self._endpoint_generations: dict[int, int] = {1: 0, 2: 0}
         self._backlight_on: dict[str, bool] = {}
         # Speed caps: watchdog in main_window reduces these on VISCA error (#740).
         self.pan_cap:        int = PAN_SPEED_MAX
@@ -82,22 +84,29 @@ class ViscaCameraAdapter:
         address, so the panel could not move the camera until an app restart.
 
         The stored VISCA id is preserved. When ``_cam_configs`` is None the
-        adapter already reads ``config.CAMn.ip`` live, so this is a no-op.
+        adapter reads ``config.CAMn.ip`` live; only pending display queries
+        are invalidated in that mode.
         """
-        if self._cam_configs is None:
-            return
-        existing = self._cam_configs.get(camera_index)
-        if existing is not None:
-            cam_id_hex = existing[1]
-        else:
-            # No prior snapshot for this index — fall back to the live config id.
-            from config import CAM1, CAM2  # noqa: PLC0415
-            cam_id_hex = (
-                CAM1.cam_id if camera_index == 1
-                else CAM2.cam_id if camera_index == 2
-                else ''
+        with self._display_query_lock:
+            # Increment even in live-config mode and on A -> B -> A changes.
+            # An old query must not become current merely by matching the IP.
+            self._endpoint_generations[camera_index] = (
+                self._endpoint_generations.get(camera_index, 0) + 1
             )
-        self._cam_configs[camera_index] = (new_ip, cam_id_hex)
+            if self._cam_configs is None:
+                return
+            existing = self._cam_configs.get(camera_index)
+            if existing is not None:
+                cam_id_hex = existing[1]
+            else:
+                # No prior snapshot for this index — fall back to the live config id.
+                from config import CAM1, CAM2  # noqa: PLC0415
+                cam_id_hex = (
+                    CAM1.cam_id if camera_index == 1
+                    else CAM2.cam_id if camera_index == 2
+                    else ''
+                )
+            self._cam_configs[camera_index] = (new_ip, cam_id_hex)
 
     # ── CameraPort implementation ─────────────────────────────────────────────
 
@@ -302,11 +311,13 @@ class ViscaCameraAdapter:
         result.  *update_slider* must be thread-safe (e.g. a
         QMetaObject.invokeMethod wrapper).
         """
-        ip, cam_id_hex = self._cam_info_by_index(camera_key)
-        cached = self._mgr.get_zoom(ip)
-        if isinstance(cached, int) and cached >= 0:
-            update_slider(cached)
-            return
+        with self._display_query_lock:
+            ip, cam_id_hex = self._cam_info_by_index(camera_key)
+            generation = self._endpoint_generations.get(camera_key, 0)
+            cached = self._mgr.get_zoom(ip)
+            if isinstance(cached, int) and cached >= 0:
+                update_slider(cached)
+                return
 
         if not self._mgr.zoom_query_try_acquire(ip):
             return  # query already in flight
@@ -317,8 +328,13 @@ class ViscaCameraAdapter:
                 if val is not None:
                     from ptz.visca.parser import zoom_to_pct  # noqa: PLC0415
                     pct = zoom_to_pct(val)
-                    self._mgr.set_zoom(ip, pct)
-                    update_slider(pct)
+                    with self._display_query_lock:
+                        if not self._display_query_is_current(
+                            camera_key, ip, cam_id_hex, generation
+                        ):
+                            return
+                        self._mgr.set_zoom(ip, pct)
+                        update_slider(pct)
             finally:
                 self._mgr.zoom_query_release(ip)
 
@@ -336,23 +352,39 @@ class ViscaCameraAdapter:
         *on_exposure_changed* must be safe to call from a non-Qt thread (e.g.
         a QTimer.singleShot wrapper or a Qt signal).
         """
-        ip, cam_id_hex = self._cam_info_by_index(camera_key)
+        with self._display_query_lock:
+            ip, cam_id_hex = self._cam_info_by_index(camera_key)
+            generation = self._endpoint_generations.get(camera_key, 0)
         if not self._mgr.ae_query_try_acquire(ip):
             return  # query already in flight
 
         def _fetch() -> None:
             try:
                 ae_mode, exp_level = self._query_ae_and_exp_comp(ip, cam_id_hex)
-                self._mgr.ae_mode[camera_key] = ae_mode
-                logger.info("AE mode cam%d (%s): %s", camera_key, ip, ae_mode)
-                if exp_level is not None:
-                    self._mgr.exposure_level[camera_key] = exp_level
-                    logger.info("ExpComp cam%d (%s): %d", camera_key, ip, exp_level)
-                on_exposure_changed()
+                with self._display_query_lock:
+                    if not self._display_query_is_current(
+                        camera_key, ip, cam_id_hex, generation
+                    ):
+                        return
+                    self._mgr.ae_mode[camera_key] = ae_mode
+                    logger.info("AE mode cam%d (%s): %s", camera_key, ip, ae_mode)
+                    if exp_level is not None:
+                        self._mgr.exposure_level[camera_key] = exp_level
+                        logger.info("ExpComp cam%d (%s): %d", camera_key, ip, exp_level)
+                    on_exposure_changed()
             finally:
                 self._mgr.ae_query_release(ip)
 
         threading.Thread(target=_fetch, daemon=True).start()
+
+    def _display_query_is_current(
+        self, camera_key: int, ip: str, cam_id_hex: str, generation: int
+    ) -> bool:
+        """Called under the display lock before publishing a query result."""
+        return (
+            self._endpoint_generations.get(camera_key, 0) == generation
+            and self._cam_info_by_index(camera_key) == (ip, cam_id_hex)
+        )
 
     # ── VISCA I/O ─────────────────────────────────────────────────────────────
 
