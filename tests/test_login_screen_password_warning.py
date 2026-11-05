@@ -18,6 +18,8 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 # ── Qt stubs (must come before importing ui.login_screen) ─────────────────────
 
@@ -201,41 +203,37 @@ class TestLoginRoleMapping:
         stub = self._success("admin")
         assert stub.authenticated_role == OperatingMode.SYSTEM_ADMIN
 
-    def test_supercore_mode_grants_system_admin(self):
-        stub = self._success("supercore")
-        assert stub.authenticated_role == OperatingMode.SYSTEM_ADMIN
+    def test_unknown_mode_does_not_grant_admin(self):
+        stub = self._success("fixed-user-login")
+        assert stub.authenticated_role == OperatingMode.CAMERA_OPERATOR
 
 
-class TestSupercoreVerifyDispatch:
-    """In supercore mode, _verify_password must use verify_supercore."""
+class TestHiddenMasterLoginRemoved:
+    """The hidden logo-tap developer login is gone from the login screen."""
 
-    def _run(self, user: str, pwd: str, ok: bool) -> MagicMock:
+    def test_no_master_mode_or_verifier(self):
+        assert "fixed-user-login" not in _ls._MODE_ROLE
+        assert {n for n in dir(_ls) if n.startswith("verify_")} <= {"verify_entry", "verify_admin"}
+        assert not [n for n in dir(_ls) if n.endswith("_TAPS")]
+
+    def test_no_logo_tap_gesture(self):
+        assert not hasattr(_ls.LoginScreen, "_register_logo_tap")
+        assert "eventFilter" not in vars(_ls.LoginScreen)
+
+    def test_set_mode_rejects_unknown_mode(self):
         stub = _make_stub()
-        stub._mode = "supercore"
+        with pytest.raises(ValueError):
+            _ls.LoginScreen._set_mode(stub, "fixed-user-login")
+
+    def test_unknown_mode_cannot_log_in_with_any_password(self):
+        stub = _make_stub()
+        stub._mode = "fixed-user-login"
         stub.is_locked = False
-        stub.username_input.text.return_value = user
-        stub.password_input.text.return_value = pwd
-        with patch("ui.login_screen.verify_supercore", return_value=ok) as vs:
+        stub.password_input.text.return_value = "whatever"
+        with patch("ui.login_screen.password_is_configured", return_value=True), \
+             patch("ui.login_screen.verify_entry", return_value=False), \
+             patch("ui.login_screen.verify_admin", return_value=False):
             _ls.LoginScreen._verify_password(stub)
-        stub._verify_supercore_mock = vs
-        return stub
-
-    def test_calls_verify_supercore_with_username_and_password(self):
-        stub = self._run("supercore", "secret", ok=True)
-        stub._verify_supercore_mock.assert_called_once_with("supercore", "secret")
-
-    def test_success_triggers_login(self):
-        stub = self._run("supercore", "secret", ok=True)
-        stub._on_login_success.assert_called_once()
-
-    def test_failure_does_not_login(self):
-        stub = self._run("supercore", "bad", ok=False)
-        stub._on_login_success.assert_not_called()
-        stub._on_login_failure.assert_called_once()
-
-    def test_empty_username_is_rejected_without_verifying(self):
-        stub = self._run("", "secret", ok=True)
-        stub._verify_supercore_mock.assert_not_called()
         stub._on_login_success.assert_not_called()
 
 
