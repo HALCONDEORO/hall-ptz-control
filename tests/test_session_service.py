@@ -500,3 +500,72 @@ def test_end_cancels_remaining_power_on():
     # El standby sí completa ambas cámaras: apagar es la operación segura.
     assert ("standby", "cam1") in port.calls
     assert ("standby", "cam2") in port.calls
+
+
+def test_standby_exception_does_not_skip_remaining_cameras(caplog):
+    """A failed adapter must not prevent shutdown attempts on other cameras."""
+    svc, port = _svc()
+
+    def standby(camera_id):
+        port.calls.append(("standby", camera_id))
+        if camera_id == "cam1":
+            raise OSError("simulated adapter failure")
+
+    port.standby = standby
+    svc._standby_all()
+
+    assert port.calls == [("standby", "cam1"), ("standby", "cam2")]
+    assert "cam1" in caplog.text
+    assert "simulated adapter failure" in caplog.text
+
+
+def test_end_still_completes_standby_after_adapter_exception():
+    """Exercise the asynchronous public shutdown path without real hardware."""
+    svc, port = _svc()
+
+    def standby(camera_id):
+        port.calls.append(("standby", camera_id))
+        if camera_id == "cam1":
+            raise OSError("simulated adapter failure")
+
+    port.standby = standby
+    with patch(f"{_MARKER_MOD}.clear_session_marker"):
+        svc.end()
+    svc._standby_thread.join(timeout=5)
+
+    assert not svc._standby_thread.is_alive()
+    assert svc.active is False
+    assert ("standby", "cam2") in port.calls
+
+
+def test_poll_cancellation_exception_does_not_block_session_end(caplog):
+    """Cleanup failure must not stop standby or leave active runtime state."""
+    store = RuntimeStateStore()
+    state = SystemState()
+    svc, port = _svc(system_state=state, runtime_state_store=store)
+    with patch(f"{_MARKER_MOD}.mark_session_active"):
+        svc.start()
+    svc._power_thread.join(timeout=5)
+    svc.set_chairman("Example")
+    port.calls.clear()
+
+    def cancel_polls(camera_id):
+        port.calls.append(("cancel_polls", camera_id))
+        if camera_id == "cam1":
+            raise OSError("simulated poll failure")
+
+    port.cancel_polls = cancel_polls
+    with patch(f"{_MARKER_MOD}.clear_session_marker") as clear:
+        svc.end()
+    svc._standby_thread.join(timeout=5)
+
+    assert ("cancel_polls", "cam2") in port.calls
+    assert ("standby", "cam1") in port.calls
+    assert ("standby", "cam2") in port.calls
+    assert svc.active is False
+    assert svc.session_id is None
+    assert state.session.active is False
+    assert state.session.chairman_name is None
+    assert store.snapshot().session.active is False
+    clear.assert_called_once()
+    assert "simulated poll failure" in caplog.text

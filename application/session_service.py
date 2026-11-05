@@ -132,7 +132,13 @@ class SessionService:
         """Standby secuencial de todas las cámaras (siempre ambas: apagar es
         la operación segura; no se cancela a mitad)."""
         for cam_id in self._camera_ids:
-            result = self._port.standby(cam_id)
+            try:
+                result = self._port.standby(cam_id)
+            except Exception:
+                # Shutdown is best-effort per camera: an adapter exception must
+                # not leave the remaining cameras without a standby attempt.
+                logger.exception("SessionService: standby raised for %s", cam_id)
+                continue
             if result is not None and hasattr(result, "ok") and not result.ok:
                 logger.warning(
                     "SessionService: standby falló en %s: %s",
@@ -197,7 +203,12 @@ class SessionService:
         # cámara: fuera del hilo llamante (ToggleSession viene de la UI).
         self._active = False
         for cam_id in self._camera_ids:
-            self._port.cancel_polls(cam_id)
+            try:
+                self._port.cancel_polls(cam_id)
+            except Exception:
+                # Poll cancellation is cleanup, not a gate for standby or for
+                # clearing the session's runtime state.
+                logger.exception("SessionService: cancel_polls raised for %s", cam_id)
         self._standby_thread = self._standby_all_async()
         self._sync_active(False)
         self._chairman = None
