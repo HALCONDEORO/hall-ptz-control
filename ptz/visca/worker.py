@@ -621,6 +621,8 @@ class CameraWorker:
         sin esperar el timeout completo (fix #181).
         """
         buf = b''
+        pending = b''
+        ack_identity = None
         deadline = time.monotonic() + VISCA_READ_TIMEOUT
         while True:
             if self._interrupt.is_set() or self._shutdown.is_set():
@@ -634,7 +636,25 @@ class CameraWorker:
             chunk = sock.recv(1024)
             if not chunk:
                 break
-            buf += chunk
+            pending += chunk
+            while b"\xff" in pending:
+                frame, pending = pending.split(b"\xff", 1)
+                framed = frame + b"\xff"
+                if len(frame) >= 2 and (frame[0] & 0xF0) == 0x90:
+                    kind = frame[1] & 0xF0
+                    identity = (frame[0], frame[1] & 0x0F)
+                    if kind == 0x40 and ack_identity is None:
+                        ack_identity = identity
+                    elif (kind in (0x50, 0x60) and ack_identity is not None
+                          and identity != ack_identity
+                          and not (kind == 0x60 and identity[1] == 0)):
+                        # VISCA assigns a command socket in its ACK. A final
+                        # response for another socket cannot confirm this
+                        # command. Socket-zero errors can reject before ACK.
+                        logger.warning("CameraWorker %s: ignored unrelated VISCA frame %s",
+                                       self.ip, framed.hex())
+                        continue
+                buf += framed
             if CameraWorker._has_final_visca_frame(buf):
                 break
         return buf
@@ -807,6 +827,14 @@ class CameraWorker:
                         self._close_socket()
                         break
 
+                    # send_confirmed may expire/cancel while recv is in
+                    # progress. Never publish a late completion as success or
+                    # reuse a session with an ambiguous response tail.
+                    if cmd.cancelled.is_set() or (cmd.expires_at and time.monotonic() > cmd.expires_at):
+                        self._close_socket()
+                        _notify_failure()
+                        break
+
                     self._set_connected(True)
                     cmd_type = CameraWorker._classify_payload(cmd.payload)
 
@@ -854,6 +882,10 @@ class CameraWorker:
                             "%s cam=%s VISCA error response [%s] %s: %s",
                             cmd.cmd_id, self.ip, cmd_type, response.hex(), response_reason,
                         )
+                        # A rejection can leave late Completion bytes behind
+                        # (including a partial next frame). Do not let the next
+                        # command consume that tail as its own confirmation.
+                        self._close_socket()
                         break  # _succeeded permanece False
 
                     _succeeded = True

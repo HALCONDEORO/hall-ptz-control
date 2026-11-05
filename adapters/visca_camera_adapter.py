@@ -93,6 +93,7 @@ class ViscaCameraAdapter:
             self._endpoint_generations[camera_index] = (
                 self._endpoint_generations.get(camera_index, 0) + 1
             )
+            self._backlight_on.pop(f"cam{camera_index}", None)
             if self._cam_configs is None:
                 return
             existing = self._cam_configs.get(camera_index)
@@ -107,6 +108,19 @@ class ViscaCameraAdapter:
                     else ''
                 )
             self._cam_configs[camera_index] = (new_ip, cam_id_hex)
+
+    def update_camera_visca_id(self, camera_index: int, new_id: str) -> None:
+        """Repoint command identity and retire display results from the old id."""
+        if camera_index not in (1, 2):
+            raise ValueError("Unknown camera index")
+        with self._display_query_lock:
+            self._endpoint_generations[camera_index] = (
+                self._endpoint_generations.get(camera_index, 0) + 1
+            )
+            self._backlight_on.pop(f"cam{camera_index}", None)
+            if self._cam_configs is not None:
+                ip, _ = self._cam_info_by_index(camera_index)
+                self._cam_configs[camera_index] = (ip, new_id)
 
     # ── CameraPort implementation ─────────────────────────────────────────────
 
@@ -241,6 +255,13 @@ class ViscaCameraAdapter:
         cmd_hex = f"010447{p:02X}{q:02X}{r:02X}{s:02X}FF"
         t0 = time.monotonic()
         ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
+        if ok:
+            with self._display_query_lock:
+                idx = self._index(camera_id)
+                self._endpoint_generations[idx] = self._endpoint_generations.get(idx, 0) + 1
+                # A confirmed movement supersedes both cached and in-flight observations.
+                if self._cam_info_by_index(idx) == (ip, cam_id_hex):
+                    self._mgr.invalidate_zoom(ip)
         return self._result("zoom_absolute", camera_id, ok, t0)
 
     def stop_all(self) -> CommandResult:
@@ -297,6 +318,19 @@ class ViscaCameraAdapter:
     # ── UI-state synchronisation helpers (read queries) ───────────────────────
     # Called by the UI layer after startup and camera reconnection to sync
     # the zoom slider and AE mode display.  Callbacks are plain Callable with
+    def display_generation(self, camera_key: int) -> int:
+        """Return the current display generation of a camera slot (1-based).
+
+        The generation changes on every ``update_camera_ip`` call. A caller that
+        hands a result to another thread (for example a queued Qt signal) can
+        capture the generation up front and compare it again on delivery: if it
+        changed, the camera was reconfigured in between and the result must be
+        dropped. Query threads already check this before publishing; this closes
+        the gap for events that are queued after that check.
+        """
+        with self._display_query_lock:
+            return self._endpoint_generations.get(camera_key, 0)
+
     # no Qt imports here.
 
     def refresh_zoom_display(
@@ -361,6 +395,8 @@ class ViscaCameraAdapter:
         def _fetch() -> None:
             try:
                 ae_mode, exp_level = self._query_ae_and_exp_comp(ip, cam_id_hex)
+                if ae_mode is None:
+                    return  # No valid observation: preserve the last known state.
                 with self._display_query_lock:
                     if not self._display_query_is_current(
                         camera_key, ip, cam_id_hex, generation
@@ -498,15 +534,16 @@ class ViscaCameraAdapter:
 
     def _query_ae_and_exp_comp(
         self, ip: str, cam_id_hex: str
-    ) -> "tuple[str, int | None]":
+    ) -> "tuple[str | None, int | None]":
         """VISCA AE+ExpComp inquiry in a single TCP session.
 
         Returns (ae_mode, exp_level) where ae_mode is 'auto'|'manual'|'bright'
+        or None when no valid mode frame was received,
         and exp_level is -7..+7 mapped from 0-14, or None.
         """
         from ptz.visca import commands as vcmd  # noqa: PLC0415
         from ptz.visca import parser as vparse  # noqa: PLC0415
-        ae_mode = "auto"
+        ae_mode = None
         exp_level: "int | None" = None
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -515,8 +552,9 @@ class ViscaCameraAdapter:
                 s.sendall(vcmd.ae_mode_inquiry(cam_id_hex))
                 ae_data = self._recv_visca_response(s)
                 frame = vparse.inquiry_frame(ae_data, payload_len=1)
-                if frame is not None:
-                    ae_mode = vparse.ae_mode(frame)
+                if frame is None:
+                    return None, None
+                ae_mode = vparse.ae_mode(frame)
                 if ae_mode not in ("manual", "bright"):
                     s.sendall(vcmd.exp_comp_inquiry(cam_id_hex))
                     ec_data = self._recv_visca_response(s)
