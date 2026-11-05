@@ -55,11 +55,15 @@ class CameraManager:
 
         # Flags de query en vuelo: evitan lanzar un segundo thread si ya hay uno
         # consultando zoom o AE de esa cámara (race condition tras preset recall).
+        # Query leases belong to endpoint IPs, not mutable camera slots. A
+        # retired query can release its own IP after reconfiguration without
+        # clearing a new endpoint's lease. Keep a busy IP reserved even if a
+        # slot moves away and back before that query finishes.
         # _inflight_lock protege el check-and-set de ambos flags: sin lock, dos
         # threads pueden leer False simultáneamente y ambos proceder (TOCTOU).
         self._inflight_lock:      threading.Lock  = threading.Lock()
-        self._zoom_query_inflight: dict[int, bool] = {1: False, 2: False}
-        self._ae_query_inflight:   dict[int, bool] = {1: False, 2: False}
+        self._zoom_query_inflight: set[str] = set()
+        self._ae_query_inflight:   set[str] = set()
 
         # Estado por cámara. Clave: cam_key (1 o 2).
         self.backlight_on:   dict[int, bool] = {1: False, 2: False}
@@ -99,10 +103,13 @@ class CameraManager:
         """Update the IP for camera cam_key (1 or 2) and retire the old TCP worker."""
         with self._workers_lock:
             old_ip = self._cam1_ip if cam_key == 1 else self._cam2_ip
-            if cam_key == 1:
-                self._cam1_ip = new_ip
-            else:
-                self._cam2_ip = new_ip
+            with self._inflight_lock:
+                if cam_key == 1:
+                    self._cam1_ip = new_ip
+                else:
+                    self._cam2_ip = new_ip
+                if old_ip != new_ip:
+                    self._zoom_cache[cam_key] = None
             old_worker = self._workers.pop(old_ip, None)
         if old_worker is not None:
             old_worker.stop()
@@ -168,11 +175,17 @@ class CameraManager:
 
     def get_zoom(self, ip: str) -> Optional[int]:
         """Último porcentaje de zoom enviado a esta cámara, o None si no hay cache."""
-        return self._zoom_cache.get(self.cam_key(ip))
+        with self._inflight_lock:
+            return self._zoom_cache.get(self.cam_key(ip))
 
     def set_zoom(self, ip: str, pct: int):
         """Actualiza el cache con el porcentaje de zoom enviado."""
-        self._zoom_cache[self.cam_key(ip)] = pct
+        with self._inflight_lock:
+            # A query started before reconfiguration may finish afterwards.
+            # Its value belongs to the retired endpoint, not the new camera.
+            if ip not in (self._cam1_ip, self._cam2_ip):
+                return
+            self._zoom_cache[self.cam_key(ip)] = pct
 
     def invalidate_zoom(self, ip: str):
         """
@@ -180,7 +193,8 @@ class CameraManager:
         Usar tras un preset recall: los presets mueven el zoom a una
         posición desconocida, así el slider se sincronizará con la red.
         """
-        self._zoom_cache[self.cam_key(ip)] = None
+        with self._inflight_lock:
+            self._zoom_cache[self.cam_key(ip)] = None
 
     def zoom_query_try_acquire(self, ip: str) -> bool:
         """
@@ -190,16 +204,16 @@ class CameraManager:
         Operación atómica mediante _inflight_lock para evitar TOCTOU.
         """
         with self._inflight_lock:
-            key = self.cam_key(ip)
-            if self._zoom_query_inflight[key]:
+            self.cam_key(ip)  # Reject queries for unconfigured endpoints.
+            if ip in self._zoom_query_inflight:
                 return False
-            self._zoom_query_inflight[key] = True
+            self._zoom_query_inflight.add(ip)
             return True
 
     def zoom_query_release(self, ip: str):
         """Libera el slot de query de zoom tras completarse el thread."""
         with self._inflight_lock:
-            self._zoom_query_inflight[self.cam_key(ip)] = False
+            self._zoom_query_inflight.discard(ip)
 
     def ae_query_try_acquire(self, ip: str) -> bool:
         """
@@ -209,13 +223,13 @@ class CameraManager:
         Operación atómica mediante _inflight_lock para evitar TOCTOU.
         """
         with self._inflight_lock:
-            key = self.cam_key(ip)
-            if self._ae_query_inflight[key]:
+            self.cam_key(ip)  # Reject queries for unconfigured endpoints.
+            if ip in self._ae_query_inflight:
                 return False
-            self._ae_query_inflight[key] = True
+            self._ae_query_inflight.add(ip)
             return True
 
     def ae_query_release(self, ip: str):
         """Libera el slot de query de AE tras completarse el thread."""
         with self._inflight_lock:
-            self._ae_query_inflight[self.cam_key(ip)] = False
+            self._ae_query_inflight.discard(ip)
