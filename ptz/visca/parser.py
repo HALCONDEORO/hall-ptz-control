@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterator, Optional
 
 from .types import ZOOM_MAX
 
@@ -135,6 +135,20 @@ def exp_comp_level(frame: bytes) -> Optional[int]:
     return max(-7, min(7, val - 7))
 
 
+def _response_frames(buf: bytes) -> Iterator[bytes]:
+    """Yield complete camera response frames, excluding the FF terminator.
+
+    A partial TCP tail is not a frame. Error frames also require an error
+    code; accepting only their type byte would stop the transport read early.
+    """
+    for frame in buf.split(b"\xff")[:-1]:
+        if len(frame) < 2 or (frame[0] & 0xF0) != 0x90:
+            continue
+        kind = frame[1] & 0xF0
+        if kind in (0x40, 0x50) or (kind == 0x60 and len(frame) >= 3):
+            yield frame
+
+
 def contains_final_response(buf: bytes) -> bool:
     """True si *buf* contiene una trama VISCA terminal: Completion (9x 5y FF)
     o Error (9x 6y FF).
@@ -145,16 +159,8 @@ def contains_final_response(buf: bytes) -> bool:
       - reportar éxito al recibir solo el ACK, ni
       - perder un frame de Error que llega después del ACK.
     """
-    pos = 0
-    while pos < len(buf):
-        term = buf.find(b"\xff", pos)
-        if term == -1:
-            break
-        frame = buf[pos:term]
-        if len(frame) >= 2 and (frame[1] & 0xF0) in (0x50, 0x60):
-            return True
-        pos = term + 1
-    return False
+    return any((frame[1] & 0xF0) in (0x50, 0x60)
+               for frame in _response_frames(buf))
 
 
 def contains_completion(buf: bytes) -> bool:
@@ -164,16 +170,7 @@ def contains_completion(buf: bytes) -> bool:
     Útil cuando el llamador ya sabe que hubo una trama terminal y necesita
     distinguir éxito (Completion) de fallo (Error).
     """
-    pos = 0
-    while pos < len(buf):
-        term = buf.find(b"\xff", pos)
-        if term == -1:
-            break
-        frame = buf[pos:term]
-        if len(frame) >= 2 and (frame[1] & 0xF0) == 0x50:
-            return True
-        pos = term + 1
-    return False
+    return any((frame[1] & 0xF0) == 0x50 for frame in _response_frames(buf))
 
 
 def validate_visca_response(response: bytes) -> tuple[bool, str]:
@@ -199,28 +196,17 @@ def validate_visca_response(response: bytes) -> tuple[bool, str]:
     if not response:
         return False, "empty response — connection may have closed"
 
-    i = 0
     found_completion = False
     found_ack = False
-    while i < len(response):
-        if response[i] & 0x80 == 0:
-            i += 1
-            continue
-        if i + 1 < len(response):
-            resp_type = response[i + 1]
-            high_nibble = resp_type >> 4
-            if high_nibble == 0x6:
-                error_code = response[i + 2] if i + 2 < len(response) else 0
-                return False, f"VISCA error frame (type={resp_type:#04x}, code={error_code:#04x})"
-            if high_nibble == 0x5:
-                found_completion = True
-            elif high_nibble == 0x4:
-                found_ack = True
-        try:
-            end = response.index(0xFF, i)
-            i = end + 1
-        except ValueError:
-            break
+    for frame in _response_frames(response):
+        resp_type = frame[1]
+        high_nibble = resp_type >> 4
+        if high_nibble == 0x6:
+            return False, f"VISCA error frame (type={resp_type:#04x}, code={frame[2]:#04x})"
+        if high_nibble == 0x5:
+            found_completion = True
+        elif high_nibble == 0x4:
+            found_ack = True
 
     if found_completion:
         return True, ""
