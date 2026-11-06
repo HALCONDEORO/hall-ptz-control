@@ -234,14 +234,20 @@ class ViscaCameraAdapter:
         return self._result("brightness_down", camera_id, ok, t0)
 
     def backlight_toggle(self, camera_id: str) -> CommandResult:
-        current = self._backlight_on.get(camera_id, False)
-        new_state = not current
-        ip, cam_id_hex = self._cam_info(camera_id)
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            generation = self._endpoint_generations.get(idx, 0)
+            ip, cam_id_hex = self._cam_info(camera_id)
+            new_state = not self._backlight_on.get(camera_id, False)
         cmd_hex = "01043302FF" if new_state else "01043303FF"
         t0 = time.monotonic()
         ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
         if ok:
-            self._backlight_on[camera_id] = new_state
+            with self._display_query_lock:
+                # A delayed confirmation must not repopulate a retired endpoint's
+                # toggle state, including an IP/id change that later changes back.
+                if self._display_query_is_current(idx, ip, cam_id_hex, generation):
+                    self._backlight_on[camera_id] = new_state
         return self._result("backlight_toggle", camera_id, ok, t0)
 
     def zoom_absolute(self, camera_id: str, position: int) -> CommandResult:
