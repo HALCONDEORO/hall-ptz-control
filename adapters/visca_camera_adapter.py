@@ -558,6 +558,8 @@ class ViscaCameraAdapter:
                 if frame is None:
                     return None, None
                 ae_mode = vparse.ae_mode(frame)
+                if ae_mode is None:
+                    return None, None
                 if ae_mode not in ("manual", "bright"):
                     s.sendall(vcmd.exp_comp_inquiry(cam_id_hex))
                     ec_data = self._recv_visca_response(s)
