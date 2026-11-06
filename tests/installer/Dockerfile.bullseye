@@ -51,6 +51,12 @@ RUN printf '%s\n' \
         > /etc/apt/sources.list \
     && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-valid-until
 
+# Snapshot CDN downloads can transiently return HTTP 503/504. Keep the pinned
+# sources and fail closed after a bounded number of native apt acquisition
+# retries; do not hide a failed package install or replace signed metadata.
+RUN printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\n' \
+        > /etc/apt/apt.conf.d/80snapshot-retries
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 \
         python3-pyqt5 \
