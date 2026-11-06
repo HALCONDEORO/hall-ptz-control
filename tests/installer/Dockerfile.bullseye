@@ -51,7 +51,17 @@ RUN printf '%s\n' \
         > /etc/apt/sources.list \
     && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-valid-until
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Snapshot CDN downloads can transiently return HTTP 503/504. Keep the pinned
+# sources and fail closed after a bounded number of native apt acquisition
+# retries; do not hide a failed package install or replace signed metadata.
+RUN printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\n' \
+        > /etc/apt/apt.conf.d/80snapshot-retries
+
+# Never proceed with incomplete or unauthenticated indexes.
+RUN apt-get -o APT::Update::Error-Mode=any update
+COPY tests/installer/acquire_snapshot_packages.sh /usr/local/libexec/khptz-acquire-snapshot
+
+RUN bash /usr/local/libexec/khptz-acquire-snapshot \
         python3 \
         python3-pyqt5 \
         python3-pyqt5.qtsvg \
