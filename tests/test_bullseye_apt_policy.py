@@ -22,8 +22,17 @@ def test_snapshot_sources_stay_pinned_and_authenticated():
 
 def test_failed_apt_install_is_not_suppressed():
     text = DOCKERFILE.read_text()
-    block = text.split("RUN apt-get update", 1)[1].split("\n\n", 1)[0]
-    assert "&& apt-get install -y --no-install-recommends" in block
+    block = text.split("RUN apt-get install", 1)[1].split("\n\n", 1)[0]
+    assert "-y --no-install-recommends" in block
     assert "||" not in block
     assert "--fix-missing" not in block
     assert "&& rm -rf /var/lib/apt/lists/*" in block
+
+
+def test_prefetch_is_exact_content_between_update_and_install():
+    text = DOCKERFILE.read_text()
+    assert text.startswith("# syntax=docker/dockerfile:1\n")
+    assert "ADD --checksum=sha256:c786f80d1a5405e96167ebbebdd7d100b356c0a3ae0f87fb6f65f05f2e723f72" in text
+    assert "https://snapshot-cloudflare.debian.org/file/b186ee30165c3a662f83618fe356dd10c2bceecc/libxkbcommon-x11-0_1.0.3-2_amd64.deb" in text
+    assert "/var/cache/apt/archives/libxkbcommon-x11-0_1.0.3-2_amd64.deb" in text
+    assert text.index("RUN apt-get update") < text.index("ADD --checksum") < text.index("RUN apt-get install")

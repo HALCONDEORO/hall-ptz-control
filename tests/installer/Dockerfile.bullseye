@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Copyright (c) 2026 MACD Adaptive Limited.
 # Licensed under the MIT License. See LICENSE in the repository root.
 #
@@ -57,7 +58,20 @@ RUN printf '%s\n' \
 RUN printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\n' \
         > /etc/apt/apt.conf.d/80snapshot-retries
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Update first: Debian container apt update hooks may clear cached .deb files.
+RUN apt-get update
+
+# The dated snapshot CDN repeatedly times out on this one immutable blob.
+# Prefetch the identical amd64 package from Debian's content-addressed archive.
+# SHA256 is from Packages.xz authenticated by the pinned snapshot's InRelease:
+# https://snapshot.debian.org/archive/debian/20260901T000000Z/dists/bullseye/main/binary-amd64/Packages.xz
+# BuildKit rejects any other bytes; apt still uses signed indexes and validates
+# its normal package selection. No alternate suite or untrusted apt source.
+ADD --checksum=sha256:c786f80d1a5405e96167ebbebdd7d100b356c0a3ae0f87fb6f65f05f2e723f72 \
+    https://snapshot-cloudflare.debian.org/file/b186ee30165c3a662f83618fe356dd10c2bceecc/libxkbcommon-x11-0_1.0.3-2_amd64.deb \
+    /var/cache/apt/archives/libxkbcommon-x11-0_1.0.3-2_amd64.deb
+
+RUN apt-get install -y --no-install-recommends \
         python3 \
         python3-pyqt5 \
         python3-pyqt5.qtsvg \
