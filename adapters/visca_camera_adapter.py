@@ -326,8 +326,11 @@ class ViscaCameraAdapter:
         )
 
     def invalidate_zoom(self, camera: int) -> None:
-        ip, _ = self._cam_info_by_index(camera)
-        self._mgr.invalidate_zoom(ip)
+        """Retire feedback captured before a confirmed preset recall."""
+        with self._display_query_lock:
+            ip, _ = self._cam_info_by_index(camera)
+            self._endpoint_generations[camera] = self._endpoint_generations.get(camera, 0) + 1
+            self._mgr.invalidate_zoom(ip)
 
     # ── UI-state synchronisation helpers (read queries) ───────────────────────
     # Called by the UI layer after startup and camera reconnection to sync
