@@ -15,12 +15,13 @@
 from __future__ import annotations
 
 import threading
+import weakref
 
 import logging
 import os
 from typing import ClassVar
 
-from PyQt5 import QtCore
+from PyQt5 import QtCore, sip
 
 from domain.atem_constants import ATEM_INPUT_LABELS as _ATEM_LABELS
 
@@ -188,6 +189,8 @@ class RightPanel:
 
     def _fit_container_height(self):
         """El panel ocupa siempre toda la altura de la pantalla."""
+        if sip.isdeleted(self._container):
+            return
         self._container.setGeometry(1446, 0, 474, 1080)
 
     # ── Secciones ─────────────────────────────────────────────────────────────
@@ -427,11 +430,22 @@ class RightPanel:
             btn.setFixedHeight(50)
             btn.setToolTip(tooltip)
             btn.setStyleSheet(self._btn_focus_base_style)
-            btn.clicked.connect(
-                (lambda m=port_method: (
-                    lambda: _run_off_ui(getattr(_get_port(), m, lambda _: None), _active_cam_id())
-                ))()
-            )
+            def _focus_clicked(_checked=False, method=port_method):
+                port = _get_port()
+                if port is None:
+                    return
+                camera_id = _active_cam_id()
+                window_ref = weakref.ref(mw)
+
+                def _apply_focus():
+                    result = getattr(port, method)(camera_id)
+                    if (method != "one_push_af" and result is not None and result.ok):
+                        from ui.camera_display_mixin import _queue_display_update
+                        _queue_display_update(window_ref, "_apply_focus_update")
+
+                _run_off_ui(_apply_focus)
+
+            btn.clicked.connect(_focus_clicked)
             focus_row.addWidget(btn)
         layout.addLayout(focus_row)
 
@@ -472,7 +486,18 @@ class RightPanel:
         def _on_backlight_clicked():
             port = _get_port()
             if port:
-                _run_off_ui(port.backlight_toggle, _active_cam_id())
+                camera_id = _active_cam_id()
+
+                def _toggle_and_refresh():
+                    result = port.backlight_toggle(camera_id)
+                    if result is not None and result.ok:
+                        # MainWindow reads the confirmed manager state for the
+                        # currently selected camera, never the old click target.
+                        QtCore.QMetaObject.invokeMethod(
+                            mw, "_update_backlight_ui", Qt.QueuedConnection,
+                        )
+
+                _run_off_ui(_toggle_and_refresh)
 
         mw.BtnBacklight.clicked.connect(_on_backlight_clicked)
 
@@ -507,8 +532,15 @@ class RightPanel:
             f"QPushButton {{ background-color: {color}; border: none; border-radius: 10px;"
             f" font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; padding: 4px 0px; }}"
         )
-        QtCore.QTimer.singleShot(
-            duration_ms, lambda: btn.setStyleSheet(self._btn_focus_base_style))
+        button_ref = weakref.ref(btn)
+        base_style = self._btn_focus_base_style
+
+        def restore_style():
+            button = button_ref()
+            if button is not None and not sip.isdeleted(button):
+                button.setStyleSheet(base_style)
+
+        QtCore.QTimer.singleShot(duration_ms, restore_style)
 
 
     def set_atem_state(self, state) -> None:

@@ -136,12 +136,27 @@ class ProvisionHandoff:
     def _read_result(self) -> HandoffResult:
         try:
             data = json.loads(self._result_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            # JSON validity is not a wire contract. In particular, "false" is
+            # truthy in Python and must never unlock the wizard's success path.
+            if not isinstance(data, dict) or type(data.get("ok")) is not bool:
+                raise ValueError("expected an object with a boolean ok field")
+            written = data.get("written", [])
+            issues = data.get("issues", [])
+            error = data.get("error", "")
+            if not isinstance(written, list) or any(
+                not isinstance(path, str) for path in written
+            ):
+                raise ValueError("expected written to be a list of paths")
+            if not isinstance(issues, list) or any(
+                not isinstance(issue, dict)
+                or not isinstance(issue.get("message", ""), str)
+                for issue in issues
+            ):
+                raise ValueError("expected issues to contain message objects")
+            if not isinstance(error, str):
+                raise ValueError("expected error to be text")
+        except (OSError, UnicodeError, ValueError) as exc:
             return HandoffResult(ok=False, error=f"unreadable result: {exc}")
-        if data.get("ok"):
-            return HandoffResult(ok=True, written=list(data.get("written", [])))
-        return HandoffResult(
-            ok=False,
-            error=str(data.get("error", "")),
-            issues=list(data.get("issues", [])),
-        )
+        if data["ok"]:
+            return HandoffResult(ok=True, written=written)
+        return HandoffResult(ok=False, error=error, issues=issues)

@@ -115,6 +115,9 @@ class PiPNudgeService:
         se ejecutará inmediatamente después del nudge en curso.
         """
         with self._lock:
+            # Timer.cancel() only prevents callbacks that have not started.
+            # Invalidate callbacks already waiting for this lock as well.
+            self._generation += 1
             self._cancel_pending_stop()
             self._nudge_active = False
 

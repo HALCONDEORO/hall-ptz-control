@@ -37,7 +37,7 @@ class PresetTestHistoryService:
 
     def last_entry(self) -> dict | None:
         entries = load_json(self._file, default=[])
-        if isinstance(entries, list) and entries:
+        if isinstance(entries, list) and entries and isinstance(entries[-1], dict):
             return entries[-1]
         return None
 
@@ -46,6 +46,8 @@ class PresetTestHistoryService:
         if entry is None:
             return "No test runs yet"
         ts = entry.get("timestamp", "")
+        if not isinstance(ts, str):
+            ts = ""
         total = entry.get("total", 0)
         ok = entry.get("ok", 0)
         try:

@@ -201,3 +201,41 @@ def test_layout_with_older_supported_version_is_migrated(tmp_path):
     _write_layout(tmp_path / "room_layout.json", version=SCHEMA_VERSION)
     layout = svc.load()
     assert layout.schema_version == SCHEMA_VERSION
+
+
+def test_recovery_does_not_replace_good_backup_with_corrupt_primary(tmp_path):
+    path = tmp_path / "room_layout.json"
+    backup = path.with_suffix(".bak")
+    _write_layout(backup, version=SCHEMA_VERSION)
+    original_backup = backup.read_bytes()
+    path.write_text("broken JSON", encoding="utf-8")
+    svc = LayoutService(layout_path=path, legacy_positions={})
+
+    recovered = svc.load()
+
+    assert svc.recovery_used is True
+    assert backup.read_bytes() == original_backup
+    path.write_text("second power cut", encoding="utf-8")
+    assert svc.load() == recovered
+    assert svc.recovery_used is True
+
+
+def test_failed_recovery_write_keeps_good_backup_and_loads_it_in_memory(tmp_path, monkeypatch):
+    path = tmp_path / "room_layout.json"
+    backup = path.with_suffix(".bak")
+    _write_layout(backup, version=SCHEMA_VERSION)
+    original_backup = backup.read_bytes()
+    path.write_text("broken JSON", encoding="utf-8")
+    original_primary = path.read_bytes()
+
+    def fail_replace(*args, **kwargs):
+        raise OSError("disk write failed")
+
+    monkeypatch.setattr("core.json_io.os.replace", fail_replace)
+    svc = LayoutService(layout_path=path, legacy_positions={})
+    recovered = svc.load()
+
+    assert svc.recovery_used is True
+    assert recovered.schema_version == SCHEMA_VERSION
+    assert backup.read_bytes() == original_backup
+    assert path.read_bytes() == original_primary

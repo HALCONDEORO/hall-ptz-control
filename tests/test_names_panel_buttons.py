@@ -464,3 +464,19 @@ class TestTitleCounter:
         _np.NamesPanel._update_title(stub)
         stub._title.setText.assert_called_once_with("👥 Attendees  (0/1 seated)")
 
+
+
+def test_reorder_search_results_preserves_filtered_out_attendees():
+    stub = _panel_stub(names=["Alice", "Bob", "Alicia", "Carol"], assigned={"Carol"})
+    _np.NamesPanel._on_order_changed(stub, ["Alicia", "Alice"])
+    assert stub.names == ["Alicia", "Bob", "Alice", "Carol"]
+    stub._on_changed.assert_called_once()
+
+
+def test_reorder_empty_search_results_preserves_all_attendees():
+    names = ["Alice", "Bob"]
+    stub = _panel_stub(names=names, assigned=set())
+    original_list = stub.names
+    _np.NamesPanel._on_order_changed(stub, [])
+    assert stub.names == ["Alice", "Bob"]
+    assert stub.names is original_list

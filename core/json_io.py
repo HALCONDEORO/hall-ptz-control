@@ -122,10 +122,11 @@ def _apply_group_access(tmp_path: str, directory: Path) -> None:
         logger.debug("No se pudo ajustar el acceso de grupo en %s: %s", tmp_path, exc)
 
 
-def save_json(path: Path | str, data: Any, indent: int = 2) -> bool:
+def save_json(path: Path | str, data: Any, indent: int = 2, *, create_backup: bool = True) -> bool:
     """
     Escribe `data` en `path` de forma atómica (temp-file + os.replace) con backup
     y bloqueo por archivo. Si el archivo ya existe, crea `.bak` antes de reemplazarlo.
+    Use create_backup=False when restoring a good backup over a corrupt primary.
     Devuelve True si tuvo éxito.
     """
     p = Path(path)
@@ -136,7 +137,7 @@ def save_json(path: Path | str, data: Any, indent: int = 2) -> bool:
             dir_ = p.parent
             dir_.mkdir(parents=True, exist_ok=True)
 
-            if p.exists():
+            if create_backup and p.exists():
                 bak = p.with_suffix('.bak')
                 try:
                     shutil.copy2(p, bak)

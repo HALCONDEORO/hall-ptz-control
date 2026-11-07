@@ -285,3 +285,206 @@ def test_platform_save_confirmation_stays_in_its_session(main_window, monkeypatc
         main_window._bus.emit.assert_called_once_with(EventType.PRESET_SAVE_SLOT, camera=1, slot=1)
     else:
         main_window._bus.emit.assert_not_called()
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_right_panel_fit_handles_container_lifetime(_qapp, deleted):
+    from PyQt5 import sip
+    from PyQt5.QtWidgets import QFrame
+    from ui.right_panel import RightPanel
+
+    panel = RightPanel.__new__(RightPanel)
+    panel._container = QFrame()
+    if deleted:
+        sip.delete(panel._container)
+    # A queued fit can outlive its parent widget during window teardown.
+    panel._fit_container_height()
+    if not deleted:
+        assert panel._container.geometry().getRect() == (1446, 0, 474, 1080)
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_right_panel_flash_handles_button_lifetime(_qapp, monkeypatch, deleted):
+    from PyQt5 import sip
+    from PyQt5.QtCore import QTimer
+    from PyQt5.QtWidgets import QPushButton
+    from ui.right_panel import RightPanel
+
+    callbacks = []
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    panel = RightPanel.__new__(RightPanel)
+    panel._btn_focus_base_style = "QPushButton { color: black; }"
+    button = QPushButton()
+    panel._flash_button(button, True)
+    if deleted:
+        sip.delete(button)
+    callbacks[0]()
+    if not deleted:
+        assert button.styleSheet() == panel._btn_focus_base_style
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_main_window_blocked_flash_handles_button_lifetime(_qapp, monkeypatch, deleted):
+    from PyQt5 import sip
+    from PyQt5.QtCore import QTimer
+    from PyQt5.QtWidgets import QPushButton
+    from ui.main_window import MainWindow
+
+    callbacks = []
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    button = QPushButton()
+    button.setStyleSheet("QPushButton { color: black; }")
+    original = button.styleSheet()
+    MainWindow._flash_blocked(None, button)
+    if deleted:
+        sip.delete(button)
+    callbacks[0]()
+    if not deleted:
+        assert button.styleSheet() == original
+
+
+def test_session_end_cancels_unconfirmed_seat_save(main_window, monkeypatch):
+    from unittest.mock import Mock
+    monkeypatch.setattr(main_window._camera_port, "refresh_zoom_display", Mock())
+    monkeypatch.setattr(main_window._camera_port, "async_refresh_ae_mode", Mock())
+    main_window._enter_seat_selection(37)
+    main_window._bus = Mock()
+    main_window._session.shutdown("manual")
+    assert main_window._seat_pending is None
+    assert main_window._seat_pending_camera is None
+    main_window._bus.reset_mock()
+    main_window.session_active = True  # a later session must not inherit Save
+    main_window._exit_seat_selection(save=True)
+    main_window._bus.emit.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "exposure"])
+def test_late_display_callback_ignores_destroyed_window(_qapp, kind):
+    """A completed network read may outlive the window receiving its result."""
+    from unittest.mock import Mock
+    from PyQt5 import sip
+    from PyQt5.QtWidgets import QWidget
+    from ui.camera_display_mixin import CameraDisplayMixin
+
+    class DisplayWindow(CameraDisplayMixin, QWidget):
+        pass
+
+    window = DisplayWindow()
+    window.Cam1 = Mock()
+    window.Cam1.isChecked.return_value = True
+    window._camera_port = Mock()
+    window._camera_port.display_generation.return_value = 0
+    window._cameras = Mock()
+    window._cameras.cam_key.return_value = 1
+    if kind == "zoom":
+        window._refresh_zoom()
+        callback = window._camera_port.refresh_zoom_display.call_args.args[1]
+    else:
+        window._on_cam_connected(True, "192.0.2.1")
+        callback = window._camera_port.async_refresh_ae_mode.call_args.args[1]
+    sip.delete(window)
+    if kind == "zoom":
+        callback(50)
+    else:
+        callback()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "exposure"])
+def test_display_callback_still_delivers_to_live_receiver(_qapp, kind):
+    from unittest.mock import Mock
+    from PyQt5.QtWidgets import QWidget
+    from ui.camera_display_mixin import CameraDisplayMixin
+
+    class DisplayWindow(CameraDisplayMixin, QWidget):
+        pass
+
+    window = DisplayWindow()
+    window.Cam1 = Mock()
+    window.Cam1.isChecked.return_value = True
+    window._camera_port = Mock()
+    window._camera_port.display_generation.return_value = 0
+    window._cameras = Mock()
+    window._cameras.cam_key.return_value = 1
+    window._set_zoom_feedback = Mock()
+    window._update_exposure_ui = Mock()
+    if kind == "zoom":
+        window._refresh_zoom()
+        window._camera_port.refresh_zoom_display.call_args.args[1](50)
+        _qapp.processEvents()
+        window._set_zoom_feedback.assert_called_once_with(50)
+    else:
+        window._on_cam_connected(True, "192.0.2.1")
+        window._camera_port.async_refresh_ae_mode.call_args.args[1]()
+        _qapp.processEvents()
+        window._update_exposure_ui.assert_called_once_with()
+    window.close()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "exposure"])
+def test_queued_display_update_is_dropped_after_shutdown(_qapp, kind):
+    from unittest.mock import Mock
+    from PyQt5.QtWidgets import QWidget
+    from ui.camera_display_mixin import CameraDisplayMixin
+
+    class DisplayWindow(CameraDisplayMixin, QWidget):
+        pass
+
+    window = DisplayWindow()
+    window.Cam1 = Mock()
+    window.Cam1.isChecked.return_value = True
+    window._camera_port = Mock()
+    window._camera_port.display_generation.return_value = 0
+    window._cameras = Mock()
+    window._cameras.cam_key.return_value = 1
+    window._set_zoom_feedback = Mock()
+    window._update_exposure_ui = Mock()
+    if kind == "zoom":
+        window._refresh_zoom()
+        callback = window._camera_port.refresh_zoom_display.call_args.args[1]
+        callback(50)
+    else:
+        window._on_cam_connected(True, "192.0.2.1")
+        callback = window._camera_port.async_refresh_ae_mode.call_args.args[1]
+        callback()
+    window._shutting_down = True
+    _qapp.processEvents()
+    window._set_zoom_feedback.assert_not_called()
+    window._update_exposure_ui.assert_not_called()
+    window.close()
+
+
+@pytest.mark.parametrize("transition", ["ended", "restarted", "restarted_and_ended", "closing"])
+def test_delayed_screen_sleep_belongs_to_ended_session(main_window, monkeypatch, transition):
+    from unittest.mock import Mock
+    from PyQt5.QtCore import QTimer
+    import ui.main_window as module
+
+    main_window._camera_port.refresh_zoom_display = Mock()
+    main_window._camera_port.async_refresh_ae_mode = Mock()
+    main_window._bus = Mock()
+    main_window.session_active = True
+    dialog = Mock()
+    dialog.exec_.return_value = 1
+    factory = Mock(return_value=dialog)
+    factory.Accepted = 1
+    monkeypatch.setattr(module, "ScreenOffDialog", factory)
+    sleep = Mock()
+    monkeypatch.setattr(module.ScreenMonitor, "sleep", sleep)
+    monkeypatch.setattr(module.ScreenMonitor, "wake", Mock())
+    callbacks = []
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, callback: callbacks.append((delay, callback)))
+
+    main_window._on_screen_turned_off()
+    sleep_callback = next(callback for delay, callback in callbacks if delay == 1500)
+    if transition in ("restarted", "restarted_and_ended"):
+        main_window._session.ToggleSession()
+        if transition == "restarted_and_ended":
+            main_window._session.shutdown("manual")
+    elif transition == "closing":
+        main_window._shutting_down = True
+    sleep_callback()
+
+    if transition == "ended":
+        sleep.assert_called_once_with()
+    else:
+        sleep.assert_not_called()

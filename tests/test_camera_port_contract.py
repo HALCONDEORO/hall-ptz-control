@@ -41,13 +41,20 @@ class _StubManager:
     def __init__(self):
         self.workers: dict[str, _StubWorker] = {}
         self.invalidated: list[str] = []
+        self.ae_mode = {1: "auto", 2: "auto"}
 
     def worker(self, ip: str) -> _StubWorker:
         self.workers.setdefault(ip, _StubWorker())
         return self.workers[ip]
 
+    def set_focus_mode(self, ip: str, mode: str) -> None:
+        self.focus_feedback = (ip, mode)
+
     def invalidate_zoom(self, ip: str) -> None:
         self.invalidated.append(ip)
+
+    def set_backlight(self, ip: str, enabled: bool) -> None:
+        self.backlight_feedback = (ip, enabled)
 
 
 _CAM_CONFIGS = {1: ("10.0.0.1", "81"), 2: ("10.0.0.2", "82")}

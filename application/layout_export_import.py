@@ -126,7 +126,15 @@ class LayoutExportImportService:
                 reason=error,
             )
 
-        pre_backup = self._backup_current()
+        try:
+            pre_backup = self._backup_current()
+        except OSError as exc:
+            return ImportResult(
+                imported=False,
+                pre_import_backup=None,
+                layout_path=self._path,
+                reason=f"Cannot back up current layout: {exc}",
+            )
         self._atomic_write(raw_bytes, self._path)
 
         return ImportResult(
@@ -177,11 +185,8 @@ class LayoutExportImportService:
         if not self._path.exists():
             return None
         bak = self._path.with_suffix(".import.bak")
-        try:
-            shutil.copy2(self._path, bak)
-            return bak
-        except OSError:
-            return None
+        shutil.copy2(self._path, bak)
+        return bak
 
     @staticmethod
     def _atomic_write(data: bytes, dest: Path) -> None:
