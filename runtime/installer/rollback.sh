@@ -402,3 +402,15 @@ echo "  4. Confirm the app launches and cameras connect."
 echo ""
 echo "Pre-rollback backup saved to: $BACKUP_DEST"
 echo ""
+if [[ "${DRY_RUN}" != "1" && "${DEV_MODE}" == "false" ]]; then
+    # Step 3 moved the source checkout to the rolled-back ref and leaves it
+    # there (a tag or commit id means a detached HEAD; a branch name stays a
+    # branch). Say where it sits either way: a later install.sh run from that
+    # checkout redeploys THAT ref again unless the operator returns to their
+    # update branch first. Skipped in dry-run: nothing was checked out.
+    printf 'Note: the source checkout now sits at %s\n' "${NEW_CURRENT}"
+    printf '      %q\n' "${SOURCE_DIR}"
+    printf '      Before the next update, return it to its branch:\n'
+    printf '        git -C %q checkout -\n' "${SOURCE_DIR}"
+    echo ""
+fi
