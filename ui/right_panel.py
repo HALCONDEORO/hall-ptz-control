@@ -21,7 +21,7 @@ import logging
 import os
 from typing import ClassVar
 
-from PyQt5 import QtCore
+from PyQt5 import QtCore, sip
 
 from domain.atem_constants import ATEM_INPUT_LABELS as _ATEM_LABELS
 
@@ -189,6 +189,8 @@ class RightPanel:
 
     def _fit_container_height(self):
         """El panel ocupa siempre toda la altura de la pantalla."""
+        if sip.isdeleted(self._container):
+            return
         self._container.setGeometry(1446, 0, 474, 1080)
 
     # ── Secciones ─────────────────────────────────────────────────────────────
@@ -530,8 +532,15 @@ class RightPanel:
             f"QPushButton {{ background-color: {color}; border: none; border-radius: 10px;"
             f" font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; padding: 4px 0px; }}"
         )
-        QtCore.QTimer.singleShot(
-            duration_ms, lambda: btn.setStyleSheet(self._btn_focus_base_style))
+        button_ref = weakref.ref(btn)
+        base_style = self._btn_focus_base_style
+
+        def restore_style():
+            button = button_ref()
+            if button is not None and not sip.isdeleted(button):
+                button.setStyleSheet(base_style)
+
+        QtCore.QTimer.singleShot(duration_ms, restore_style)
 
 
     def set_atem_state(self, state) -> None:

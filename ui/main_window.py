@@ -24,12 +24,13 @@ from __future__ import annotations
 import logging
 import os
 import time
+import weakref
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from domain.shutdown_intent import ShutdownIntent
 
-from PyQt5 import QtGui, QtCore
+from PyQt5 import QtGui, QtCore, sip
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtSvg import QSvgRenderer
@@ -1208,7 +1209,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         """Breve flash rojo sobre widget cuando una acción de preset es bloqueada."""
         orig = widget.styleSheet()
         widget.setStyleSheet(orig + " background-color: #7a1a1a;")
-        QTimer.singleShot(duration_ms, lambda: widget.setStyleSheet(orig))
+        widget_ref = weakref.ref(widget)
+
+        def restore_style():
+            target = widget_ref()
+            if target is not None and not sip.isdeleted(target):
+                target.setStyleSheet(orig)
+
+        QTimer.singleShot(duration_ms, restore_style)
 
     def _dispatch_preset_action(
         self,
