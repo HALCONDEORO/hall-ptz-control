@@ -74,3 +74,37 @@ class TestJoystickAdapter:
         adapter.stop()
 
         assert bus.events == [(EventType.CAMERA_STOP, {"camera": 2})]
+
+
+    def test_release_stops_camera_that_moved_even_after_selection_change(self):
+        bus = _Bus()
+        current = {"camera": 1}
+        adapter = JoystickAdapter(bus, lambda: current["camera"])
+        adapter.handlers()["up"](3, 4)
+        current["camera"] = 2
+        adapter.stop()
+        assert bus.events[-1] == (EventType.CAMERA_STOP, {"camera": 1})
+
+    def test_selection_change_stops_old_camera_before_moving_new_camera(self):
+        bus = _Bus()
+        current = {"camera": 1}
+        adapter = JoystickAdapter(bus, lambda: current["camera"])
+        adapter.handlers()["up"](3, 4)
+        current["camera"] = 2
+        adapter.handlers()["right"](3, 4)
+        assert bus.events[-2:] == [
+            (EventType.CAMERA_STOP, {"camera": 1}),
+            (EventType.CAMERA_MOVE, {"camera": 2, "pan_speed": 3, "tilt_speed": 0}),
+        ]
+        adapter.stop()
+        assert bus.events[-1] == (EventType.CAMERA_STOP, {"camera": 2})
+
+    def test_completed_gesture_does_not_keep_old_camera_for_next_stop(self):
+        bus = _Bus()
+        current = {"camera": 1}
+        adapter = JoystickAdapter(bus, lambda: current["camera"])
+        adapter.handlers()["up"](3, 4)
+        adapter.stop()
+        current["camera"] = 2
+        adapter.stop()
+        assert bus.events[-1] == (EventType.CAMERA_STOP, {"camera": 2})

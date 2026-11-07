@@ -7,7 +7,7 @@ import math
 from typing import ClassVar
 
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QWidget
 
 from config import SPEED_MAX
@@ -417,6 +417,30 @@ class DigitalJoystick(QWidget):
         sphere.setColorAt(1.00, lo)
         p.setBrush(sphere)
         p.drawEllipse(hp, hr, hr)
+
+    def _cancel_gesture(self):
+        """Stop before losing input ownership; queued ticks cannot restart motion."""
+        moving = self._tracking and self._cur_dir is not None
+        self._timer.stop()
+        self._tracking = False
+        self._ring_dragging = False
+        self._knob_pos = QtCore.QPointF(self._center)
+        self._cur_dir = None
+        self._cur_sector = None
+        if moving:
+            self.stop_handler()
+        self.update()
+
+    def event(self, event):
+        # Qt can drop a mouse release when a dialog takes the grab, the session
+        # hides/disables controls, or the operator switches to another window.
+        # Some events arrive during QWidget construction, before state exists.
+        if hasattr(self, "_timer") and (
+            event.type() in (QEvent.Hide, QEvent.UngrabMouse, QEvent.WindowDeactivate)
+            or (event.type() == QEvent.EnabledChange and not self.isEnabled())
+        ):
+            self._cancel_gesture()
+        return super().event(event)
 
     # ── mouse events ───────────────────────────────────────────────────────────
     def mousePressEvent(self, event):
