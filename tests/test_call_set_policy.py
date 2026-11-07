@@ -42,13 +42,13 @@ class TestBasicOperatorMode:
 
     @pytest.mark.parametrize("mode", [OperatingMode.BASIC_OPERATOR, OperatingMode.OPERATOR])
     @pytest.mark.parametrize("input_type", _set_inputs())
-    def test_set_blocked(self, policy, mode, input_type):
-        """basic_operator no puede SET; long press no dispara CALL en release."""
+    def test_legacy_basic_set_requires_confirmation(self, policy, mode, input_type):
+        """Former basic roles now save presets, with mandatory confirmation."""
         d = policy.decide(mode, input_type,
                           session_active=True, camera_available=True)
-        assert d.allowed is False
-        assert d.action == CallSetAction.NONE
-        assert d.reason_code == "operator_no_set"
+        assert d.allowed is True
+        assert d.action == CallSetAction.SET
+        assert d.requires_confirmation is True
 
     def test_drag_blocked(self, policy):
         d = policy.decide(OperatingMode.BASIC_OPERATOR, InputType.DRAG,

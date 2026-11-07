@@ -41,32 +41,16 @@ _ALWAYS_BLOCKED: dict[OperatingMode, str] = {
     OperatingMode.PRESET_TEST: "preset_test_no_direct_action",
 }
 
-# Roles que pueden hacer SET (con confirmación obligatoria).
-_SET_ALLOWED_ROLES: frozenset[OperatingMode] = frozenset({
-    OperatingMode.CAMERA_OPERATOR,
-    OperatingMode.TECHNICIAN,
-    OperatingMode.SYSTEM_ADMIN,
-    OperatingMode.ADMIN_INSTALLER,  # alias legacy de technician
-})
-
-# Roles que solo pueden hacer CALL (sin SET).
-_CALL_ONLY_ROLES: frozenset[OperatingMode] = frozenset({
-    OperatingMode.BASIC_OPERATOR,
-    OperatingMode.OPERATOR,         # alias legacy de basic_operator
-})
+# Both access roles may save presets, always with confirmation.
+_SET_ALLOWED_ROLES = frozenset({OperatingMode.USER, OperatingMode.ADMIN})
 
 
 class CallSetCommandPolicy:
     """
     Decide si una acción CALL o SET está permitida dadas las condiciones actuales.
 
-    Jerarquía de roles (#718 #719):
-      basic_operator / operator  → solo CALL.
-      camera_operator            → CALL + SET con confirmación.
-      technician / admin_installer → CALL + SET con confirmación.
-      system_admin               → CALL + SET con confirmación.
-      support                    → bloqueado (sin acciones reales de cámara).
-      demo                       → bloqueado (sin hardware real).
+    USER and ADMIN may CALL and SET with confirmation. Support/demo remain
+    safety contexts that cannot operate real hardware.
 
     Modos de trabajo temporales (name_edit, layout_edit, preset_test):
       Bloquean todas las acciones de cámara independientemente del rol.
@@ -126,16 +110,8 @@ class CallSetCommandPolicy:
 
         # 5. Entradas SET
         if input_type in _SET_INPUTS:
-            if mode in _CALL_ONLY_ROLES:
-                # basic_operator / operator: no pueden SET
-                return PolicyDecision(
-                    action=CallSetAction.NONE,
-                    allowed=False,
-                    requires_confirmation=False,
-                    reason_code="operator_no_set",
-                )
             if mode in _SET_ALLOWED_ROLES:
-                # camera_operator / technician / system_admin: SET con confirmación
+                # Both access roles require SET confirmation
                 return PolicyDecision(
                     action=CallSetAction.SET,
                     allowed=True,

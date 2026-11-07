@@ -82,7 +82,7 @@ class TestAccessModeServicePersistence:
         svc = AccessModeService(path=p)
         svc.set_mode(OperatingMode.CAMERA_OPERATOR)
         data = json.loads(p.read_text(encoding="utf-8"))
-        assert data == {"access_mode": "camera_operator"}
+        assert data == {"access_mode": "user"}
 
     def test_invalid_mode_raises(self, tmp_path):
         svc = AccessModeService(path=tmp_path / "access_mode.json")
@@ -259,12 +259,12 @@ class TestPolicyWithAccessMode:
         logic.set_preset(42)
         assert logic.sets == [42]
 
-    def test_basic_operator_cannot_set(self, tmp_path):
+    def test_former_basic_operator_can_set(self, tmp_path):
         svc = AccessModeService(path=tmp_path / "a.json")
         svc.set_mode(OperatingMode.BASIC_OPERATOR)
         logic = _PolicyLogic(svc)
         logic.set_preset(42)
-        assert logic.sets == []
+        assert logic.sets == [42]
 
     def test_basic_operator_can_call(self, tmp_path):
         svc = AccessModeService(path=tmp_path / "a.json")
@@ -296,15 +296,15 @@ class TestPolicyWithAccessMode:
         logic.set_preset(42)
         assert logic.sets == []
 
-    def test_switching_from_basic_to_camera_operator_enables_set(self, tmp_path):
+    def test_legacy_user_aliases_have_same_set_permission(self, tmp_path):
         svc = AccessModeService(path=tmp_path / "a.json")
         svc.set_mode(OperatingMode.BASIC_OPERATOR)
         logic = _PolicyLogic(svc)
         logic.set_preset(1)
-        assert logic.sets == []
+        assert logic.sets == [1]
         svc.set_mode(OperatingMode.CAMERA_OPERATOR)
         logic.set_preset(1)
-        assert logic.sets == [1]
+        assert logic.sets == [1, 1]
 
     def test_session_inactive_blocks_call(self, tmp_path):
         svc = AccessModeService(path=tmp_path / "a.json")
