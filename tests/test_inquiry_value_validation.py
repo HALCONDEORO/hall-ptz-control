@@ -26,11 +26,10 @@ def test_unknown_ae_does_not_trigger_followup_or_fake_auto(monkeypatch):
     from unittest.mock import Mock
     from adapters.visca_camera_adapter import ViscaCameraAdapter
 
-    connection = Mock()
-    connection.__enter__ = Mock(return_value=connection)
-    connection.__exit__ = Mock(return_value=False)
-    monkeypatch.setattr("adapters.visca_camera_adapter.socket.socket", Mock(return_value=connection))
-    adapter = ViscaCameraAdapter(Mock(), {1: ("192.0.2.1", "81")})
-    monkeypatch.setattr(adapter, "_recv_visca_response", Mock(return_value=b"\x90\x50\x7e\xff"))
+    worker = Mock()
+    worker.send_inquiry.return_value = b"\x90\x50\x7e\xff"
+    manager = Mock()
+    manager.worker.return_value = worker
+    adapter = ViscaCameraAdapter(manager, {1: ("192.0.2.1", "81")})
     assert adapter._query_ae_and_exp_comp("192.0.2.1", "81") == (None, None)
-    assert connection.sendall.call_count == 1
+    assert worker.send_inquiry.call_count == 1

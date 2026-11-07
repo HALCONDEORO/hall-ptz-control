@@ -115,8 +115,6 @@ def test_confirmed_absolute_zoom_invalidates_previous_observation(tmp_path):
 
 
 def test_failed_ae_query_does_not_publish_invented_auto(tmp_path, monkeypatch):
-    import socket
-
     _path, _cfg, mgr, adapter, _svc = rig(tmp_path)
     mgr.ae_mode[1] = "manual"
     mgr.exposure_level[1] = 4
@@ -131,7 +129,7 @@ def test_failed_ae_query_does_not_publish_invented_auto(tmp_path, monkeypatch):
 
     monkeypatch.setattr("adapters.visca_camera_adapter.threading.Thread", DeferredThread)
     monkeypatch.setattr(
-        "adapters.visca_camera_adapter.socket.socket", Mock(side_effect=socket.timeout("offline"))
+        adapter, "_query_response", Mock(return_value=b"")
     )
     callback = Mock()
     adapter.async_refresh_ae_mode(1, callback)
