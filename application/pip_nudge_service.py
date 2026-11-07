@@ -114,6 +114,15 @@ class PiPNudgeService:
             pan, duration_ms = return_nudge
             self._apply(pan, label="OFF", duration_ms=duration_ms)
 
+    def cancel_for_camera(self, camera_id: str) -> None:
+        """Cancel only when a command replaces this camera's pan movement.
+
+        Cancelling for another camera removes our only scheduled STOP while
+        leaving this camera moving, so unrelated commands must be ignored.
+        """
+        if camera_id == self._camera_id:
+            self.cancel()
+
     def cancel(self) -> None:
         """Cancela cualquier desplazamiento pendiente (control manual).
 
