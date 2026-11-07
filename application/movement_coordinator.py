@@ -108,7 +108,14 @@ class MovementCoordinator:
 
         if execute_cb is not None:
             try:
-                execute_cb(preset)
+                # A callback returning False means the command was rejected
+                # (e.g. the camera did not accept the recall). That is a
+                # failure just like an exception: mark the slot errored so it
+                # does not stay MOVING_TO_PRESET forever, and report failure.
+                # Note: callbacks returning None (fire-and-forget) are success.
+                if execute_cb(preset) is False:
+                    self.mark_error(camera_id, "execute_cb reported failure")
+                    return False
             except Exception as exc:
                 self.mark_error(camera_id, str(exc))
                 return False
