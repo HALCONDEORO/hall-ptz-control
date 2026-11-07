@@ -2,8 +2,9 @@
 
 The setup wizard is the **on-device, touchscreen first-run experience** that runs
 on the Raspberry Pi itself. It replaces console-based setup: an operator taps
-through a few pre-filled screens and, when it finishes, the install is configured
-and the service is running.
+through a few pre-filled screens to write the installation configuration. A
+successful provisioning result does not prove the GUI is running or the hardware
+is ready. Check runtime diagnostics before handover.
 
 It is **not** a Windows tool and does not run off-device. Everything happens on
 the Pi's own desktop session.
@@ -17,15 +18,19 @@ khptz setup            # open the wizard (fresh install)
 khptz setup --force    # Repair: reopen on an already-provisioned install
 ```
 
-`khptz setup` is **idempotent**. Once the install is provisioned (the
-`/etc/khptz/.provisioned` marker exists) it prints a note and exits `0` **without**
-opening a window. That is what lets the same command be wired to first-boot
-autostart and fire harmlessly on every login after setup has completed once.
+`khptz setup` is **idempotent**. On a product install using `/etc/khptz`,
+it prints a note and exits `0` **without** opening a window only when both
+`.provisioned` and `.rpi-integrated` exist. If `.provisioned` exists but
+`.rpi-integrated` is missing, it opens the wizard for integration migration.
+With an overridden configuration directory (tests/development), only the
+provisioned marker is required to suppress the window.
 
 | Situation | `khptz setup` | `khptz setup --force` |
 |---|---|---|
 | Not provisioned (fresh) | Opens the wizard | Opens the wizard |
-| Already provisioned | Exits 0, no window | Opens in **Repair** mode |
+| Product: provisioned, integration marker missing | Opens for integration migration | Opens in **Repair** mode |
+| Product: both markers present | Exits 0, no window | Opens in **Repair** mode |
+| Overridden config directory: provisioned | Exits 0, no window | Opens in **Repair** mode |
 
 Source: [`runtime/cli.py`](../runtime/cli.py) (`cmd_setup`) →
 [`runtime/setup_launcher.py`](../runtime/setup_launcher.py)
@@ -35,9 +40,23 @@ Source: [`runtime/cli.py`](../runtime/cli.py) (`cmd_setup`) →
 
 ## First-boot autostart
 
-The product installer (`sudo ./runtime/installer/install.sh`, product mode)
-installs two separate launchers so the wizard appears automatically on first
-boot **and** the menu entry can still open Repair afterwards:
+Use the supported top-level wrapper from the normal desktop account, not a root
+login. `$USER` must name that desktop account, never the `khptz` service account:
+
+```bash
+sudo bash install_khptz_rpi.sh --wizard-user "$USER"
+```
+
+The wrapper runs readiness checks and invokes the product installer. Exit `20`
+means configuration is still required; exit `30` means failure. Reboot and log
+back into the desktop so new group membership takes effect, then complete setup.
+See [Raspberry Pi installation](INSTALL_RPI.md#install-the-runtime-service) for
+release and OS gates, options and recovery. Do not bypass the wrapper by invoking
+`runtime/installer/install.sh` directly.
+
+The product installer installs two separate launchers so the wizard appears
+automatically on first desktop login **and** the menu entry can still open
+Repair afterwards:
 
 - `runtime/khptz-setup-menu.desktop` (`Exec=khptz setup --force`) →
   `/usr/share/applications/khptz-setup.desktop` (applications menu), and
@@ -45,10 +64,11 @@ boot **and** the menu entry can still open Repair afterwards:
   the desktop (wizard) user's `~/.config/autostart/khptz-setup.desktop` (XDG
   autostart on login).
 
-The autostart entry self-suppresses once provisioned — it fires on every login
-but quietly does nothing after the first successful setup. The menu entry
-always passes `--force`, so clicking it after setup reopens Repair rather than
-doing nothing.
+The autostart entry fires on every desktop login. On a product install it
+suppresses the wizard only once both `.provisioned` and `.rpi-integrated` exist;
+a missing integration marker opens the migration wizard even if the room is
+already provisioned. The menu entry always passes `--force`, so clicking it
+after setup reopens Repair rather than doing nothing.
 
 The desktop (wizard) user defaults to `$SUDO_USER`; override with
 `--wizard-user <user>`.
@@ -102,7 +122,7 @@ never writes `/etc/khptz` directly. Instead:
 
 ```text
 wizard (desktop user)
-  └─ writes request → /run/khptz/request.json   (tmpfs, 0750 root:<wizard-user>)
+  └─ writes request → /run/khptz/request.json   (tmpfs, 0750 <wizard-user>:root)
        └─ khptz-provision.path (systemd) reacts
             └─ runtime/provision.py (root oneshot):
                  validate → snapshot → apply config.yaml + secrets + OS steps
@@ -118,11 +138,17 @@ provisions with **no further password prompt** via this channel.
 
 ### Rollback safety
 
-Before applying, the privileged step snapshots the files a re-provision
-overwrites (`config.yaml` + both secrets). If apply fails mid-flow, it restores
-the previous bytes (repair) or removes partial writes (fresh install), so a
-failed run never leaves a half-written config. See `ConfigSnapshot` in
-[`runtime/provision.py`](../runtime/provision.py).
+Before applying, the privileged step snapshots `config.yaml` and both secrets.
+If apply fails mid-flow, it attempts to restore the previous files (repair) or
+remove partial writes (fresh install). Restoration is best-effort. When rollback
+returns normally, the failure result includes `rolled_back`; that flag does not
+certify complete restoration. It can be `true` even if a file could not be
+recreated, because the file-write helper can return without writing. If rollback
+raises, the outer error result can omit `rolled_back` entirely. Verify the files
+and runtime state after a failure before retrying or handing over the install.
+This is not a rollback of every OS change or a guarantee that a failed run leaves
+no partial state. See `ConfigSnapshot`, `_safe_write_regular_file` and
+`run_provision` in [`runtime/provision.py`](../runtime/provision.py).
 
 ---
 
@@ -137,13 +163,41 @@ Passwords (operator + administrator) → Review → Installing → Done.
 - **Installing** drops the request and polls the result with a timer — the
   touchscreen stays responsive and Next stays disabled until provisioning
   succeeds.
-- **Done** independently verifies the install (marker + config present) and
-  points to `khptz doctor` if verification fails.
+- **Done** checks the provisioned marker and configuration file. On a product
+  Pi it also checks the integration marker and the selected launcher files
+  (system or desktop-session mode). It points to `khptz doctor` if those checks
+  fail. File-presence checks do not prove the process is running or cameras
+  respond.
 
 Pages collect input only; all file writes go through `ProvisioningService`
 (headless, Qt-free). Source: [`ui/setup_wizard/`](../ui/setup_wizard/). The
 branded touchscreen look is applied once via `setup_wizard_qss()` in
 [`ui/styles.py`](../ui/styles.py).
+
+---
+
+## Check runtime state after setup
+
+Run `khptz verify-install`, `khptz status` and `khptz doctor` before handover.
+In default system GUI mode, provisioning attempts to restart
+`khptz-control.service`, but that restart is best-effort: it can fail without
+changing the successful provisioning result. In `--gui-mode user`, provisioning
+does not restart the system GUI service; the desktop session owns
+`khptz-gui.service` instead. Check the service for the installed mode:
+
+```bash
+# Default system GUI mode:
+sudo systemctl status khptz-control --no-pager
+# Desktop-session GUI mode, as the desktop user (without sudo):
+systemctl --user status khptz-gui --no-pager
+```
+
+The current Done screen's "Installed and running" wording is not a live process
+check. Confirm runtime state, display access and real camera behavior separately.
+Source: `_restart_control_service` in
+[`runtime/provision.py`](../runtime/provision.py),
+[`application/install_verification.py`](../application/install_verification.py),
+and the [installation guide](INSTALL_RPI.md#systemd-autostart-validation).
 
 ---
 
