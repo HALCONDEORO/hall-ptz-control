@@ -42,12 +42,26 @@ _SPECIAL_SEAT_DEFS = {
 
 # ── API pública ───────────────────────────────────────────────────────────────
 
-def build_special_seat_button(seat_number: int, x: int, y: int, parent) -> SpecialDragButton:
+def build_special_seat_button(
+    seat_number: int, x: int, y: int, parent, label: Optional[str] = None,
+) -> SpecialDragButton:
     """
     Crea, dimensiona, estiliza y pone icono en un SpecialDragButton.
     NO conecta señales — el llamador (MainWindow) las conecta tras recibir el botón.
     """
-    defn = _SPECIAL_SEAT_DEFS[seat_number]
+    # Layouts can mark any preset as special. Only the four legacy presets
+    # have known icons; preserve a custom seat's identity and label without
+    # guessing an icon or aborting the whole window during startup.
+    defn = _SPECIAL_SEAT_DEFS.get(seat_number)
+    if defn is None:
+        button = SpecialDragButton(
+            seat_id=seat_number, default_label=label or str(seat_number), parent=parent,
+        )
+        button.move(x, y)
+        button.resize(55, 65)
+        button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        button._apply_style()
+        return button
     button = SpecialDragButton(seat_id=seat_number, default_label=defn['label'], parent=parent)
     button.move(x, y)
     button.resize(defn['w'], defn['h'])

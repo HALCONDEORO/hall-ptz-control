@@ -235,3 +235,20 @@ def test_cancelled_seat_selection_cannot_be_saved_later(main_window, monkeypatch
     main_window._exit_seat_selection(save=False)
     main_window._exit_seat_selection(save=True)
     main_window._bus.emit.assert_not_called()
+
+
+def test_custom_special_seat_builds_without_known_legacy_icon(main_window, monkeypatch):
+    """A valid custom special layout must not abort construction with KeyError."""
+    from domain.room_layout import SeatLayout
+    from ui.widgets import SpecialDragButton
+
+    seat = SeatLayout(id="side", label="Side room", preset=37,
+                      camera_role="comments", x=10, y=20, type="special")
+    monkeypatch.setattr(main_window._layout_svc, "visible_seats", lambda: [seat])
+    main_window._build_seat_buttons()
+    button = main_window.Seat37
+    assert isinstance(button, SpecialDragButton)
+    assert button.seat_number == 37
+    assert button.text() == "Side room"
+    assert button.x() == 10 and button.y() == 20
+    assert button.icon().isNull()

@@ -53,7 +53,7 @@ class TestCut:
         a.set_preview_input(2)
         result = svc.cut(role=role)
         assert result.ok is False
-        assert "technician" in result.message.lower()
+        assert "admin" in result.message.lower()
 
     def test_allowed_for_technician(self):
         svc, a = _svc()

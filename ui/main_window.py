@@ -322,7 +322,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         # Determinar rol post-login:
         # • Login real (operador por cuenta atrás o admin) → el rol lo
         #   decide la credencial usada, expuesto en login_overlay.authenticated_role
-        #   (Operador→CAMERA_OPERATOR, Admin→SYSTEM_ADMIN).
+        #   (Operador→USER, Admin→ADMIN).
         # • Sim / sin login real → respeta el rol persistido en access_mode.json.
         # El flag legacy de 'restart as admin' solo se consume aquí; el modo de
         # login inicial ya lo decidió LoginScreen a partir de ese flag.
@@ -626,7 +626,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             seat_number = seat.preset
             x, y = seat.x, seat.y
             if seat.type == "special" or seat_number in (128, 129, 130, 131):
-                button = build_special_seat_button(seat_number, x, y, parent=self)
+                button = build_special_seat_button(seat_number, x, y, parent=self, label=seat.label)
                 button.init_preset_actions(
                     seat_number,
                     call_cb=self._call_preset_from_button,
@@ -1039,15 +1039,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         If the current role already has configuration access, open Settings
         directly. Otherwise show the password overlay; on the correct admin
-        password, elevate to Technician and then open Settings. Reuses the same
+        password, elevate to Admin and then open Settings. Reuses the same
         RoleElevationOverlay and ConfigDialog flow as the right-panel buttons —
         no separate admin path.
         """
-        _SETTINGS_ROLES = {
-            OperatingMode.TECHNICIAN,
-            OperatingMode.SYSTEM_ADMIN,
-            OperatingMode.ADMIN_INSTALLER,
-        }
+        _SETTINGS_ROLES = {OperatingMode.ADMIN}
         if self._access_mode_svc.mode in _SETTINGS_ROLES:
             self._open_config_dialog()
             return
@@ -1093,16 +1089,16 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._role_elevation_overlay.show_overlay()
 
     def _on_role_elevation_success(self):
-        """Callback tras contraseña correcta: sube a SYSTEM_ADMIN sin reiniciar."""
-        self._access_mode_svc.set_mode(OperatingMode.SYSTEM_ADMIN)
+        """Callback tras contraseña correcta: sube a ADMIN sin reiniciar."""
+        self._access_mode_svc.set_mode(OperatingMode.ADMIN)
         self._right_panel._update_mode_buttons()
-        logger.info("Rol cambiado a SYSTEM_ADMIN (overlay inline)")
+        logger.info("Rol cambiado a ADMIN (overlay inline)")
 
     def _exit_admin_mode(self):
-        """Baja el rol a CAMERA_OPERATOR inline — sin contraseña ni reinicio."""
-        self._access_mode_svc.set_mode(OperatingMode.CAMERA_OPERATOR)
+        """Baja el rol a USER inline — sin contraseña ni reinicio."""
+        self._access_mode_svc.set_mode(OperatingMode.USER)
         self._right_panel._update_mode_buttons()
-        logger.info("Rol cambiado a CAMERA_OPERATOR (inline)")
+        logger.info("Rol cambiado a USER (inline)")
 
     def _restart_as_admin(self):
         """Escribe el flag de admin y cierra la app para relanzarla con login.
@@ -1196,7 +1192,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         """Devuelve el modo operativo actual para la política CALL/SET.
 
         name_edit es un modo de trabajo temporal — bloquea acciones de cámara.
-        El rol (camera_operator, technician, etc.) viene del AccessModeService.
+        El rol (user/admin) viene del AccessModeService.
         """
         if self.BtnNames.isChecked():
             return OperatingMode.NAME_EDIT

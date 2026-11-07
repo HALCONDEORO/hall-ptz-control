@@ -14,7 +14,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 
 # ── Qt stubs ──────────────────────────────────────────────────────────────────
@@ -165,9 +164,22 @@ class TestBuildSpecialSeatButton:
             btn = self._build(seat)
             assert btn is not None
 
-    def test_unknown_seat_raises_key_error(self):
-        with pytest.raises(KeyError):
-            self._build(999)
+    def test_custom_special_seat_uses_text_without_invented_icon(self):
+        with patch.object(_sb, "SpecialDragButton", _FakeDragButton), \
+             patch.object(_sb, "_load_svg_pixmap") as load_icon:
+            btn = _sb.build_special_seat_button(37, 10, 20, None, label="Side room")
+        assert btn.seat_id == 37
+        assert btn.default_label == "Side room"
+        assert btn.moved_to == (10, 20)
+        assert btn.resized_to == (55, 65)
+        assert btn._style_applied
+        assert btn.icon_set is None
+        load_icon.assert_not_called()
+
+    def test_custom_special_seat_without_label_shows_preset_number(self):
+        btn = self._build(37)
+        assert btn.default_label == "37"
+        assert btn.seat_id == 37
 
     def test_button_positioned_correctly(self):
         btn = self._build(128, x=5, y=15)

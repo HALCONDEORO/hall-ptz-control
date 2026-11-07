@@ -107,14 +107,14 @@ class TestNamesBlocksPresetActions:
         assert logic.confirmations_asked == [5]
         assert logic.sets == [5]
 
-    def test_set_blocked_in_operator_mode(self):
-        """Operator mode cannot SET — policy returns operator_no_set."""
+    def test_set_confirmed_in_legacy_user_mode(self):
+        """Former Operator now saves presets with mandatory confirmation."""
         logic = _NamesAwarePresetLogic()
         logic._names_open = False
         logic._access_mode = OperatingMode.OPERATOR
         logic.confirm_and_set_preset(5)
-        assert logic.confirmations_asked == []
-        assert logic.sets == []
+        assert logic.confirmations_asked == [5]
+        assert logic.sets == [5]
 
     def test_cancel_set_does_not_save(self):
         logic = _NamesAwarePresetLogic()

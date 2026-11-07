@@ -10,44 +10,38 @@ from enum import Enum
 
 
 class OperatingMode(str, Enum):
-    """Modo de operación del producto en el momento de la acción.
+    """Two access roles plus non-persistent safety/work contexts.
 
-    Roles persistentes (quién es el usuario):
-      basic_operator   — solo CALL, sin SET ni movimiento manual.
-      camera_operator  — CALL, SET con confirmación, movimiento PTZ, editar nombres.
-                         Rol por defecto en una instalación limpia.
-      technician       — todo lo de camera_operator + layout, configuración, diagnóstico.
-      system_admin     — control total: usuarios, seguridad, backup, reset.
-      support          — solo diagnóstico/lectura; sin acciones reales de cámara.
-      demo             — operación simulada; nunca toca hardware real.
-
-    Modos de trabajo temporales (tarea en curso, no persistida):
-      name_edit    — edición de nombres; bloquea acciones de cámara.
-      layout_edit  — edición de layout; bloquea acciones de cámara.
-      preset_test  — validación de presets; requiere advertencia antes de mover cámaras.
-
-    Aliases de compatibilidad (valores antiguos persistidos):
-      operator        → basic_operator
-      admin_installer → technician
-      names           → name_edit
+    USER may CALL and SET with confirmation. ADMIN also configures the room
+    and switches ATEM live. Historical member names are aliases, not roles.
+    Contexts remain distinct so migration cannot enable real hardware.
     """
-    # ── Roles persistentes ────────────────────────────────────────────────
-    BASIC_OPERATOR  = "basic_operator"
-    CAMERA_OPERATOR = "camera_operator"
-    TECHNICIAN      = "technician"
-    SYSTEM_ADMIN    = "system_admin"
-    SUPPORT         = "support"
-    DEMO            = "demo"
+    USER = "user"
+    ADMIN = "admin"
 
-    # ── Modos de trabajo temporales ───────────────────────────────────────
-    NAME_EDIT   = "name_edit"
+    # Source compatibility only. All new writes use user/admin.
+    BASIC_OPERATOR = "user"
+    CAMERA_OPERATOR = "user"
+    OPERATOR = "user"
+    TECHNICIAN = "admin"
+    SYSTEM_ADMIN = "admin"
+    ADMIN_INSTALLER = "admin"
+
+    SUPPORT = "support"
+    DEMO = "demo"
+    NAME_EDIT = "name_edit"
     LAYOUT_EDIT = "layout_edit"
     PRESET_TEST = "preset_test"
+    NAMES = "names"
 
-    # ── Aliases de compatibilidad (backward-compat) ───────────────────────
-    OPERATOR        = "operator"         # → basic_operator
-    ADMIN_INSTALLER = "admin_installer"  # → technician
-    NAMES           = "names"            # → name_edit
+    @classmethod
+    def _missing_(cls, value):
+        legacy = {
+            "basic_operator": cls.USER, "camera_operator": cls.USER,
+            "operator": cls.USER, "technician": cls.ADMIN,
+            "system_admin": cls.ADMIN, "admin_installer": cls.ADMIN,
+        }
+        return legacy.get(value) if isinstance(value, str) else None
 
 
 class InputType(str, Enum):

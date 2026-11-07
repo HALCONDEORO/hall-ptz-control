@@ -53,30 +53,30 @@ class TestVisibleRoles:
     def test_only_two_roles_are_offered(self):
         """#roles-simplify: Operator and Administrator, nothing else."""
         dialog, mw, layout = build()
-        assert button_named(layout, "Operator")
-        assert button_named(layout, "Administrator")
+        assert button_named(layout, "User")
+        assert button_named(layout, "Admin")
 
     def test_operator_role_is_named(self):
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.CAMERA_OPERATOR)
-        assert role_line(layout) == "Current role: Operator"
+        assert role_line(layout) == "Current role: User"
 
     def test_admin_role_is_named(self):
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.SYSTEM_ADMIN)
-        assert role_line(layout) == "Current role: Administrator"
+        assert role_line(layout) == "Current role: Admin"
 
     @pytest.mark.parametrize("legacy", ["BASIC_OPERATOR", "OPERATOR"])
     def test_legacy_operator_values_read_as_operator(self, legacy):
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(getattr(OperatingMode, legacy))
-        assert role_line(layout) == "Current role: Operator"
+        assert role_line(layout) == "Current role: User"
 
     @pytest.mark.parametrize("legacy", ["TECHNICIAN", "ADMIN_INSTALLER"])
     def test_legacy_admin_values_read_as_administrator(self, legacy):
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(getattr(OperatingMode, legacy))
-        assert role_line(layout) == "Current role: Administrator"
+        assert role_line(layout) == "Current role: Admin"
 
     def test_every_operating_mode_maps_to_a_visible_role(self):
         """A mode that maps to neither would render an unselected control with
@@ -85,7 +85,7 @@ class TestVisibleRoles:
         for mode in OperatingMode:
             dialog, mw, layout = build(mode)
             assert role_line(layout) in {
-                "Current role: Operator", "Current role: Administrator",
+                "Current role: User", "Current role: Admin",
             }, mode
 
 
@@ -93,7 +93,7 @@ class TestRoleExplanation:
     def test_operator_note_describes_the_daily_use(self):
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.CAMERA_OPERATOR)
-        assert "Operator: daily room use" in notes(layout)
+        assert "User: daily room use" in notes(layout)
 
     def test_operator_note_says_settings_are_hidden(self):
         from domain.call_set_policy import OperatingMode
@@ -107,25 +107,28 @@ class TestRoleExplanation:
 
 
 class TestSwitchingRole:
-    def test_choosing_administrator_goes_through_the_service(self):
+    def test_choosing_admin_requires_password_overlay(self):
         """ADR-006: the write belongs to the application service, never to the
         widget."""
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.CAMERA_OPERATOR)
-        button_named(layout, "Administrator").click()
-        assert mw._access_mode_svc.applied == [OperatingMode.SYSTEM_ADMIN]
+        from unittest.mock import Mock
+        mw._enter_admin_mode_inline = Mock()
+        button_named(layout, "Admin").click()
+        mw._enter_admin_mode_inline.assert_called_once()
+        assert mw._access_mode_svc.applied == []
 
     def test_choosing_operator_goes_through_the_service(self):
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.SYSTEM_ADMIN)
-        button_named(layout, "Operator").click()
+        button_named(layout, "User").click()
         assert mw._access_mode_svc.applied == [OperatingMode.CAMERA_OPERATOR]
 
     def test_the_main_panel_is_refreshed(self):
         """Otherwise the ⚙ Settings button and the live permissions disagree."""
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.CAMERA_OPERATOR)
-        button_named(layout, "Administrator").click()
+        button_named(layout, "User").click()
         assert mw._right_panel.calls == ["_update_mode_buttons"]
 
     def test_the_shown_role_follows_the_service(self):
@@ -134,14 +137,14 @@ class TestSwitchingRole:
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.CAMERA_OPERATOR)
         mw._access_mode_svc.set_mode(OperatingMode.SYSTEM_ADMIN)
-        assert role_line(layout) == "Current role: Administrator"
+        assert role_line(layout) == "Current role: Admin"
 
-    def test_switching_does_not_close_the_dialog(self):
+    def test_demotion_closes_privileged_settings(self):
         """The operator usually continues in the newly unlocked tabs."""
         from domain.call_set_policy import OperatingMode
         dialog, mw, layout = build(OperatingMode.CAMERA_OPERATOR)
-        button_named(layout, "Administrator").click()
-        assert dialog.accepted_count == 0
+        button_named(layout, "User").click()
+        assert dialog.closed_count == 1
 
 
 class TestServiceUnavailable:
@@ -153,25 +156,25 @@ class TestServiceUnavailable:
 
     def test_clicking_a_role_does_not_crash(self):
         dialog, mw, layout = build(service=False)
-        button_named(layout, "Administrator").click()
+        button_named(layout, "User").click()
         assert mw._right_panel.calls == ["_update_mode_buttons"]
 
 
 class TestPasswordAndSchedule:
     def test_operator_password_change_is_offered(self):
         dialog, mw, layout = build()
-        button_named(layout, "Change Operator Password").click()
+        button_named(layout, "User Password").click()
         assert mw._dialogs.calls == ["ChangePassword"]
 
     def test_admin_password_change_is_offered(self):
         dialog, mw, layout = build()
-        button_named(layout, "Change Admin Password").click()
+        button_named(layout, "Admin Password").click()
         assert mw._dialogs.calls == ["ChangeAdminPassword"]
 
     def test_the_settings_sheet_closes_behind_the_password_dialog(self):
         """Leaving it open stacks a modal behind a modal on the touchscreen."""
         dialog, mw, layout = build()
-        button_named(layout, "Change Operator Password").click()
+        button_named(layout, "User Password").click()
         assert dialog.closed_count == 1
 
     def test_the_schedule_is_reachable(self):
