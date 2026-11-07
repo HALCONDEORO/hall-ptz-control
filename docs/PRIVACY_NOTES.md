@@ -1,6 +1,6 @@
 # Privacy Notes
 
-This document summarizes the customer and operator data handled by KHPTZ Controls.
+This document summarizes the customer and operator data handled by KH PTZ Control.
 It is operational guidance only and does not replace a customer-specific privacy policy,
 data-processing agreement, or legal review.
 
@@ -19,13 +19,13 @@ The application can store the following local data:
 | Logs and crash reports | `logs/` | Must not contain passwords or unnecessary personal data. |
 | Backup ZIP files | User-selected/export location | May contain the data listed above. |
 
-Runtime JSON data is stored under the configured persistent data directory, usually:
-
-```text
-~/.config/khptz/
-```
-
-Some plain-text deployment config files may still live beside the application during the current migration period.
+Production service installs use `/etc/khptz/` for site configuration,
+`/var/lib/khptz/` for persistent runtime data, `/var/log/khptz/` for logs and
+`/var/backups/khptz/` for local backup archives. Overrides and development
+checkouts can use other paths. `~/.config/khptz/` is a legacy migration source,
+not the production default. See [runtime path contract](RUNTIME_PATH_CONTRACT.md)
+and inspect the actual installation before exporting or deleting data. Legacy
+plain-text files can still exist beside development application code.
 
 ## Data That Must Not Be Logged Or Exported By Default
 
