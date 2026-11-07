@@ -49,7 +49,8 @@ while [[ $# -gt 0 ]]; do
         --atem)  INSTALL_ATEM=true; shift ;;
         --check) CHECK_MODE=true; shift ;;
         --wizard-user)
-            [[ $# -ge 2 ]] || { echo "--wizard-user requires a value" >&2; exit 1; }
+            [[ $# -ge 2 && -n "$2" && "$2" != -* ]] \
+                || { echo "--wizard-user requires a username (e.g. --wizard-user pi)" >&2; exit 1; }
             WIZARD_USER="$2"; shift 2 ;;
         --gui-mode)
             [[ $# -ge 2 ]] || { echo "--gui-mode requires a value" >&2; exit 1; }
