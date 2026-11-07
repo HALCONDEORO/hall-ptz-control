@@ -33,8 +33,10 @@ it, restoring a backup or importing a layout wrote files only their creator
 could read, which is how a session-owned GUI ends up with no presets after a
 recovery (#885).
 
-Thread safety: callers that share a dest path across threads should use their
-own lock (or core.json_io.save_json which is lock-per-path).
+Overlapping writes use independent private temp files, so each replacement
+publishes only its own complete content. The last replacement wins. Callers
+still need a lock around read-modify-write transactions to prevent lost updates
+(or core.json_io.save_json which is lock-per-path).
 
 Raises OSError on failure — callers decide how to handle/log it.
 """
@@ -43,6 +45,7 @@ from __future__ import annotations
 
 import os
 import stat
+import tempfile
 from pathlib import Path
 
 
@@ -102,14 +105,12 @@ def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None) ->
     # specific mode (secrets pass 0o600) are honoured exactly as before.
     if mode is None:
         mode = group_shared_mode(dest.parent)
-    tmp = dest.with_suffix(dest.suffix + ".tmp")
-    tmp.unlink(missing_ok=True)
-    # O_BINARY (Windows) keeps os.write byte-exact; without it Windows opens in
-    # text mode and translates \n → \r\n, corrupting JSON/YAML/secret payloads.
-    # getattr → 0 on POSIX, where the flag does not exist.
-    _flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0)
+    # Remove only the legacy fixed-name orphan, never another current writer's
+    # temporary file. mkstemp uses exclusive creation and a private 0600 mode.
+    dest.with_suffix(dest.suffix + ".tmp").unlink(missing_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".tmp", dir=dest.parent)
+    tmp = Path(tmp_name)
     try:
-        fd = os.open(str(tmp), _flags, 0o600)
         try:
             mv = memoryview(data)
             written = 0
