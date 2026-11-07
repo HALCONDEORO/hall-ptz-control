@@ -9,7 +9,7 @@
 #   auto(actor, role)
 #
 # Safety rules:
-#   - CUT/AUTO require TECHNICIAN role.  Normal operator/camera_operator cannot cut live.
+#   - CUT/AUTO require ADMIN role.  Normal operator/camera_operator cannot cut live.
 #   - CUT/AUTO never retry automatically — one call, one result.
 #   - Commands require ATEM to be connected.
 #   - All commands are auditable: correlation_id + actor in result data.
@@ -47,7 +47,7 @@ class AtemCommandService:
         self,
         input_id: int,
         actor: str = "",
-        role: OperatingMode = OperatingMode.CAMERA_OPERATOR,
+        role: OperatingMode = OperatingMode.USER,
     ) -> OperationResult:
         """Set ATEM preview bus input.
 
@@ -69,9 +69,9 @@ class AtemCommandService:
     def cut(
         self,
         actor: str = "",
-        role: OperatingMode = OperatingMode.CAMERA_OPERATOR,
+        role: OperatingMode = OperatingMode.USER,
     ) -> OperationResult:
-        """Execute CUT transition — TECHNICIAN role required.
+        """Execute CUT transition — ADMIN role required.
 
         CUT is never retried automatically.  This method represents one
         deliberate operator action.  No automatic retry is performed on failure.
@@ -83,7 +83,7 @@ class AtemCommandService:
             return OperationResult(
                 ok=False,
                 code=OperationCode.PERMISSION_DENIED,
-                message=f"CUT requires technician role (current: {role.value})",
+                message=f"CUT requires admin role (current: {role.value})",
                 severity=OperationSeverity.WARNING,
                 operation="atem_cut",
                 target="atem",
@@ -102,9 +102,9 @@ class AtemCommandService:
     def auto(
         self,
         actor: str = "",
-        role: OperatingMode = OperatingMode.CAMERA_OPERATOR,
+        role: OperatingMode = OperatingMode.USER,
     ) -> OperationResult:
-        """Execute AUTO transition — TECHNICIAN role required.
+        """Execute AUTO transition — ADMIN role required.
 
         AUTO is never retried automatically.  This method represents one
         deliberate operator action.  Uses the ATEM's configured transition
@@ -117,7 +117,7 @@ class AtemCommandService:
             return OperationResult(
                 ok=False,
                 code=OperationCode.PERMISSION_DENIED,
-                message=f"AUTO requires technician role (current: {role.value})",
+                message=f"AUTO requires admin role (current: {role.value})",
                 severity=OperationSeverity.WARNING,
                 operation="atem_auto",
                 target="atem",

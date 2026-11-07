@@ -4,9 +4,9 @@
 # ui/atem_admin_panel.py — Admin/support ATEM control panel (#554)
 #
 # AtemAdminPanel is the production admin panel — NOT the demo simulator panel.
-# It is only shown in TECHNICIAN context and only when ATEM is installed+enabled.
+# It is only shown in ADMIN context and only when ATEM is installed+enabled.
 #
-# CUT/AUTO buttons are disabled for non-TECHNICIAN roles with tooltip explanation.
+# CUT/AUTO buttons are disabled for non-ADMIN roles with tooltip explanation.
 # Status text is never color-only.
 # Panel must only be instantiated when ATEM is configured.
 
@@ -89,7 +89,7 @@ _RESULT_STYLE = (
 class AtemAdminPanel(_QFrameBase):  # type: ignore[valid-type]
     """Admin/support ATEM control panel.
 
-    Exposes Program/Preview status and manual commands for TECHNICIAN role.
+    Exposes Program/Preview status and manual commands for ADMIN role.
     CUT/AUTO are disabled with explanatory tooltip when role is insufficient.
 
     Never show in production to normal operators.
@@ -186,7 +186,7 @@ class AtemAdminPanel(_QFrameBase):  # type: ignore[valid-type]
         root.addWidget(self._prev_buttons_widget)
 
         # ── Live switch ───────────────────────────────────────────────────────
-        live_lbl = QLabel("LIVE SWITCH (TECHNICIAN ONLY)")
+        live_lbl = QLabel("LIVE SWITCH (ADMIN ONLY)")
         live_lbl.setStyleSheet(_SECTION_STYLE)
         root.addWidget(live_lbl)
 
@@ -501,13 +501,12 @@ class AtemAdminPanel(_QFrameBase):  # type: ignore[valid-type]
         from domain.call_set_policy import OperatingMode
         if self._role_fn is not None:
             return self._role_fn()
-        return OperatingMode.CAMERA_OPERATOR
+        return OperatingMode.USER
 
     def _is_technician(self) -> bool:
         # Delegates to the single domain rule so the button-enabling logic here
         # can never diverge from the command guard in AtemCommandService.
-        # Administrator (SYSTEM_ADMIN) has full access including live switching;
-        # TECHNICIAN keeps it for backward compatibility.
+        # All legacy administrative roles resolve to the canonical ADMIN.
         from domain.atem_policy import can_live_switch
         return can_live_switch(self._current_role())
 
@@ -557,7 +556,7 @@ class AtemAdminPanel(_QFrameBase):  # type: ignore[valid-type]
         self._lbl_role.setText(f"Role: {role.value}")
 
         tech = self._is_technician()
-        tip = "" if tech else "Requires technician role to perform live switching"
+        tip = "" if tech else "Requires admin role to perform live switching"
         self._btn_cut.setEnabled(tech)
         self._btn_auto.setEnabled(tech)
         self._btn_cut.setToolTip(tip)
