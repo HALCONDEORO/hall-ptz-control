@@ -8,10 +8,14 @@ el hecho de que CI esté en verde.
 ## Antes de tocar el equipo
 
 - Anota modelo de Pi, sistema, Python, etiqueta/commit y usuario de escritorio.
-- El objetivo de software es Pi 4 con Raspberry Pi OS Bullseye de 64 bits,
-  Python 3.9.2 y escritorio X11. La Pi 5 no funciona con Bullseye.
-- Pi 5 con Bookworm/Trixie sigue sin validar. X11, dependencias y empaquetado
-  necesitan comprobación propia; no uses `--atem` ni `--dev` en ese camino.
+- El objetivo de la instalación es Raspberry Pi OS Bookworm de 64 bits con
+  escritorio y Python 3.11. El ensayo de instalación en contenedor Bookworm
+  pasó; no equivale a validación física de Pi, X11, pantalla ni cámaras.
+- El modelo de Pi y el sistema instalado se comprueban en el equipo antes de
+  decidir cambios. La Pi 5 no funciona con Bullseye. Trixie sigue sin validar.
+  Usa el modo GUI de sistema predeterminado; el modo GUI de usuario no está
+  aprobado para autenticación local. No añadas `--atem` ni `--dev` sin su
+  comprobación específica.
 - Verifica red, IP únicas y cámaras previstas. No muevas cámaras sin permiso.
 - En una actualización, confirma una copia recuperable y el plan de rollback.
   Si falla la copia, para antes de cambiar datos.

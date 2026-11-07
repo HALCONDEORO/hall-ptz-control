@@ -176,7 +176,21 @@ else
 fi
 
 # No second/legacy controller running.
-LEGACY_PROCS="$(pgrep -fa 'KHPTZ|khptz|PTZ.?[Cc]ontrol|camera.?controller' 2>/dev/null || true)"
+filter_legacy_processes() {
+    local pid command
+    while IFS=' ' read -r pid command; do
+        [[ -n "${pid}" ]] || continue
+        # The validator and its sudo/bash parent match their own filename.
+        [[ "${pid}" == "$$" || "${pid}" == "${PPID}" ]] && continue
+        # The supported GUI is checked separately above, including duplicates.
+        # Match the script argument, not an arbitrary substring in a legacy argv.
+        if [[ "${command}" =~ ^([^[:space:]]*/)?python(3(\.[0-9]+)?)?[[:space:]]+/opt/khptz/main\.py([[:space:]]|$) ]]; then
+            continue
+        fi
+        printf '%s %s\n' "${pid}" "${command}"
+    done
+}
+LEGACY_PROCS="$(pgrep -fa 'KHPTZ|khptz|PTZ.?[Cc]ontrol|camera.?controller' 2>/dev/null | filter_legacy_processes || true)"
 if [[ -z "${LEGACY_PROCS}" ]]; then
     ok "No legacy KHPTZ/PTZ controller process is running."
 else
