@@ -193,3 +193,20 @@ def test_current_queued_display_updates_are_delivered(main_window, _qapp):
     _qapp.processEvents()
     main_window._set_zoom_feedback.assert_called_once_with(75)
     main_window._update_exposure_ui.assert_called_once()
+
+
+def test_custom_special_seat_builds_without_known_legacy_icon(main_window, monkeypatch):
+    """A valid custom special layout must not abort construction with KeyError."""
+    from domain.room_layout import SeatLayout
+    from ui.widgets import SpecialDragButton
+
+    seat = SeatLayout(id="side", label="Side room", preset=37,
+                      camera_role="comments", x=10, y=20, type="special")
+    monkeypatch.setattr(main_window._layout_svc, "visible_seats", lambda: [seat])
+    main_window._build_seat_buttons()
+    button = main_window.Seat37
+    assert isinstance(button, SpecialDragButton)
+    assert button.seat_number == 37
+    assert button.text() == "Side room"
+    assert button.x() == 10 and button.y() == 20
+    assert button.icon().isNull()
