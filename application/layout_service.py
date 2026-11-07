@@ -118,7 +118,7 @@ class LayoutService:
             if layout is not None:
                 logger.warning("Recovered from .bak — re-saving as primary file")
                 self._recovery_used = True
-                self.save(layout)
+                self.save(layout, create_backup=False)
                 self._layout = layout
                 return layout
 
@@ -135,12 +135,12 @@ class LayoutService:
         """True if the last load() fell back to .bak or default regeneration."""
         return self._recovery_used
 
-    def save(self, layout: RoomLayout) -> bool:
+    def save(self, layout: RoomLayout, *, create_backup: bool = True) -> bool:
         """Validate and persist layout atomically. Returns True on success."""
         self._validate(layout)
         from core.json_io import save_json
         data = self._serialize(layout)
-        ok = save_json(self._path, data)
+        ok = save_json(self._path, data, create_backup=create_backup)
         if ok:
             self._layout = layout
         return ok
