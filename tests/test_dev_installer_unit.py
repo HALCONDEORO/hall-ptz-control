@@ -23,6 +23,7 @@ def test_dev_unit_can_read_home_checkout_and_write_runtime_data(tmp_path):
             "PATH": str(Path(shutil.which("sed")).parent),
             "APP_USER": "desktop",
             "INSTALL_DIR": "/home/desktop/khptz",
+            "CONFIG_DIR": "/home/desktop/khptz",
             "DATA_DIR": "/home/desktop/.config/khptz",
             "LOG_DIR": "/var/log/khptz",
             "BACKUP_DIR": "/var/backups/khptz",

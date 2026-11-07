@@ -526,6 +526,10 @@ LAUNCHER
 else
     cat > "${KHPTZ_LAUNCHER}" <<LAUNCHER
 #!/usr/bin/env bash
+export KHPTZ_CONFIG_DIR="${CONFIG_DIR}"
+export KHPTZ_DATA_DIR="${DATA_DIR}"
+export KHPTZ_LOG_DIR="${LOG_DIR}"
+export KHPTZ_BACKUP_DIR="${BACKUP_DIR}"
 cd "${INSTALL_DIR}" && exec python3 -m runtime.cli "\$@"
 LAUNCHER
 fi
@@ -557,6 +561,9 @@ else
         -e "s|ExecStart=/usr/bin/python3 /opt/khptz/main.py|ExecStart=/usr/bin/python3 ${INSTALL_DIR}/main.py|g" \
         -e "s|ReadWritePaths=.*|ReadWritePaths=${DATA_DIR} ${LOG_DIR} ${BACKUP_DIR}|g" \
         -e "s|Environment=KHPTZ_DATA_DIR=/var/lib/khptz|Environment=KHPTZ_DATA_DIR=${DATA_DIR}|g" \
+        -e "/^Environment=KHPTZ_DATA_DIR=/a Environment=KHPTZ_CONFIG_DIR=${CONFIG_DIR}" \
+        -e "/^Environment=KHPTZ_DATA_DIR=/a Environment=KHPTZ_LOG_DIR=${LOG_DIR}" \
+        -e "/^Environment=KHPTZ_DATA_DIR=/a Environment=KHPTZ_BACKUP_DIR=${BACKUP_DIR}" \
         -e "/^ConditionPathExists=\/etc\/khptz\/\.provisioned$/d" \
         "${SERVICE_TEMPLATE}" > "${SERVICE_FILE}"
 fi
