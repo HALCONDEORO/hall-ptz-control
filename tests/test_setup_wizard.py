@@ -413,3 +413,17 @@ class TestEndToEndApply:
         loaded = load_config(resolver.config_dir / "config.yaml")
         assert len(loaded.cameras) == 2
         assert secret_manager.decrypt_secret(secret_manager.SECRET_ADMIN) == "admin-pass"
+
+
+class TestDonePageRuntimeClaims:
+    def test_completion_text_requires_runtime_checks(self, wizard):
+        from PyQt5.QtWidgets import QLabel
+
+        page = _page(wizard, "DonePage")
+        text = " ".join(label.text() for label in page.findChildren(QLabel))
+        assert "Configuration applied" in page.subTitle()
+        assert "Installed and running" not in page.subTitle()
+        assert "The room is ready." not in text
+        assert "does not confirm" in text
+        for command in ("khptz verify-install", "khptz status", "khptz doctor"):
+            assert command in text
