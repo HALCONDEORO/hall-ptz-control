@@ -293,6 +293,21 @@ def test_room_layout_file_in_data_paths():
     assert ROOM_LAYOUT_FILE.name == "room_layout.json"
 
 
+def test_update_seat_position_reports_failed_save_without_changing_live_layout(tmp_path, monkeypatch):
+    svc = _service(tmp_path)
+    original_layout = svc.load()
+    original_seat = svc.seat_by_id("1")
+    original_bytes = (tmp_path / "room_layout.json").read_bytes()
+    monkeypatch.setattr("core.json_io.save_json", lambda *args, **kwargs: False)
+
+    result = svc.update_seat_position("1", x=999, y=888)
+
+    assert result is False
+    assert svc.layout is original_layout
+    assert svc.seat_by_id("1") is original_seat
+    assert (tmp_path / "room_layout.json").read_bytes() == original_bytes
+
+
 @pytest.mark.parametrize("backup", ["valid", "missing", "invalid"])
 @pytest.mark.parametrize("field,value", [("x", "bad"), ("preset", None), ("y", 1e309)])
 def test_load_invalid_numeric_seat_recovers_saved_layout(tmp_path, field, value, backup):
