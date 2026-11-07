@@ -252,3 +252,39 @@ def test_custom_special_seat_builds_without_known_legacy_icon(main_window, monke
     assert button.text() == "Side room"
     assert button.x() == 10 and button.y() == 20
     assert button.icon().isNull()
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_right_panel_fit_handles_container_lifetime(_qapp, deleted):
+    from PyQt5 import sip
+    from PyQt5.QtWidgets import QFrame
+    from ui.right_panel import RightPanel
+
+    panel = RightPanel.__new__(RightPanel)
+    panel._container = QFrame()
+    if deleted:
+        sip.delete(panel._container)
+    # A queued fit can outlive its parent widget during window teardown.
+    panel._fit_container_height()
+    if not deleted:
+        assert panel._container.geometry().getRect() == (1446, 0, 474, 1080)
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_right_panel_flash_handles_button_lifetime(_qapp, monkeypatch, deleted):
+    from PyQt5 import sip
+    from PyQt5.QtCore import QTimer
+    from PyQt5.QtWidgets import QPushButton
+    from ui.right_panel import RightPanel
+
+    callbacks = []
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    panel = RightPanel.__new__(RightPanel)
+    panel._btn_focus_base_style = "QPushButton { color: black; }"
+    button = QPushButton()
+    panel._flash_button(button, True)
+    if deleted:
+        sip.delete(button)
+    callbacks[0]()
+    if not deleted:
+        assert button.styleSheet() == panel._btn_focus_base_style
