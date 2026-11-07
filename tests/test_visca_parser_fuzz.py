@@ -212,12 +212,12 @@ class TestNibbleMasking:
     def test_zoom_all_nibbles_full(self):
         data = _zoom_completion(p=0xF, q=0xF, r=0xF, s=0xF)
         result = parser.zoom(data)
-        assert result == 0xFFFF
+        assert result is None
 
     def test_zoom_value_within_valid_range(self):
         data = _zoom_completion(p=0x04, q=0x00, r=0x00, s=0x00)
         result = parser.zoom(data)
-        assert 0 <= result <= 0xFFFF
+        assert 0 <= result <= 0x4000
 
     def test_ptz_high_nibbles_rejected(self):
         # PTZ with non-zero high nibble in pan bytes → None

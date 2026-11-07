@@ -292,3 +292,44 @@ class TestUndoLastAssignment:
             for i in range(SeatNamesController._UNDO_DEPTH + 10):
                 SeatNamesController._on_seat_name_assigned(ctrl, i, f"P{i}")
         assert len(ctrl._undo_stack) == SeatNamesController._UNDO_DEPTH
+
+
+class TestUndoAfterRename:
+    def test_undo_move_preserves_renamed_identity(self):
+        seat5 = _FakeSeat("")
+        seat6 = _FakeSeat("PersonA")
+        ctrl, w = _ctrl_stub(
+            seats={"5": seat5, "6": seat6},
+            seat_names={"5": "PersonA"}, names_list=["PersonA"],
+        )
+        with patch("ui.seat_names_mixin.save_names_data"), \
+             patch("ui.seat_names_mixin.GoButton", _FakeSeat), \
+             patch("ui.seat_names_mixin.SpecialDragButton", _FakeSeat):
+            ctrl._on_seat_name_assigned(6, "PersonA")
+            w._names_list[:] = ["PersonB"]
+            ctrl._on_names_list_changed(old_name="PersonA", new_name="PersonB")
+            ctrl.undo_last_assignment()
+        assert w._seat_names == {"5": "PersonB"}
+        assert seat5.assigned_name == "PersonB"
+        assert seat6.assigned_name == ""
+
+    def test_undo_clear_preserves_rename_without_live_assignment(self):
+        ctrl, w = _ctrl_stub(seat_names={"5": "PersonA"}, names_list=["PersonA"])
+        with patch("ui.seat_names_mixin.save_names_data"):
+            ctrl._clear_all_seats()
+            w._names_list[:] = ["PersonB"]
+            ctrl._on_names_list_changed(old_name="PersonA", new_name="PersonB")
+            ctrl.undo_last_assignment()
+        assert w._seat_names == {"5": "PersonB"}
+
+    def test_repeated_rename_migrates_all_undo_levels_only_for_that_person(self):
+        ctrl, w = _ctrl_stub(seat_names={"5": "PersonA", "7": "PersonC"})
+        with patch("ui.seat_names_mixin.save_names_data"):
+            ctrl._on_seat_name_assigned(6, "PersonA")
+            ctrl._on_seat_name_assigned(8, "PersonC")
+            ctrl._on_names_list_changed(old_name="PersonA", new_name="PersonB")
+            ctrl._on_names_list_changed(old_name="PersonB", new_name="PersonD")
+            ctrl.undo_last_assignment()
+            assert w._seat_names == {"6": "PersonD", "7": "PersonC"}
+            ctrl.undo_last_assignment()
+        assert w._seat_names == {"5": "PersonD", "7": "PersonC"}

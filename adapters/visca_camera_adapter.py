@@ -222,16 +222,33 @@ class ViscaCameraAdapter:
         return self._result("one_push_af", camera_id, ok, t0)
 
     def brightness_up(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
-        t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01040D02FF")
-        return self._result("brightness_up", camera_id, ok, t0)
+        return self._adjust_brightness(camera_id, "02", "brightness_up")
 
     def brightness_down(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
+        return self._adjust_brightness(camera_id, "03", "brightness_down")
+
+    def _adjust_brightness(self, camera_id: str, step: str, command: str) -> CommandResult:
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            ip, cam_id_hex = self._cam_info(camera_id)
+            generation = self._endpoint_generations.get(idx, 0)
+            mode = self._mgr.ae_mode[idx]
         t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01040D03FF")
-        return self._result("brightness_down", camera_id, ok, t0)
+        if mode in ("manual", "bright"):
+            ok = self._send_confirmed(ip, cam_id_hex, f"01040D{step}FF")
+        elif mode == "auto":
+            # CAM_Bright is for manual/bright. Auto exposure uses ExpComp,
+            # and enabling it must succeed before issuing an adjustment.
+            ok = self._send_confirmed(ip, cam_id_hex, "01043E02FF")
+            if ok:
+                with self._display_query_lock:
+                    current = (self._display_query_is_current(
+                        idx, ip, cam_id_hex, generation
+                    ) and self._mgr.ae_mode[idx] == mode)
+                ok = current and self._send_confirmed(ip, cam_id_hex, f"01040E{step}FF")
+        else:
+            ok = False  # Unknown AE observations cannot select a safe opcode.
+        return self._result(command, camera_id, ok, t0)
 
     def backlight_toggle(self, camera_id: str) -> CommandResult:
         with self._display_query_lock:
@@ -248,6 +265,7 @@ class ViscaCameraAdapter:
                 # toggle state, including an IP/id change that later changes back.
                 if self._display_query_is_current(idx, ip, cam_id_hex, generation):
                     self._backlight_on[camera_id] = new_state
+                    self._mgr.set_backlight(ip, new_state)
         return self._result("backlight_toggle", camera_id, ok, t0)
 
     def zoom_absolute(self, camera_id: str, position: int) -> CommandResult:
@@ -326,8 +344,11 @@ class ViscaCameraAdapter:
         )
 
     def invalidate_zoom(self, camera: int) -> None:
-        ip, _ = self._cam_info_by_index(camera)
-        self._mgr.invalidate_zoom(ip)
+        """Retire feedback captured before a confirmed preset recall."""
+        with self._display_query_lock:
+            ip, _ = self._cam_info_by_index(camera)
+            self._endpoint_generations[camera] = self._endpoint_generations.get(camera, 0) + 1
+            self._mgr.invalidate_zoom(ip)
 
     # ── UI-state synchronisation helpers (read queries) ───────────────────────
     # Called by the UI layer after startup and camera reconnection to sync
