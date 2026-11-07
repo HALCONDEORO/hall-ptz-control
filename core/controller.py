@@ -43,8 +43,8 @@ class Controller:
         self._presets      = preset_svc
         self._session      = session_svc
         # Camera-confirmed slots survive a disk failure, but are not durable
-        # until a later retry persists them. Existing does not mean saved.
-        self._pending_preset_persistence: set[str] = set()
+        # until a later retry persists them. Track stable slots, not mutable names.
+        self._pending_preset_persistence: set[int] = set()
         self._register()
 
     def _register(self) -> None:
@@ -181,8 +181,8 @@ class Controller:
         ok = self._result_ok(result)
         if ok:
             if is_new:
-                self._pending_preset_persistence.add(name)
-            if name in self._pending_preset_persistence:
+                self._pending_preset_persistence.add(slot)
+            if slot in self._pending_preset_persistence:
                 persisted = self._presets.persist()
                 if not persisted:
                     logger.error(
@@ -190,7 +190,7 @@ class Controller:
                         "PRESET_SAVED no emitido", name, slot,
                     )
                     return
-                self._pending_preset_persistence.discard(name)
+                self._pending_preset_persistence.discard(slot)
             logger.info("Preset %d guardado para '%s' en Cam%d", slot, name, cam)
             self._bus.emit(EventType.PRESET_SAVED, camera=cam, name=name, slot=slot)
         else:
