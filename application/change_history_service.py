@@ -82,7 +82,11 @@ class ChangeHistoryService:
                 if not line:
                     continue
                 try:
-                    events.append(ChangeEvent.from_dict(json.loads(line)))
+                    data = json.loads(line)
+                    if not isinstance(data, dict):
+                        logger.warning("Skipping corrupt history line: expected an object")
+                        continue
+                    events.append(ChangeEvent.from_dict(data))
                 except (json.JSONDecodeError, KeyError) as exc:
                     logger.warning("Skipping corrupt history line: %s", exc)
             return events

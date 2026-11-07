@@ -215,6 +215,12 @@ class CameraManager:
                 return
             self._zoom_cache[self.cam_key(ip)] = pct
 
+    def set_backlight(self, ip: str, enabled: bool) -> None:
+        """Publish confirmed backlight state for a still-configured endpoint."""
+        with self._inflight_lock:
+            if ip in (self._cam1_ip, self._cam2_ip):
+                self.backlight_on[self.cam_key(ip)] = enabled
+
     def invalidate_zoom(self, ip: str):
         """
         Borra el cache de zoom para esta cámara.

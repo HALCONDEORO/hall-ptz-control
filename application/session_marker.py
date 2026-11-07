@@ -65,7 +65,7 @@ def was_session_interrupted(path: Path | None = None) -> bool:
     started_at = ""
     try:
         started_at = path.read_text(encoding="utf-8").strip()
-    except OSError:
+    except (OSError, UnicodeError):
         pass
     logger.warning(
         "[STARTUP] %s (session started at: %s)",

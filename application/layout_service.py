@@ -192,7 +192,9 @@ class LayoutService:
 
         try:
             return self._deserialize_with_migration(raw)
-        except LayoutError as exc:
+        except (ValueError, TypeError, OverflowError) as exc:
+            # LayoutError is a ValueError. Numeric conversions and malformed
+            # collections must use the same backup/default recovery path.
             logger.exception("Invalid layout in %s: %s", path.name, exc)
             return None
 

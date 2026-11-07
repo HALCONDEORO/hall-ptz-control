@@ -96,25 +96,39 @@ class AsyncEventBus:
         self._subscribers: Dict[EventType, List[Callable[[Event], None]]] = {}
         self._lock = threading.RLock()
         self._worker: Optional[threading.Thread] = None
+        self._lifecycle_lock = threading.Lock()
+        self._stop_requested = False
 
     # ── Ciclo de vida ────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        if self._worker is not None and self._worker.is_alive():
-            return  # idempotente: no arranca un segundo worker
-        self._worker = threading.Thread(
-            target=self._run,
-            name="AsyncEventBus-worker",
-            daemon=True,
-        )
-        self._worker.start()
+        with self._lifecycle_lock:
+            if self._worker is not None and self._worker.is_alive():
+                return  # Includes a worker still finishing a timed-out stop.
+            self._stop_requested = False
+            self._worker = threading.Thread(
+                target=self._run,
+                name="AsyncEventBus-worker",
+                daemon=True,
+            )
+            self._worker.start()
 
     def stop(self) -> None:
-        if self._worker is None:
+        with self._lifecycle_lock:
+            worker = self._worker
+            if worker is None:
+                return
+            if not self._stop_requested:
+                self._queue.put(None)
+                self._stop_requested = True
+        # A handler may request stop itself. Let it return and consume the
+        # sentinel rather than trying to join its own thread.
+        if worker is threading.current_thread():
             return
-        self._queue.put(None)  # centinela: ordena al worker que termine
-        self._worker.join(timeout=2.0)
-        self._worker = None
+        worker.join(timeout=2.0)
+        with self._lifecycle_lock:
+            if self._worker is worker and not worker.is_alive():
+                self._worker = None
 
     # ── Suscripción ──────────────────────────────────────────────────────────
 

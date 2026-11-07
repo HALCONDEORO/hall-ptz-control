@@ -23,19 +23,22 @@ def zoom(data: bytes) -> Optional[int]:
     Extrae el valor 0–0x4000 de una respuesta VISCA zoom inquiry.
     Escanea el buffer para manejar ACK + Completion en el mismo paquete TCP.
     Formato Completion: 9x 50 0p 0q 0r 0s FF
-    Devuelve None si los nibbles de payload son inválidos.
+    Devuelve None si los nibbles o el rango de zoom son inválidos.
     """
     frame = inquiry_frame(data, payload_len=4)
     if frame is None:
         return None
     if not _valid_nibble_bytes(frame, [2, 3, 4, 5]):
         return None
-    return (
+    raw = (
         (frame[2] & 0xF) << 12
         | (frame[3] & 0xF) << 8
         | (frame[4] & 0xF) << 4
         | (frame[5] & 0xF)
     )
+    # The product's zoom commands and percentage UI use 0..ZOOM_MAX.
+    # Reject corrupt/unsupported observations, rather than inventing feedback.
+    return raw if raw <= ZOOM_MAX else None
 
 
 def zoom_to_pct(raw: int) -> int:

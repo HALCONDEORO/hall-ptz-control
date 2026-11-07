@@ -347,3 +347,40 @@ def test_queued_display_update_is_dropped_after_shutdown(_qapp, kind):
     window._set_zoom_feedback.assert_not_called()
     window._update_exposure_ui.assert_not_called()
     window.close()
+
+
+@pytest.mark.parametrize("transition", ["ended", "restarted", "restarted_and_ended", "closing"])
+def test_delayed_screen_sleep_belongs_to_ended_session(main_window, monkeypatch, transition):
+    from unittest.mock import Mock
+    from PyQt5.QtCore import QTimer
+    import ui.main_window as module
+
+    main_window._camera_port.refresh_zoom_display = Mock()
+    main_window._camera_port.async_refresh_ae_mode = Mock()
+    main_window._bus = Mock()
+    main_window.session_active = True
+    dialog = Mock()
+    dialog.exec_.return_value = 1
+    factory = Mock(return_value=dialog)
+    factory.Accepted = 1
+    monkeypatch.setattr(module, "ScreenOffDialog", factory)
+    sleep = Mock()
+    monkeypatch.setattr(module.ScreenMonitor, "sleep", sleep)
+    monkeypatch.setattr(module.ScreenMonitor, "wake", Mock())
+    callbacks = []
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, callback: callbacks.append((delay, callback)))
+
+    main_window._on_screen_turned_off()
+    sleep_callback = next(callback for delay, callback in callbacks if delay == 1500)
+    if transition in ("restarted", "restarted_and_ended"):
+        main_window._session.ToggleSession()
+        if transition == "restarted_and_ended":
+            main_window._session.shutdown("manual")
+    elif transition == "closing":
+        main_window._shutting_down = True
+    sleep_callback()
+
+    if transition == "ended":
+        sleep.assert_called_once_with()
+    else:
+        sleep.assert_not_called()

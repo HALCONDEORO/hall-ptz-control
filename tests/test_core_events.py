@@ -224,3 +224,86 @@ class TestAsyncEventBusUnsubscribe:
             bus.stop()
 
         assert seen == ["second"]
+
+
+def test_stop_timeout_does_not_allow_second_worker(monkeypatch):
+    bus = AsyncEventBus()
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_handler(event):
+        entered.set()
+        release.wait(timeout=5)
+
+    bus.subscribe(EventType.SESSION_START, slow_handler)
+    bus.start()
+    original_worker = bus._worker
+    bus.emit(EventType.SESSION_START)
+    assert entered.wait(timeout=2)
+    # Simulate join's documented timeout while the handler is still running.
+    monkeypatch.setattr(original_worker, "join", lambda timeout=None: None)
+    try:
+        bus.stop()
+        bus.start()
+        assert bus._worker is original_worker
+    finally:
+        release.set()
+        threading.Thread.join(original_worker, timeout=0.1)
+        if original_worker.is_alive():
+            bus._queue.put(None)
+            threading.Thread.join(original_worker, timeout=2)
+        bus.stop()
+
+
+def test_repeated_stop_timeout_does_not_leave_extra_sentinel(monkeypatch):
+    bus = AsyncEventBus()
+    entered = threading.Event()
+    release = threading.Event()
+    seen = []
+
+    def handler(event):
+        seen.append(event.payload["n"])
+        if event.payload["n"] == 1:
+            entered.set()
+            release.wait(timeout=5)
+
+    bus.subscribe(EventType.SESSION_START, handler)
+    bus.start()
+    worker = bus._worker
+    bus.emit(EventType.SESSION_START, n=1)
+    assert entered.wait(timeout=2)
+    monkeypatch.setattr(worker, "join", lambda timeout=None: None)
+    try:
+        bus.stop()
+        bus.stop()
+    finally:
+        release.set()
+        threading.Thread.join(worker, timeout=2)
+    bus.start()
+    try:
+        bus.emit(EventType.SESSION_START, n=2)
+        _drain(bus)
+        assert seen == [1, 2]
+    finally:
+        bus.stop()
+
+
+def test_handler_can_request_stop_without_self_join_error(caplog):
+    bus = AsyncEventBus()
+    returned = threading.Event()
+
+    def handler(event):
+        bus.stop()
+        returned.set()
+
+    bus.subscribe(EventType.SESSION_START, handler)
+    bus.start()
+    worker = bus._worker
+    try:
+        bus.emit(EventType.SESSION_START)
+        assert returned.wait(timeout=2)
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+        assert "Excepción en handler" not in caplog.text
+    finally:
+        bus.stop()
