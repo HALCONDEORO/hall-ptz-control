@@ -42,15 +42,17 @@ model or firmware is approved merely because it appears in an installation guide
 | Preview input changes reflected in UI | PASS / FAIL / SKIP | |
 | Incorrect mapping shows identifiable mismatch | PASS / FAIL / SKIP | |
 
-### Manual Admin Commands (TECHNICIAN role only)
+### Manual Admin Commands (TECHNICIAN and SYSTEM_ADMIN)
 
 | Test | Result | Notes |
 |---|---|---|
 | `set_preview_input` changes ATEM preview bus | PASS / FAIL / SKIP | |
-| CUT transitions program correctly | PASS / FAIL / SKIP | |
-| AUTO transitions with configured transition effect | PASS / FAIL / SKIP | |
-| CUT/AUTO blocked for camera_operator role | PASS / FAIL / SKIP | |
-| CUT/AUTO greyed out in UI for non-technician | PASS / FAIL / SKIP | |
+| TECHNICIAN: CUT transitions program correctly | PASS / FAIL / SKIP | |
+| TECHNICIAN: AUTO uses configured transition effect | PASS / FAIL / SKIP | |
+| SYSTEM_ADMIN: CUT transitions program correctly | PASS / FAIL / SKIP | |
+| SYSTEM_ADMIN: AUTO uses configured transition effect | PASS / FAIL / SKIP | |
+| CAMERA_OPERATOR: CUT/AUTO blocked by command guard | PASS / FAIL / SKIP | |
+| CAMERA_OPERATOR: CUT/AUTO disabled in UI | PASS / FAIL / SKIP | |
 
 ### Failure / Degraded
 

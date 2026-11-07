@@ -22,7 +22,7 @@ ATEM validation is established by this guide or by mocked tests.
 | Network | ATEM and Raspberry Pi on the same AV subnet (e.g. 192.168.30.0/24). Static IPs required. |
 | PyATEMMax | Optional Python dependency — required for production real-hardware monitoring. Not needed for demo/simulation. |
 | Firmware | Record the actual firmware; the report template contains no tested version |
-| KHPTZ version | ≥ 3.38.2 |
+| KH PTZ Control build | Record the exact reviewed commit/tag; a version number alone does not identify the validated build |
 
 ---
 
@@ -109,6 +109,12 @@ Code references: [CLI](../runtime/cli.py),
 [network checks](../application/network_diagnostics.py),
 [adapter diagnostics](../application/atem_diagnostics_service.py).
 
+Live switching permission comes from `LIVE_SWITCH_ROLES` in
+[domain/atem_policy.py](../domain/atem_policy.py): both `TECHNICIAN` and
+`SYSTEM_ADMIN` are allowed; `CAMERA_OPERATOR` is blocked. Validate the UI and
+command guard for each role. A permitted role is not permission to test on a live
+programme output.
+
 ## Handover Fields
 
 Record at install handover:
@@ -137,7 +143,7 @@ Record at install handover:
 | `atem_reachable` warning | Configured probe did not succeed, or address missing | Preserve evidence; check config and actual adapter state before changing anything |
 | "ATEM disconnected" in UI | Power, address, network or adapter failure | Check power/address/logs; do not power-cycle a live switcher without permission |
 | `atem.enabled=true requires atem.installed=true` | Config mismatch | Set `installed: true` or `enabled: false` |
-| CUT/AUTO greyed out in admin panel | Not TECHNICIAN role | Switch to admin/technician mode |
+| CUT/AUTO greyed out in admin panel | CAMERA_OPERATOR is blocked; TECHNICIAN and SYSTEM_ADMIN are the permitted live-switch roles | Confirm the authorised role and session state; do not bypass the role check |
 | Camera controls unavailable | Session not started | ATEM state does not block PTZ — check session |
 
 ---
