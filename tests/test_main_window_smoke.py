@@ -252,3 +252,98 @@ def test_custom_special_seat_builds_without_known_legacy_icon(main_window, monke
     assert button.text() == "Side room"
     assert button.x() == 10 and button.y() == 20
     assert button.icon().isNull()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "exposure"])
+def test_late_display_callback_ignores_destroyed_window(_qapp, kind):
+    """A completed network read may outlive the window receiving its result."""
+    from unittest.mock import Mock
+    from PyQt5 import sip
+    from PyQt5.QtWidgets import QWidget
+    from ui.camera_display_mixin import CameraDisplayMixin
+
+    class DisplayWindow(CameraDisplayMixin, QWidget):
+        pass
+
+    window = DisplayWindow()
+    window.Cam1 = Mock()
+    window.Cam1.isChecked.return_value = True
+    window._camera_port = Mock()
+    window._camera_port.display_generation.return_value = 0
+    window._cameras = Mock()
+    window._cameras.cam_key.return_value = 1
+    if kind == "zoom":
+        window._refresh_zoom()
+        callback = window._camera_port.refresh_zoom_display.call_args.args[1]
+    else:
+        window._on_cam_connected(True, "192.0.2.1")
+        callback = window._camera_port.async_refresh_ae_mode.call_args.args[1]
+    sip.delete(window)
+    if kind == "zoom":
+        callback(50)
+    else:
+        callback()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "exposure"])
+def test_display_callback_still_delivers_to_live_receiver(_qapp, kind):
+    from unittest.mock import Mock
+    from PyQt5.QtWidgets import QWidget
+    from ui.camera_display_mixin import CameraDisplayMixin
+
+    class DisplayWindow(CameraDisplayMixin, QWidget):
+        pass
+
+    window = DisplayWindow()
+    window.Cam1 = Mock()
+    window.Cam1.isChecked.return_value = True
+    window._camera_port = Mock()
+    window._camera_port.display_generation.return_value = 0
+    window._cameras = Mock()
+    window._cameras.cam_key.return_value = 1
+    window._set_zoom_feedback = Mock()
+    window._update_exposure_ui = Mock()
+    if kind == "zoom":
+        window._refresh_zoom()
+        window._camera_port.refresh_zoom_display.call_args.args[1](50)
+        _qapp.processEvents()
+        window._set_zoom_feedback.assert_called_once_with(50)
+    else:
+        window._on_cam_connected(True, "192.0.2.1")
+        window._camera_port.async_refresh_ae_mode.call_args.args[1]()
+        _qapp.processEvents()
+        window._update_exposure_ui.assert_called_once_with()
+    window.close()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "exposure"])
+def test_queued_display_update_is_dropped_after_shutdown(_qapp, kind):
+    from unittest.mock import Mock
+    from PyQt5.QtWidgets import QWidget
+    from ui.camera_display_mixin import CameraDisplayMixin
+
+    class DisplayWindow(CameraDisplayMixin, QWidget):
+        pass
+
+    window = DisplayWindow()
+    window.Cam1 = Mock()
+    window.Cam1.isChecked.return_value = True
+    window._camera_port = Mock()
+    window._camera_port.display_generation.return_value = 0
+    window._cameras = Mock()
+    window._cameras.cam_key.return_value = 1
+    window._set_zoom_feedback = Mock()
+    window._update_exposure_ui = Mock()
+    if kind == "zoom":
+        window._refresh_zoom()
+        callback = window._camera_port.refresh_zoom_display.call_args.args[1]
+        callback(50)
+    else:
+        window._on_cam_connected(True, "192.0.2.1")
+        callback = window._camera_port.async_refresh_ae_mode.call_args.args[1]
+        callback()
+    window._shutting_down = True
+    _qapp.processEvents()
+    window._set_zoom_feedback.assert_not_called()
+    window._update_exposure_ui.assert_not_called()
+    window.close()
