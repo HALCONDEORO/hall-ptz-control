@@ -165,6 +165,10 @@ else
         [[ -f "$STATE_FILE" ]] || fail \
             "No install state at $STATE_FILE — this install predates rollback support. Re-run install.sh from the source checkout first, or pass --source <checkout> --to <ref>."
         SOURCE_DIR="$(state_value KHPTZ_SOURCE_DIR)"
+    fi
+    # --source overrides only the checkout, not the installed GUI identity.
+    # Preserve these settings even when recovering from a replacement clone.
+    if [[ -f "$STATE_FILE" ]]; then
         WIZARD_USER="$(state_value KHPTZ_WIZARD_USER)"
         GUI_MODE="$(state_value KHPTZ_GUI_MODE)"
     fi
