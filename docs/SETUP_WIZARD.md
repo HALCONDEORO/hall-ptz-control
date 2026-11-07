@@ -18,15 +18,19 @@ khptz setup            # open the wizard (fresh install)
 khptz setup --force    # Repair: reopen on an already-provisioned install
 ```
 
-`khptz setup` is **idempotent**. Once the install is provisioned (the
-`/etc/khptz/.provisioned` marker exists) it prints a note and exits `0` **without**
-opening a window. That is what lets the same command be wired to first-boot
-autostart and fire harmlessly on every login after setup has completed once.
+`khptz setup` is **idempotent**. On a product install using `/etc/khptz`,
+it prints a note and exits `0` **without** opening a window only when both
+`.provisioned` and `.rpi-integrated` exist. If `.provisioned` exists but
+`.rpi-integrated` is missing, it opens the wizard for integration migration.
+With an overridden configuration directory (tests/development), only the
+provisioned marker is required to suppress the window.
 
 | Situation | `khptz setup` | `khptz setup --force` |
 |---|---|---|
 | Not provisioned (fresh) | Opens the wizard | Opens the wizard |
-| Already provisioned | Exits 0, no window | Opens in **Repair** mode |
+| Product: provisioned, integration marker missing | Opens for integration migration | Opens in **Repair** mode |
+| Product: both markers present | Exits 0, no window | Opens in **Repair** mode |
+| Overridden config directory: provisioned | Exits 0, no window | Opens in **Repair** mode |
 
 Source: [`runtime/cli.py`](../runtime/cli.py) (`cmd_setup`) →
 [`runtime/setup_launcher.py`](../runtime/setup_launcher.py)
@@ -60,10 +64,11 @@ Repair afterwards:
   the desktop (wizard) user's `~/.config/autostart/khptz-setup.desktop` (XDG
   autostart on login).
 
-The autostart entry self-suppresses once provisioned — it fires on every login
-but quietly does nothing after the first successful setup. The menu entry
-always passes `--force`, so clicking it after setup reopens Repair rather than
-doing nothing.
+The autostart entry fires on every desktop login. On a product install it
+suppresses the wizard only once both `.provisioned` and `.rpi-integrated` exist;
+a missing integration marker opens the migration wizard even if the room is
+already provisioned. The menu entry always passes `--force`, so clicking it
+after setup reopens Repair rather than doing nothing.
 
 The desktop (wizard) user defaults to `$SUDO_USER`; override with
 `--wizard-user <user>`.
@@ -117,7 +122,7 @@ never writes `/etc/khptz` directly. Instead:
 
 ```text
 wizard (desktop user)
-  └─ writes request → /run/khptz/request.json   (tmpfs, 0750 root:<wizard-user>)
+  └─ writes request → /run/khptz/request.json   (tmpfs, 0750 <wizard-user>:root)
        └─ khptz-provision.path (systemd) reacts
             └─ runtime/provision.py (root oneshot):
                  validate → snapshot → apply config.yaml + secrets + OS steps
@@ -135,9 +140,14 @@ provisions with **no further password prompt** via this channel.
 
 Before applying, the privileged step snapshots `config.yaml` and both secrets.
 If apply fails mid-flow, it attempts to restore the previous files (repair) or
-remove partial writes (fresh install). Restoration is best-effort; the failure
-result reports `rolled_back`. This is not a rollback of every OS change or a
-guarantee that a failed run leaves no partial state. See `ConfigSnapshot` and
+remove partial writes (fresh install). Restoration is best-effort. When rollback
+returns normally, the failure result includes `rolled_back`; that flag does not
+certify complete restoration. It can be `true` even if a file could not be
+recreated, because the file-write helper can return without writing. If rollback
+raises, the outer error result can omit `rolled_back` entirely. Verify the files
+and runtime state after a failure before retrying or handing over the install.
+This is not a rollback of every OS change or a guarantee that a failed run leaves
+no partial state. See `ConfigSnapshot`, `_safe_write_regular_file` and
 `run_provision` in [`runtime/provision.py`](../runtime/provision.py).
 
 ---
