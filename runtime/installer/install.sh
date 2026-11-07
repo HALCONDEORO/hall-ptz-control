@@ -143,7 +143,7 @@ require_pyqt5() {
         error "PyQt5 not available — install with: sudo apt install -y python3-pyqt5 python3-pyqt5.qtsvg"
     fi
     if ! python3 -c "from PyQt5 import QtSvg" 2>/dev/null; then
-        warn "PyQt5.QtSvg not available — SVG icons may not render. Install with: sudo apt install -y python3-pyqt5.qtsvg"
+        error "PyQt5.QtSvg not available — required by the GUI. Install with: sudo apt install -y python3-pyqt5.qtsvg"
     fi
 }
 
