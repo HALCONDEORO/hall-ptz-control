@@ -67,6 +67,7 @@ class ViscaCameraAdapter:
         self._display_query_lock = threading.RLock()
         self._endpoint_generations: dict[int, int] = {1: 0, 2: 0}
         self._backlight_on: dict[str, bool] = {}
+        self._backlight_toggle_locks = {1: threading.Lock(), 2: threading.Lock()}
         # Speed caps: watchdog in main_window reduces these on VISCA error (#740).
         self.pan_cap:        int = PAN_SPEED_MAX
         self.tilt_cap:       int = TILT_SPEED_MAX
@@ -251,22 +252,25 @@ class ViscaCameraAdapter:
         return self._result(command, camera_id, ok, t0)
 
     def backlight_toggle(self, camera_id: str) -> CommandResult:
-        with self._display_query_lock:
-            idx = self._index(camera_id)
-            generation = self._endpoint_generations.get(idx, 0)
-            ip, cam_id_hex = self._cam_info(camera_id)
-            new_state = not self._backlight_on.get(camera_id, False)
-        cmd_hex = "01043302FF" if new_state else "01043303FF"
-        t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
-        if ok:
+        # Toggle is a read-confirm-write operation. Serialize it per camera,
+        # not with the display lock: STOP and endpoint updates must stay free.
+        with self._backlight_toggle_locks[self._index(camera_id)]:
             with self._display_query_lock:
-                # A delayed confirmation must not repopulate a retired endpoint's
-                # toggle state, including an IP/id change that later changes back.
-                if self._display_query_is_current(idx, ip, cam_id_hex, generation):
-                    self._backlight_on[camera_id] = new_state
-                    self._mgr.set_backlight(ip, new_state)
-        return self._result("backlight_toggle", camera_id, ok, t0)
+                idx = self._index(camera_id)
+                generation = self._endpoint_generations.get(idx, 0)
+                ip, cam_id_hex = self._cam_info(camera_id)
+                new_state = not self._backlight_on.get(camera_id, False)
+            cmd_hex = "01043302FF" if new_state else "01043303FF"
+            t0 = time.monotonic()
+            ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
+            if ok:
+                with self._display_query_lock:
+                    # A delayed confirmation must not repopulate a retired endpoint's
+                    # toggle state, including an IP/id change that later changes back.
+                    if self._display_query_is_current(idx, ip, cam_id_hex, generation):
+                        self._backlight_on[camera_id] = new_state
+                        self._mgr.set_backlight(ip, new_state)
+            return self._result("backlight_toggle", camera_id, ok, t0)
 
     def zoom_absolute(self, camera_id: str, position: int) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
