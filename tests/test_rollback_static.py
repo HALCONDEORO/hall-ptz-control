@@ -257,16 +257,18 @@ class TestProductModePipGuard:
         sh = _install_sh()
         assert "grep -qE '^[[:space:]]*[^#[:space:]]'" in sh
 
-    def test_pip3_required_before_use_in_product_branch(self):
+    def test_product_interpreter_pip_required_before_use(self):
         sh = _install_sh()
         idx = sh.find("Installing additional pip dependencies from requirements-rpi.txt")
         assert idx != -1
         block = sh[idx:idx + 400]
-        require = block.find("require_command pip3 python3-pip")
-        use = block.find("pip3 install")
+        require = block.find("require_python_module pip python3-pip")
+        use = block.find('"${PYTHON_BIN}" -m pip install')
         assert require != -1 and require < use, (
-            "pip3 must be checked before it is used in the product-mode branch"
+            "pip must be checked through the product interpreter before use"
         )
+        selection = sh[sh.index('# Product launchers use'):sh.index('SERVICE_NAME=')]
+        assert 'else\n    PYTHON_BIN="/usr/bin/python3"' in selection
 
     def test_current_requirements_rpi_has_no_pip_requirements(self):
         """If this ever fails, product installs now genuinely need pip3 and

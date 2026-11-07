@@ -102,6 +102,14 @@ else
     BACKUP_DIR="/var/backups/khptz"
 fi
 
+# Product launchers use this exact interpreter, regardless of sudo's PATH.
+# Dev remains explicitly PATH-based, matching its existing launcher contract.
+if [[ "${DEV_MODE}" == "true" ]]; then
+    PYTHON_BIN="python3"
+else
+    PYTHON_BIN="/usr/bin/python3"
+fi
+
 SERVICE_NAME="khptz-control"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -140,10 +148,10 @@ require_command() {
 }
 
 require_pyqt5() {
-    if ! python3 -c "import PyQt5" 2>/dev/null; then
+    if ! "${PYTHON_BIN}" -c "import PyQt5" 2>/dev/null; then
         error "PyQt5 not available — install with: sudo apt install -y python3-pyqt5 python3-pyqt5.qtsvg"
     fi
-    if ! python3 -c "from PyQt5 import QtSvg" 2>/dev/null; then
+    if ! "${PYTHON_BIN}" -c "from PyQt5 import QtSvg" 2>/dev/null; then
         error "PyQt5.QtSvg not available — required by the GUI. Install with: sudo apt install -y python3-pyqt5.qtsvg"
     fi
 }
@@ -157,7 +165,7 @@ require_pyqt5() {
 require_python_module() {
     local module="$1"
     local apt_hint="$2"
-    if ! python3 -c "import ${module}" 2>/dev/null; then
+    if ! "${PYTHON_BIN}" -c "import ${module}" 2>/dev/null; then
         error "Required Python module not available: ${module} — install with: sudo apt install -y ${apt_hint}"
     fi
 }
@@ -167,21 +175,23 @@ require_python_module() {
 info "Checking prerequisites..."
 [[ "$(id -u)" -eq 0 ]] || error "This script must be run as root (use sudo)"
 
-require_command python3  python3
+require_command "${PYTHON_BIN}" python3
 require_command git      git
 require_command rsync    rsync
 require_command systemctl
 
 # Optional ATEM installs use pip even in product mode. Check it before the
 # read-only readiness exit and before creating users or directories.
-if [[ "${DEV_MODE}" == "true" || "${INSTALL_ATEM}" == "true" ]]; then
+if [[ "${DEV_MODE}" == "true" ]]; then
     require_command pip3 python3-pip
+elif [[ "${INSTALL_ATEM}" == "true" ]]; then
+    require_python_module pip python3-pip
 fi
 
 require_pyqt5
 require_python_module yaml python3-yaml
 
-PYTHON_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+PYTHON_VERSION="$("${PYTHON_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 info "Python version: ${PYTHON_VERSION}"
 info "Install mode  : $([[ ${DEV_MODE} == true ]] && echo 'developer' || echo 'product')"
 info "App user      : ${APP_USER}"
@@ -210,8 +220,8 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     _chk_pass "Architecture: $(uname -m)"
 
     # Python version
-    _py_major="$(python3 -c 'import sys; print(sys.version_info.major)')"
-    _py_minor="$(python3 -c 'import sys; print(sys.version_info.minor)')"
+    _py_major="$("${PYTHON_BIN}" -c 'import sys; print(sys.version_info.major)')"
+    _py_minor="$("${PYTHON_BIN}" -c 'import sys; print(sys.version_info.minor)')"
     if [[ "${_py_major}" -eq 3 && "${_py_minor}" -eq 9 ]]; then
         _chk_pass "Python ${PYTHON_VERSION} (3.9.x — supported target is 3.9.2)"
     elif [[ "${_py_major}" -eq 3 && "${_py_minor}" -gt 9 ]]; then
@@ -353,8 +363,8 @@ else
     info "  PyQt5 expected from: sudo apt install -y python3-pyqt5 python3-pyqt5.qtsvg"
     if grep -qE '^[[:space:]]*[^#[:space:]]' "${REPO_ROOT}/requirements-rpi.txt" 2>/dev/null; then
         info "Installing additional pip dependencies from requirements-rpi.txt..."
-        require_command pip3 python3-pip
-        pip3 install --quiet -r "${REPO_ROOT}/requirements-rpi.txt"
+        require_python_module pip python3-pip
+        "${PYTHON_BIN}" -m pip install --quiet -r "${REPO_ROOT}/requirements-rpi.txt"
     else
         info "  requirements-rpi.txt lists no pip requirements — nothing to install."
     fi
@@ -363,8 +373,12 @@ fi
 # ATEM support: install separately only when explicitly requested.
 if [[ "${INSTALL_ATEM:-false}" == "true" ]]; then
     info "Installing ATEM dependencies (--atem requested)..."
-    require_command pip3 python3-pip
-    pip3 install --quiet -r "${REPO_ROOT}/requirements-atem.txt"
+    if [[ "${DEV_MODE}" == "true" ]]; then
+        require_command pip3 python3-pip
+        pip3 install --quiet -r "${REPO_ROOT}/requirements-atem.txt"
+    else
+        "${PYTHON_BIN}" -m pip install --quiet -r "${REPO_ROOT}/requirements-atem.txt"
+    fi
 fi
 
 # ── Copy application files ────────────────────────────────────────────────────
@@ -433,7 +447,7 @@ if [[ ! -f "${CONFIG_TARGET}" ]]; then
         # Generate a unique installation ID for this install.
         # Never overwrite an existing ID — this block only runs when config is first created.
         INSTALL_YEAR="$(date +%Y)"
-        INSTALL_ID="$(python3 -c "
+        INSTALL_ID="$("${PYTHON_BIN}" -c "
 import sys; sys.path.insert(0, '${INSTALL_DIR}')
 from domain.installation_id import generate_installation_id
 print(generate_installation_id(${INSTALL_YEAR}))
