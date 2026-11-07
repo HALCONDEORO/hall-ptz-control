@@ -291,3 +291,30 @@ def test_delete_layout_file_regenerates_from_legacy(tmp_path):
 def test_room_layout_file_in_data_paths():
     from data_paths import ROOM_LAYOUT_FILE
     assert ROOM_LAYOUT_FILE.name == "room_layout.json"
+
+
+@pytest.mark.parametrize("backup", ["valid", "missing", "invalid"])
+@pytest.mark.parametrize("field,value", [("x", "bad"), ("preset", None), ("y", 1e309)])
+def test_load_invalid_numeric_seat_recovers_saved_layout(tmp_path, field, value, backup):
+    svc = _service(tmp_path)
+    good_layout = svc.load()
+    good_layout.room_name = "Custom saved room"
+    svc.save(good_layout)
+    good_bytes = (tmp_path / "room_layout.json").read_bytes()
+    (tmp_path / "room_layout.bak").write_bytes(good_bytes)
+    broken = json.loads(good_bytes)
+    broken["seats"][0][field] = value
+    (tmp_path / "room_layout.json").write_text(json.dumps(broken), encoding="utf-8")
+
+    backup_path = tmp_path / "room_layout.bak"
+    if backup == "missing":
+        backup_path.unlink()
+    elif backup == "invalid":
+        backup_path.write_text(json.dumps(broken), encoding="utf-8")
+
+    recovered = svc.load()
+
+    assert svc.recovery_used is True
+    assert recovered.room_name == ("Custom saved room" if backup == "valid" else "Main Chamber")
+    assert recovered.seats[0].preset == good_layout.seats[0].preset
+    assert recovered.seats[0].x == good_layout.seats[0].x
