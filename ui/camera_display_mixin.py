@@ -31,6 +31,13 @@ from ui.display_freshness import capture_display_generation, display_update_is_c
 class CameraDisplayMixin:
     """Presentation-only bridge used by MainWindow, with no hardware I/O."""
 
+    @pyqtSlot()
+    def _apply_focus_update(self) -> None:
+        """Recheck shutdown when queued confirmed focus feedback is delivered."""
+        if getattr(self, "_shutting_down", False):
+            return
+        self._update_focus_ui()
+
     def _selected_cam_key(self) -> int:
         return 1 if self.Cam1.isChecked() else 2
 
