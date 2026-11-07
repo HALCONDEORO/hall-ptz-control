@@ -181,8 +181,11 @@ class NetworkHandoverReportService:
     """
 
     def __init__(self, config_path=None) -> None:
-        from pathlib import Path
-        self._config_path = config_path or (Path(__file__).parent.parent / "config.yaml")
+        from runtime.path_resolver import RuntimePathResolver
+        self._config_path = (
+            config_path if config_path is not None
+            else RuntimePathResolver().config_dir / "config.yaml"
+        )
 
     def generate(
         self,

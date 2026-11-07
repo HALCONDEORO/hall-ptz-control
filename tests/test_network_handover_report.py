@@ -396,3 +396,33 @@ class TestNetworkReportCLI:
         args = build_parser().parse_args(["network-report", "--with-preflight"])
         assert args.with_preflight is True
 
+
+
+class TestRuntimeConfigPath:
+    def test_default_uses_runtime_config_dir(self, tmp_path, monkeypatch):
+        _write_config(tmp_path, _isolated_config())
+        monkeypatch.setenv("KHPTZ_CONFIG_DIR", str(tmp_path))
+        report = NetworkHandoverReportService().generate()
+        assert report.site_name == "Test Venue"
+        assert report.installation_id == "khptz-2026-TEST"
+        assert report.errors == []
+
+    def test_explicit_path_overrides_runtime_config_dir(self, tmp_path, monkeypatch):
+        runtime_dir = tmp_path / "runtime"
+        runtime_dir.mkdir()
+        _write_config(runtime_dir, _isolated_config(site={"name": "Runtime Venue"}))
+        explicit = _write_config(tmp_path, _isolated_config())
+        monkeypatch.setenv("KHPTZ_CONFIG_DIR", str(runtime_dir))
+        report = NetworkHandoverReportService(config_path=explicit).generate()
+        assert report.site_name == "Test Venue"
+        assert report.errors == []
+
+
+    def test_cli_uses_runtime_config_without_constructor_patch(self, tmp_path, monkeypatch, capsys):
+        _write_config(tmp_path, _isolated_config())
+        for name in ("CONFIG", "DATA", "LOG", "BACKUP", "RUN"):
+            monkeypatch.setenv(f"KHPTZ_{name}_DIR", str(tmp_path))
+        assert cli_main(["network-report", "--json"]) == 0
+        report = json.loads(capsys.readouterr().out)
+        assert report["site_name"] == "Test Venue"
+        assert report["errors"] == []
