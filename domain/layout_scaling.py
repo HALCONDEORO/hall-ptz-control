@@ -64,14 +64,14 @@ def scale_point_to_canonical(
     Inverse of scale_point_to_window.  Used when saving a drag-edited position
     so that edits made on a scaled display are stored at the correct scale.
     """
-    if canonical_w <= 0 or canonical_h <= 0:
-        # Degenerate layout (0x0 canonical): canonical sizes are the divisors
-        # below, so the guard must reject them — not the window size. A window
-        # of 0 is still caught by the ``scale == 0`` check after the division.
+    if canonical_w <= 0 or canonical_h <= 0 or window_w <= 0 or window_h <= 0:
+        # Both pairs are guarded: the canonical sizes are the divisors below
+        # (a degenerate 0-sized layout would raise ZeroDivisionError), and
+        # non-positive window sizes must keep the historical behaviour of
+        # returning the input unchanged. With all four positive, ``scale``
+        # is strictly positive, so no post-division check is needed.
         return wx, wy
     scale = min(window_w / canonical_w, window_h / canonical_h)
-    if scale == 0:
-        return wx, wy
     return round(wx / scale), round(wy / scale)
 
 

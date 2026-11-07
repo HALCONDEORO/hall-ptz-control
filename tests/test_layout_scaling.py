@@ -99,6 +99,12 @@ class TestScalePointToCanonical:
     def test_zero_canonical_height_returns_input(self):
         assert scale_point_to_canonical(50, 50, 1440, 0, 800, 600) == (50, 50)
 
+    def test_negative_window_width_returns_input(self):
+        assert scale_point_to_canonical(50, 50, 1440, 1080, -800, 600) == (50, 50)
+
+    def test_negative_window_height_returns_input(self):
+        assert scale_point_to_canonical(50, 50, 1440, 1080, 800, -600) == (50, 50)
+
     def test_zero_window_returns_input(self):
         assert scale_point_to_canonical(50, 50, 1440, 1080, 0, 0) == (50, 50)
 
