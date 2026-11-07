@@ -1749,6 +1749,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         connected = self.Cam1._connected if self.Cam1.isChecked() else self.Cam2._connected
         self._right_panel.show_camera_controls(connected and self.session_active)
 
+    @pyqtSlot()
     def _update_backlight_ui(self):
         cam_key = 1 if self.Cam1.isChecked() else 2
         if self._cameras.backlight_on[cam_key]:
