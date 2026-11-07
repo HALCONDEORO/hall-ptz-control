@@ -35,7 +35,7 @@ class CameraStateService:
         camera_role: str = "unknown",
         runtime_state_store: 'Optional[RuntimeStateStore]' = None,
     ) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # Store callbacks may read this service synchronously.
         self._store = runtime_state_store  # #792 — fuente unica de verdad
         self._states: dict[str, PTZCameraRuntimeState] = {
             cam_id: PTZCameraRuntimeState(
