@@ -50,6 +50,16 @@ SERVICE_NAME="khptz-control"
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 while [[ $# -gt 0 ]]; do
+    # Do not consume the next option (notably --dry-run) as a path/ref.
+    # Reject malformed arguments before any backup or service operation.
+    case "$1" in
+        --user|--dir|--source|--to)
+            if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
+                echo "$1 requires a value (run with --help for usage)" >&2
+                exit 1
+            fi
+            ;;
+    esac
     case "$1" in
         --dev)     DEV_MODE=true;              shift ;;
         --user)    APP_USER_OVERRIDE="$2";     shift 2 ;;
