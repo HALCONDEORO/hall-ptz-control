@@ -91,6 +91,26 @@ def load_json(path: Path | str, default: Any = None) -> Any:
         return recovered
 
 
+def _fsync_dir(dirpath: Path) -> None:
+    """Best-effort fsync of *dirpath* so the os.replace rename is durable.
+
+    Mirrors core.atomic_write._fsync_dir: the temp file is fsync'd before the
+    rename, but without also fsync'ing the directory a power loss can drop the
+    directory entry itself and the saved file vanishes. No-op where opening a
+    directory for fsync is unsupported (e.g. Windows).
+    """
+    try:
+        fd = os.open(str(dirpath), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _apply_group_access(tmp_path: str, directory: Path) -> None:
     """Let the file's group reach it when its directory says the group may.
 
@@ -155,6 +175,7 @@ def save_json(path: Path | str, data: Any, indent: int = 2, *, create_backup: bo
                         pass
                 _apply_group_access(tmp, dir_)
                 os.replace(tmp, p)
+                _fsync_dir(dir_)
             except Exception:
                 try:
                     os.unlink(tmp)

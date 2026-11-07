@@ -88,6 +88,23 @@ class TestSaveJson:
     def test_non_serializable_returns_false(self, tmp_path):
         assert save_json(tmp_path / "fail.json", object()) is False
 
+    def test_save_fsyncs_parent_directory(self, tmp_path, monkeypatch):
+        """os.replace must be followed by a directory fsync so a completed
+        save survives power loss (same durability policy as atomic_write)."""
+        import os as _os
+
+        fsync_calls: list[int] = []
+        real_fsync = _os.fsync
+
+        def _spy(fd: int) -> None:
+            fsync_calls.append(fd)
+            return real_fsync(fd)
+
+        monkeypatch.setattr(_os, "fsync", _spy)
+        assert save_json(tmp_path / "cfg.json", {"a": 1}) is True
+        # One fsync for the temp file contents, one for the directory entry.
+        assert len(fsync_calls) >= 2
+
     def test_no_tmp_left_after_success(self, tmp_path):
         f = tmp_path / "data.json"
         save_json(f, {"x": 1})
