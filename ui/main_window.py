@@ -1622,10 +1622,18 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             accepted = dialog.exec_() == ScreenOffDialog.Accepted
             if accepted:
                 self._session.shutdown("screen_off")
-                QTimer.singleShot(1500, ScreenMonitor.sleep)
+                generation = self._session._session_generation
+                QTimer.singleShot(1500, lambda: self._sleep_screen_after_session_end(generation))
             # Rejected or X: screen stays on, session continues
         finally:
             self._screen_dialog_active = False
+
+    def _sleep_screen_after_session_end(self, generation: int) -> None:
+        """Discard delayed DPMS work if another session or app close began."""
+        if (self._shutting_down or self.session_active
+                or self._session._session_generation != generation):
+            return
+        ScreenMonitor.sleep()
 
     def _ask_shutdown_intent(self) -> "ShutdownIntent":
         """Show a shutdown dialog and return the operator's explicit choice.
@@ -1745,6 +1753,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
                 logger.exception("[SHUTDOWN] admin-restart launch failed: %s", exc)
             self._pending_admin_restart = None
 
+    @pyqtSlot()
     def _update_focus_ui(self):
         cam_key = 1 if self.Cam1.isChecked() else 2
         self._right_panel.set_focus_mode(self._cameras.focus_mode[cam_key])
@@ -1757,6 +1766,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         connected = self.Cam1._connected if self.Cam1.isChecked() else self.Cam2._connected
         self._right_panel.show_camera_controls(connected and self.session_active)
 
+    @pyqtSlot()
     def _update_backlight_ui(self):
         cam_key = 1 if self.Cam1.isChecked() else 2
         if self._cameras.backlight_on[cam_key]:

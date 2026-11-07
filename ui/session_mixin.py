@@ -117,6 +117,11 @@ class SessionController:
         self._session_generation += 1
         logger.info("Session shutdown: reason=%s", reason)
 
+        # A Save selection belongs to this session. Never carry an unconfirmed
+        # preset overwrite into a later session or leave its buttons on screen.
+        if getattr(self._w, "_seat_pending", None) is not None:
+            self._w._exit_seat_selection(save=False)
+
         # Standby via bus → Controller → SessionService.end(reason)
         self._w._bus.emit(EventType.SESSION_END, reason=reason)
 

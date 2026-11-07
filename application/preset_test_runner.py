@@ -169,6 +169,14 @@ class PresetTestRunner:
                 item=item, status=STATUS_SKIPPED, message="Preset not in PRESET_MAP"
             )
 
+        # Callbacks and routing may yield to the UI or block. A cancellation
+        # observed there must not dispatch another camera movement. This cannot
+        # retract a command already handed to the transport.
+        if self._cancel_event.is_set():
+            return PresetTestResult(
+                item=item, status=STATUS_CANCELLED, message="Cancelled by user"
+            )
+
         t0 = time.monotonic()
         try:
             ok = self._send_fn(ip, cam_id, preset_hex)

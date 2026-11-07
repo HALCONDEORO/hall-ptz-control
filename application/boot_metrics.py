@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from datetime import datetime
+from fractions import Fraction
 from pathlib import Path
 from typing import Optional
 
@@ -118,11 +120,26 @@ class BootStatistics:
             return []
 
     def get_summary(self) -> dict:
-        stats = self._read_stats()
+        # History may contain individually damaged entries even when the JSON
+        # root is a valid list. Keep usable older entries (missing duration=0),
+        # but do not let one bad record break the splash summary or its average.
+        stats = []
+        for entry in self._read_stats():
+            if not isinstance(entry, dict):
+                continue
+            duration = entry.get("duration_ms", 0)
+            if (isinstance(duration, bool)
+                    or not isinstance(duration, (int, float))
+                    or duration < 0
+                    or (isinstance(duration, float) and not math.isfinite(duration))):
+                continue
+            stats.append(entry)
         if not stats:
             return {}
         successful = sum(1 for s in stats if s.get("success", False))
-        avg_duration = int(sum(s.get("duration_ms", 0) for s in stats) / len(stats))
+        # Exact arithmetic prevents finite but large history values from
+        # overflowing the intermediate float sum/division.
+        avg_duration = int(sum(Fraction(s.get("duration_ms", 0)) for s in stats) / len(stats))
         success_rate = successful / len(stats) * 100
         return {
             "total_boots": len(stats),
