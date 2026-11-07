@@ -1,6 +1,8 @@
 # ATEM Hardware Validation Report (#557)
 
-**Template** — complete one copy per installation or revalidation event.
+**Template: NOT RUN.** Complete one copy per installation or revalidation event.
+Blank fields and unselected PASS/FAIL choices are not validation evidence. No
+model or firmware is approved merely because it appears in an installation guide.
 
 ---
 
@@ -10,12 +12,12 @@
 |---|---|
 | Date | |
 | Validator | |
-| KHPTZ version | |
+| KHPTZ version and commit/tag | |
 | Raspberry Pi model | |
 | Raspberry Pi OS version | |
 | ATEM model | |
 | ATEM firmware version | |
-| PyATEMMax version (if used) | |
+| PyATEMMax version and dependency/licence review reference | |
 | Network topology | |
 
 ---
@@ -27,8 +29,8 @@
 | Test | Result | Notes |
 |---|---|---|
 | Pi can ping ATEM IP | PASS / FAIL / SKIP | |
-| ATEM connects on startup (`khptz doctor`) | PASS / FAIL / SKIP | |
-| `khptz doctor` ATEM row: OK | PASS / FAIL / SKIP | |
+| Running adapter receives fresh ATEM state after startup | PASS / FAIL / SKIP | |
+| CLI named ATEM network check: record output, exit code and limitations | PASS / FAIL / SKIP | |
 | ATEM reconnects after disconnect/reconnect | PASS / FAIL / SKIP | |
 
 ### Program / Preview display
@@ -40,15 +42,17 @@
 | Preview input changes reflected in UI | PASS / FAIL / SKIP | |
 | Incorrect mapping shows identifiable mismatch | PASS / FAIL / SKIP | |
 
-### Manual Admin Commands (TECHNICIAN role only)
+### Manual Admin Commands (TECHNICIAN and SYSTEM_ADMIN)
 
 | Test | Result | Notes |
 |---|---|---|
 | `set_preview_input` changes ATEM preview bus | PASS / FAIL / SKIP | |
-| CUT transitions program correctly | PASS / FAIL / SKIP | |
-| AUTO transitions with configured transition effect | PASS / FAIL / SKIP | |
-| CUT/AUTO blocked for camera_operator role | PASS / FAIL / SKIP | |
-| CUT/AUTO greyed out in UI for non-technician | PASS / FAIL / SKIP | |
+| TECHNICIAN: CUT transitions program correctly | PASS / FAIL / SKIP | |
+| TECHNICIAN: AUTO uses configured transition effect | PASS / FAIL / SKIP | |
+| SYSTEM_ADMIN: CUT transitions program correctly | PASS / FAIL / SKIP | |
+| SYSTEM_ADMIN: AUTO uses configured transition effect | PASS / FAIL / SKIP | |
+| CAMERA_OPERATOR: CUT/AUTO blocked by command guard | PASS / FAIL / SKIP | |
+| CAMERA_OPERATOR: CUT/AUTO disabled in UI | PASS / FAIL / SKIP | |
 
 ### Failure / Degraded
 
@@ -57,7 +61,7 @@
 | Startup with ATEM disconnected (no hang) | PASS / FAIL / SKIP | |
 | Startup with wrong ATEM IP (no hang) | PASS / FAIL / SKIP | |
 | Camera PTZ works while ATEM offline | PASS / FAIL | |
-| `khptz doctor` warns (not blocks) on ATEM offline | PASS / FAIL / SKIP | |
+| Offline ATEM diagnostic result recorded separately from GUI behaviour | PASS / FAIL / SKIP | |
 | Reconnect after power-cycle | PASS / FAIL / SKIP | |
 | ATEM Software Control coexistence | PASS / FAIL / N/A | |
 
@@ -71,6 +75,13 @@
 | `automation_disabled: true` confirmed in config | PASS / FAIL | |
 
 ---
+
+## Evidence and safe-test scope
+
+Record permission to use the equipment, the non-live output used for CUT/AUTO,
+observed results and timestamps. Capture synthetic input labels or redact site
+addresses and names before uploading evidence. Never include secrets. If a test
+was not run, mark SKIP with a reason; never infer PASS from a blank or a mock.
 
 ## Summary
 
