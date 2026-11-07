@@ -283,7 +283,15 @@ trap _restart_service_on_abort EXIT
 # ── Step 3: Revert code ───────────────────────────────────────────────────────
 
 log "Step 3: Checking out $TARGET_REF in $SOURCE_DIR"
-run git_src fetch --tags origin
+# Best-effort fetch: the appliance may be offline, and the rollback target is
+# normally already a local ref (it lived in this checkout when it was last
+# installed). An unreachable remote must not strand the operator on the
+# version they explicitly asked to leave. The checkout works from local
+# objects; only a never-fetched target would fail there, with git's own
+# error naming the missing ref.
+if ! run git_src fetch --tags origin; then
+    log "WARNING: could not fetch from origin (offline?) - continuing with local refs."
+fi
 run git_src checkout "$TARGET_REF"
 
 if [[ "${DEV_MODE}" == "false" ]]; then

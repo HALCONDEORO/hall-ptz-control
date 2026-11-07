@@ -344,6 +344,16 @@ class TestGitRunsAsCheckoutOwner:
         assert "safe.directory='*'" in body
 
 
+class TestOfflineFetchIsBestEffort:
+    """Customer appliances are often offline: an unreachable origin must not
+    abort the rollback when the target ref is already local."""
+
+    def test_fetch_failure_does_not_abort(self):
+        body = _product_branch(_sh(), "Step 3: Checking out", 'run git_src checkout')
+        assert "if ! run git_src fetch --tags origin" in body
+        assert "local refs" in body
+
+
 class TestUserModeSkipsSystemStart:
     """#15: GUI_MODE=user means the app runs as the desktop user — there is
     no system service to (re)start and forcing one could duplicate it."""
