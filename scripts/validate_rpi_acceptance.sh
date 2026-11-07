@@ -101,13 +101,27 @@ say "GUI mode    : ${GUI_MODE}"
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
+# Diagnostics can create/rotate app.log and blackbox files. Never let a
+# sudo-run validator leave root-owned files in the service's runtime paths.
+cli_as_service() {
+    if [[ "$(id -u)" -eq 0 ]]; then
+        if ! id khptz >/dev/null 2>&1; then
+            printf '%s\n' 'khptz service account missing; refusing root CLI execution' >&2
+            return 127
+        fi
+        sudo -u khptz -- "$@"
+    else
+        "$@"
+    fi
+}
+
 head2 "Diagnostics (khptz version / status / doctor)"
 
 if ! command -v khptz >/dev/null 2>&1; then
     fail "khptz CLI not on PATH - the install did not complete"
 else
     for _cmd in version status; do
-        if out="$(khptz "${_cmd}" 2>&1)"; then
+        if out="$(cli_as_service khptz "${_cmd}" 2>&1)"; then
             pass "khptz ${_cmd} completed"
         else
             fail "khptz ${_cmd} exited non-zero"
@@ -119,7 +133,7 @@ else
         esac
     done
 
-    doctor_out="$(khptz doctor 2>&1)"; doctor_rc=$?
+    doctor_out="$(cli_as_service khptz doctor 2>&1)"; doctor_rc=$?
     printf '%s\n' "${doctor_out}" | sed 's/^/         | /' >> "${REPORT}"
     case "${doctor_out}" in
         *UnicodeEncodeError*) fail "khptz doctor: UnicodeEncodeError (#884 regression)" ;;
@@ -141,7 +155,7 @@ else
     esac
 
     # #890: JSON must agree with the human output and the exit code.
-    json_out="$(khptz doctor --json 2>/dev/null)"; json_rc=$?
+    json_out="$(cli_as_service khptz doctor --json 2>/dev/null)"; json_rc=$?
     if [[ "${json_rc}" -eq "${doctor_rc}" ]]; then
         pass "khptz doctor --json exit code agrees with human output (${json_rc})"
     else
@@ -324,7 +338,7 @@ fi
 head2 "Persistence"
 
 if [[ "${WITH_BACKUP}" == "true" ]] && command -v khptz >/dev/null 2>&1; then
-    if khptz backup >/dev/null 2>&1; then
+    if cli_as_service khptz backup >/dev/null 2>&1; then
         pass "khptz backup created a backup"
     else
         fail "khptz backup failed"

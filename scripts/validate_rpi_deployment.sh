@@ -94,13 +94,27 @@ else
     KHPTZ=()
 fi
 
+# Diagnostics can create/rotate app.log and blackbox files. Never let a
+# sudo-run validator leave root-owned files in the service's runtime paths.
+cli_as_service() {
+    if [[ "$(id -u)" -eq 0 ]]; then
+        if ! id khptz >/dev/null 2>&1; then
+            printf '%s\n' 'khptz service account missing; refusing root CLI execution' >&2
+            return 127
+        fi
+        sudo -u khptz -- "$@"
+    else
+        "$@"
+    fi
+}
+
 run_khptz() {
     # Run a khptz subcommand read-only; never let its exit status abort us.
     if [[ ${#KHPTZ[@]} -eq 0 ]]; then
         warn "khptz CLI not found; skipped: $*"
         return 0
     fi
-    ( cd "${REPO_ROOT}" && "${KHPTZ[@]}" "$@" ) || warn "khptz $* exited non-zero (see output above)"
+    ( cd "${REPO_ROOT}" && cli_as_service "${KHPTZ[@]}" "$@" ) || warn "khptz $* exited non-zero (see output above)"
 }
 
 capture_khptz() {
@@ -110,7 +124,7 @@ capture_khptz() {
         warn "khptz CLI not found; skipped: $*" >&2
         return 0
     fi
-    ( cd "${REPO_ROOT}" && "${KHPTZ[@]}" "$@" 2>&1 ) || true
+    ( cd "${REPO_ROOT}" && cli_as_service "${KHPTZ[@]}" "$@" 2>&1 ) || true
 }
 
 section() { printf '\n===== %s =====\n' "$*"; }
