@@ -99,6 +99,7 @@ class ViscaCommand:
     cmd_id:     str                           = field(default_factory=_next_cmd_id)
     on_success: Optional[Callable[[], None]] = None
     on_failure: Optional[Callable[[], None]] = None
+    response: bytes                          = field(default=b"", repr=False, compare=False)
 
 
 class CameraWorkerSignals(QObject):
@@ -331,6 +332,18 @@ class CameraWorker:
             logger.warning("%s cam=%s send_confirmed: timeout %.1fs", cmd.cmd_id, self.ip, timeout)
             return False
         return box.get("ok", False)
+
+    def send_inquiry(self, cmd: ViscaCommand, timeout: float) -> bytes:
+        """Read an inquiry through the same serialized session as commands.
+
+        Queue rejection, interruption, camera error or timeout return no data.
+        send_confirmed owns cancellation and deadlines, so expired inquiries
+        cannot run later or publish a late observation.
+        """
+        cmd.response = b""
+        if self.send_confirmed(cmd, timeout):
+            return cmd.response
+        return b""
 
     def stop(self) -> None:
         """
@@ -908,6 +921,7 @@ class CameraWorker:
                         self._close_socket()
                         break  # _succeeded permanece False
 
+                    cmd.response = response
                     _succeeded = True
                     self._consecutive_no_response = 0
                     break

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Callable
 
 from config import (
     PRESET_MAP, PAN_SPEED_MAX, TILT_SPEED_MAX, ZOOM_DRIVE_MAX,
-    VISCA_PORT, SOCKET_TIMEOUT, VISCA_READ_TIMEOUT, CAMERA_CONNECT_TIMEOUT,
+    VISCA_READ_TIMEOUT, CAMERA_CONNECT_TIMEOUT,
 )
 
 # Espera máxima de un comando confirmado: reconexión inmediata (3 intentos)
@@ -530,50 +530,41 @@ class ViscaCameraAdapter:
         """VISCA zoom inquiry → raw 0–0x4000, or None on error."""
         from ptz.visca import commands as vcmd  # noqa: PLC0415
         from ptz.visca import parser as vparse  # noqa: PLC0415
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(SOCKET_TIMEOUT)
-                s.connect((ip, VISCA_PORT))
-                s.sendall(vcmd.zoom_inquiry(cam_id_hex))
-                data = self._recv_visca_response(s)
-            return vparse.zoom(data)
-        except (socket.timeout, socket.error, OSError) as exc:
-            logger.exception("_query_zoom %s: %s", ip, exc)
-            return None
+        data = self._query_response(ip, cam_id_hex, vcmd.zoom_inquiry(cam_id_hex))
+        return vparse.zoom(data)
+
+    def _query_response(self, ip: str, cam_id_hex: str, payload: bytes) -> bytes:
+        """Serialize state reads with control on the camera's existing session."""
+        from ptz.visca import ViscaCommand
+
+        if not ip or not ip.strip():
+            return b""
+        idx = 2 if cam_id_hex.lower() == "82" else 1
+        return self._mgr.worker(ip).send_inquiry(
+            ViscaCommand(camera=idx, payload=payload),
+            timeout=CONFIRMED_CMD_TIMEOUT,
+        )
 
     def _query_ae_and_exp_comp(
         self, ip: str, cam_id_hex: str
     ) -> "tuple[str | None, int | None]":
-        """VISCA AE+ExpComp inquiry in a single TCP session.
+        """Read AE and exposure on the worker session, without parallel sockets."""
+        from ptz.visca import commands as vcmd
+        from ptz.visca import parser as vparse
 
-        Returns (ae_mode, exp_level) where ae_mode is 'auto'|'manual'|'bright'
-        or None when no valid mode frame was received,
-        and exp_level is -7..+7 mapped from 0-14, or None.
-        """
-        from ptz.visca import commands as vcmd  # noqa: PLC0415
-        from ptz.visca import parser as vparse  # noqa: PLC0415
-        ae_mode = None
-        exp_level: "int | None" = None
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(SOCKET_TIMEOUT)
-                s.connect((ip, VISCA_PORT))
-                s.sendall(vcmd.ae_mode_inquiry(cam_id_hex))
-                ae_data = self._recv_visca_response(s)
-                frame = vparse.inquiry_frame(ae_data, payload_len=1)
-                if frame is None:
-                    return None, None
-                ae_mode = vparse.ae_mode(frame)
-                if ae_mode is None:
-                    return None, None
-                if ae_mode not in ("manual", "bright"):
-                    s.sendall(vcmd.exp_comp_inquiry(cam_id_hex))
-                    ec_data = self._recv_visca_response(s)
-                    frame = vparse.inquiry_frame(ec_data, payload_len=4)
-                    if frame is not None:
-                        exp_level = vparse.exp_comp_level(frame)
-        except (socket.timeout, socket.error, OSError) as exc:
-            logger.warning("_query_ae_and_exp_comp %s: %s", ip, exc)
+        data = self._query_response(ip, cam_id_hex, vcmd.ae_mode_inquiry(cam_id_hex))
+        frame = vparse.inquiry_frame(data, payload_len=1)
+        if frame is None:
+            return None, None
+        ae_mode = vparse.ae_mode(frame)
+        if ae_mode is None:
+            return None, None
+        exp_level = None
+        if ae_mode not in ("manual", "bright"):
+            data = self._query_response(ip, cam_id_hex, vcmd.exp_comp_inquiry(cam_id_hex))
+            frame = vparse.inquiry_frame(data, payload_len=4)
+            if frame is not None:
+                exp_level = vparse.exp_comp_level(frame)
         return ae_mode, exp_level
 
     def _queued_result(self, command: str, camera_id: str, queued: bool) -> CommandResult:
