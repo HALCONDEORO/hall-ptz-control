@@ -57,6 +57,23 @@ class TestRequestPreset:
         coord.request_preset("platform", 9)  # different target — replaces
         assert coord.get_status("platform").pending_preset == 9
 
+    def test_execute_cb_false_marks_error_and_returns_false(self):
+        # A callback returning False (command rejected) is a failure like an
+        # exception: the request fails and the slot must not stay MOVING.
+        coord = _coord()
+        ok = coord.request_preset("platform", 3, execute_cb=lambda p: False)
+        assert ok is False
+        status = coord.get_status("platform")
+        assert status.state == MovementState.ERROR
+        assert status.pending_preset is None
+
+    def test_execute_cb_none_return_is_success(self):
+        # Fire-and-forget callbacks returning None must still count as success.
+        coord = _coord()
+        called: list[int] = []
+        assert coord.request_preset("platform", 3, execute_cb=called.append) is True
+        assert coord.get_status("platform").state == MovementState.MOVING_TO_PRESET
+
     def test_execute_cb_error_marks_error_state(self):
         coord = _coord()
 
