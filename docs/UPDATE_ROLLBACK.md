@@ -175,6 +175,104 @@ khptz verify-install
 
 ---
 
+## Uninstalling
+
+Two levels: **remove the code only** (customer data stays, a later reinstall
+picks it back up) or **full removal**. There is no uninstaller script; both
+are manual. Take a backup first (`khptz backup`) and copy it off the
+appliance if the presets, seat names or config matter later.
+
+### 1. Stop everything first
+
+```bash
+# System services and the display-ready chain (system GUI mode)
+sudo systemctl stop khptz-control.service khptz-provision.path \
+                    khptz-provision.service khptz-display-ready.path \
+                    khptz-display-ready.service
+sudo systemctl disable khptz-control.service khptz-provision.path \
+                       khptz-display-ready.path
+```
+
+If the install used `--gui-mode user`, stop the session-owned GUI as the
+desktop user BEFORE removing its unit file, and reload the user manager:
+
+```bash
+# Run as the desktop user
+systemctl --user stop khptz-gui.service
+systemctl --user disable khptz-gui.service
+systemctl --user daemon-reload
+```
+
+### 2. Remove the code only (keeps customer data)
+
+```bash
+sudo rm -rf /opt/khptz
+```
+
+Config and install state (`/etc/khptz`), presets and secrets
+(`/var/lib/khptz`), logs (`/var/log/khptz`) and backups
+(`/var/backups/khptz`) stay in place; reinstalling later resumes where the
+install left off. Stop here for this variant.
+
+Note: with `/opt/khptz` gone, the desktop autostart entries and the
+`/usr/local/bin/khptz` launcher still point at the missing tree. The
+session GUI unit has no `[Install]` section, but its autostart entry
+starts it anyway, so the desktop session can log start-up errors until
+the app is reinstalled - or until the entries from step 3 are removed.
+
+### 3. Full removal (also deletes customer data)
+
+Continuing from step 2:
+
+```bash
+# a. Unit files, the service drop-in and the tmpfiles entry
+sudo rm -f /etc/systemd/system/khptz-control.service \
+           /etc/systemd/system/khptz-provision.service \
+           /etc/systemd/system/khptz-provision.path \
+           /etc/systemd/system/khptz-display-ready.service \
+           /etc/systemd/system/khptz-display-ready.path \
+           /etc/systemd/user/khptz-gui.service \
+           /etc/tmpfiles.d/khptz.conf
+sudo rm -rf /etc/systemd/system/khptz-control.service.d
+sudo systemctl daemon-reload
+
+# If the session-owned GUI existed, reload the user manager too
+# (as the desktop user) so it forgets the deleted unit:
+systemctl --user daemon-reload
+
+# b. Launchers, display helper and desktop entries
+sudo rm -f /usr/local/bin/khptz \
+           /usr/local/libexec/khptz-gui-session \
+           /usr/local/libexec/khptz-display-session \
+           /usr/share/applications/khptz-setup.desktop
+
+# c. Autostart entries (run as the desktop user; the last two come from
+#    repair_rpi_runtime.sh, current and legacy)
+rm -f ~/.config/autostart/khptz-setup.desktop \
+      ~/.config/autostart/khptz-gui.desktop \
+      ~/.config/autostart/khptz-display-session.desktop \
+      ~/.config/autostart/khptz-display-permission.desktop
+
+# d. Config, data, logs and backups - this deletes the admin secrets and
+#    every local backup
+sudo rm -rf /etc/khptz /var/lib/khptz /var/log/khptz /var/backups/khptz
+
+# e. Drop the scoped display grant (from the desktop session)
+xhost -SI:localuser:khptz
+
+# f. Last: remove the service user, once nothing on disk belongs to it
+sudo userdel khptz
+```
+
+A `--dev` install writes the same system service file and
+`/usr/local/bin/khptz`, and keeps the app and `config.yaml` inside the
+checkout - but its data, logs and backups still live outside it
+(`~/.config/khptz`, `/var/log/khptz`, `/var/backups/khptz`). Remove the
+unit, the launcher, the checkout and those three directories; there is no
+`khptz` service user in dev mode, so skip step f.
+
+---
+
 ## Safety rules
 
 - **Never overwrite customer data** (presets, seat names, schedules, camera config).
