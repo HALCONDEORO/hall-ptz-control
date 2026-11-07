@@ -92,7 +92,9 @@ class PresetVerificationService:
         """
         records = self.load_all()
         key = _key(seat_id, camera_id)
-        rec = records.get(key) or PresetVerification(
+        # Each explicit verification describes the target supplied now, not
+        # the preset or identity retained by an older/imported record.
+        rec = PresetVerification(
             seat_id=seat_id,
             camera_id=camera_id,
             preset=preset,
