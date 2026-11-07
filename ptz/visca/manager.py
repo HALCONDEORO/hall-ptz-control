@@ -221,6 +221,12 @@ class CameraManager:
             if ip in (self._cam1_ip, self._cam2_ip):
                 self.backlight_on[self.cam_key(ip)] = enabled
 
+    def set_focus_mode(self, ip: str, mode: str) -> None:
+        """Store confirmed focus mode only for a still-configured endpoint."""
+        with self._inflight_lock:
+            if ip in (self._cam1_ip, self._cam2_ip):
+                self.focus_mode[self.cam_key(ip)] = mode
+
     def invalidate_zoom(self, ip: str):
         """
         Borra el cache de zoom para esta cámara.

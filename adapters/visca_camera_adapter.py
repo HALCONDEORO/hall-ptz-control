@@ -204,16 +204,24 @@ class ViscaCameraAdapter:
         return self._queued_result("home", camera_id, queued)
 
     def focus_auto(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
-        t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01043802FF")
-        return self._result("focus_auto", camera_id, ok, t0)
+        return self._set_focus_mode(camera_id, "auto", "01043802FF", "focus_auto")
 
     def focus_manual(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
+        return self._set_focus_mode(camera_id, "manual", "01043803FF", "focus_manual")
+
+    def _set_focus_mode(self, camera_id: str, mode: str,
+                        payload: str, command: str) -> CommandResult:
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            ip, cam_id_hex = self._cam_info(camera_id)
+            generation = self._endpoint_generations.get(idx, 0)
         t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01043803FF")
-        return self._result("focus_manual", camera_id, ok, t0)
+        ok = self._send_confirmed(ip, cam_id_hex, payload)
+        if ok:
+            with self._display_query_lock:
+                if self._display_query_is_current(idx, ip, cam_id_hex, generation):
+                    self._mgr.set_focus_mode(ip, mode)
+        return self._result(command, camera_id, ok, t0)
 
     def one_push_af(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)

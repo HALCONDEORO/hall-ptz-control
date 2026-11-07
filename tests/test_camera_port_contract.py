@@ -47,6 +47,9 @@ class _StubManager:
         self.workers.setdefault(ip, _StubWorker())
         return self.workers[ip]
 
+    def set_focus_mode(self, ip: str, mode: str) -> None:
+        self.focus_feedback = (ip, mode)
+
     def invalidate_zoom(self, ip: str) -> None:
         self.invalidated.append(ip)
 

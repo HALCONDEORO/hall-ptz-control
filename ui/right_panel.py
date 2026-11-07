@@ -427,11 +427,22 @@ class RightPanel:
             btn.setFixedHeight(50)
             btn.setToolTip(tooltip)
             btn.setStyleSheet(self._btn_focus_base_style)
-            btn.clicked.connect(
-                (lambda m=port_method: (
-                    lambda: _run_off_ui(getattr(_get_port(), m, lambda _: None), _active_cam_id())
-                ))()
-            )
+            def _focus_clicked(_checked=False, method=port_method):
+                port = _get_port()
+                if port is None:
+                    return
+                camera_id = _active_cam_id()
+
+                def _apply_focus():
+                    result = getattr(port, method)(camera_id)
+                    if (method != "one_push_af" and result is not None and result.ok):
+                        QtCore.QMetaObject.invokeMethod(
+                            mw, "_update_focus_ui", Qt.QueuedConnection,
+                        )
+
+                _run_off_ui(_apply_focus)
+
+            btn.clicked.connect(_focus_clicked)
             focus_row.addWidget(btn)
         layout.addLayout(focus_row)
 
