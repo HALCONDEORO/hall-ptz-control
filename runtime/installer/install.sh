@@ -543,6 +543,8 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     cp "${SERVICE_TEMPLATE}" "${SERVICE_FILE}"
 else
     # Dev mode: patch paths and user for the developer install location.
+    # The checkout lives under /home, which ProtectHome=true hides entirely.
+    # Keep homes read-only except for the explicit runtime ReadWritePaths below.
     # Also strip ConditionPathExists=.../.provisioned — dev installs never run
     # the setup wizard or the provisioning channel (both gated to product mode
     # above), so that marker is never created and the gate would otherwise
@@ -550,6 +552,7 @@ else
     sed \
         -e "s|User=khptz|User=${APP_USER}|g" \
         -e "s|Group=khptz|Group=${APP_USER}|g" \
+        -e "s|ProtectHome=true|ProtectHome=read-only|g" \
         -e "s|WorkingDirectory=/opt/khptz|WorkingDirectory=${INSTALL_DIR}|g" \
         -e "s|ExecStart=/usr/bin/python3 /opt/khptz/main.py|ExecStart=/usr/bin/python3 ${INSTALL_DIR}/main.py|g" \
         -e "s|ReadWritePaths=.*|ReadWritePaths=${DATA_DIR} ${LOG_DIR} ${BACKUP_DIR}|g" \
