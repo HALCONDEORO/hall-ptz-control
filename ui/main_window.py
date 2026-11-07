@@ -1745,6 +1745,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
                 logger.exception("[SHUTDOWN] admin-restart launch failed: %s", exc)
             self._pending_admin_restart = None
 
+    @pyqtSlot()
     def _update_focus_ui(self):
         cam_key = 1 if self.Cam1.isChecked() else 2
         self._right_panel.set_focus_mode(self._cameras.focus_mode[cam_key])
