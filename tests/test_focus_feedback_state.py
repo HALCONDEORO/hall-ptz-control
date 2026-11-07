@@ -40,9 +40,10 @@ def test_failed_or_retired_focus_preserves_feedback(method, retired):
     assert manager.focus_mode[1] == 'prior-mode'
 
 
+@pytest.mark.parametrize('lifecycle', ['alive', 'deleted', 'shutdown', 'queued_shutdown', 'queued_deleted'])
 @pytest.mark.parametrize('ok', [True, False])
 @pytest.mark.parametrize('method', ['focus_auto', 'focus_manual', 'one_push_af'])
-def test_real_focus_buttons_queue_feedback_without_qt_stub_contamination(ok, method):
+def test_real_focus_buttons_queue_feedback_without_qt_stub_contamination(ok, method, lifecycle):
     import os
     from pathlib import Path
     import subprocess
@@ -50,10 +51,10 @@ def test_real_focus_buttons_queue_feedback_without_qt_stub_contamination(ok, met
 
     script = (
         "import runpy,sys,pytest; ns=runpy.run_path(sys.argv[1]); "
-        "ns['_assert_focus_button'](pytest.MonkeyPatch(),sys.argv[2]=='True',sys.argv[3])"
+        "ns['_assert_focus_button'](pytest.MonkeyPatch(),sys.argv[2]=='True',sys.argv[3],sys.argv[4])"
     )
     completed = subprocess.run(
-        [sys.executable, '-c', script, str(Path(__file__).resolve()), str(ok), method],
+        [sys.executable, '-c', script, str(Path(__file__).resolve()), str(ok), method, lifecycle],
         cwd=Path(__file__).resolve().parents[1],
         env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'},
         text=True, capture_output=True, timeout=20,
@@ -61,13 +62,15 @@ def test_real_focus_buttons_queue_feedback_without_qt_stub_contamination(ok, met
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def _assert_focus_button(monkeypatch, ok, method):
+def _assert_focus_button(monkeypatch, ok, method, lifecycle):
     from PyQt5.QtCore import QObject, pyqtSlot
     from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout
     from ui.right_panel import RightPanel
+    from ui.camera_display_mixin import CameraDisplayMixin
+    from PyQt5 import sip
     app = QApplication.instance() or QApplication([])
 
-    class Window(QObject):
+    class Window(QObject, CameraDisplayMixin):
         def __init__(self):
             super().__init__()
             self.Cam1 = Mock()
@@ -99,7 +102,15 @@ def _assert_focus_button(monkeypatch, ok, method):
               'one_push_af': panel.btn_one_push_af}[method]
     button.click()
     assert window.updates == 0
+    if lifecycle == 'deleted':
+        sip.delete(window)
+    elif lifecycle == 'shutdown':
+        window._shutting_down = True
     pending.pop()()
+    if lifecycle == 'queued_shutdown':
+        window._shutting_down = True
+    elif lifecycle == 'queued_deleted':
+        sip.delete(window)
     app.processEvents()
     getattr(window._camera_port, method).assert_called_once_with('cam1')
-    assert window.updates == int(ok and method != 'one_push_af')
+    assert window.updates == int(ok and method != 'one_push_af' and lifecycle == 'alive')

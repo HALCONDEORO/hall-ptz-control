@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import threading
+import weakref
 
 import logging
 import os
@@ -432,13 +433,13 @@ class RightPanel:
                 if port is None:
                     return
                 camera_id = _active_cam_id()
+                window_ref = weakref.ref(mw)
 
                 def _apply_focus():
                     result = getattr(port, method)(camera_id)
                     if (method != "one_push_af" and result is not None and result.ok):
-                        QtCore.QMetaObject.invokeMethod(
-                            mw, "_update_focus_ui", Qt.QueuedConnection,
-                        )
+                        from ui.camera_display_mixin import _queue_display_update
+                        _queue_display_update(window_ref, "_apply_focus_update")
 
                 _run_off_ui(_apply_focus)
 
