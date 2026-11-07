@@ -152,7 +152,11 @@ def evaluate_speed_error(
         return nxt, SpeedErrorDecision(window_reset, False, False, True)
 
     # Cooldown: avoid a cascade of reductions from rapid consecutive errors.
-    if (now - last) < cooldown:
+    # ``last == 0.0`` means "no reduction yet": the first error must always
+    # count. Without the guard, an error arriving while monotonic uptime is
+    # still below the cooldown (the app autostarts on boot) was silently
+    # ignored — no reduction applied and no retry consumed.
+    if last > 0 and (now - last) < cooldown:
         nxt = {"last_reduction": last, "window_start": start, "retries": retries}
         return nxt, SpeedErrorDecision(window_reset, False, False, False)
 
