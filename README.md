@@ -8,9 +8,11 @@ cameras frame that person, so friends commenting from the audience can be seen o
 hall's displays and on the video stream during the meeting.
 
 Free and open-source (MIT). Built for a real hall and tested in live meetings; the
-Raspberry Pi installation is still pending. Any hall may use the MIT-licensed application. Optional dependencies have
-separate licences; review the [ATEM dependency gate](docs/ATEM_DEPENDENCY_DECISION.md)
-before bundling or deploying ATEM support.
+Raspberry Pi installation is still pending. The original application code is
+MIT-licensed. Required GUI dependencies and optional components have separate
+licences; see [third-party notices](THIRD_PARTY_NOTICES.md) and the
+[ATEM dependency gate](docs/ATEM_DEPENDENCY_DECISION.md) before sharing an installed
+system or deploying ATEM support.
 
 ![KH PTZ Control banner](docs/screenshots/banner.png)
 
@@ -26,8 +28,8 @@ before bundling or deploying ATEM support.
 - **Operator login.** A simple on-screen password protects the controls; an admin role
   unlocks configuration.
 - **ATEM integration (optional).** Camera status can follow the video switcher.
-- **Simulation mode.** A built-in camera simulator lets you try everything — including
-  the full installer and the operator UI — without any camera hardware.
+- **Simulation mode.** Fake/demo components support operator UI rehearsal without
+  camera hardware; they do not validate a full Raspberry Pi installation.
 
 ![Operator panel](docs/screenshots/03-panel.png)
 
@@ -40,7 +42,8 @@ wins:
   physical stopping then depends on the camera and the network.
 - STOP commands travel in a **priority queue** that bypasses every pending movement.
 - If the command queue is full, **new movement commands are dropped — never a STOP**.
-- Closing the app or ending a session stops every configured camera.
+- Closing the app or ending a session requests a stop for configured cameras;
+  confirm the physical result and use the hall's fallback if the network fails.
 
 ## Screenshots
 
@@ -95,7 +98,7 @@ and login settings. Follow the current wizard prompts; do not use a default pass
 The full guide — prerequisites, validation, backup/restore, rollback and
 troubleshooting — is [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).
 New to the project? Start with [docs/FOR_KINGDOM_HALLS.md](docs/FOR_KINGDOM_HALLS.md):
-what to buy, the one-command install and how operators use it in the meeting.
+equipment targets, a checked installation path and a handover checklist.
 
 ### Try it without cameras (simulation mode)
 
@@ -103,9 +106,11 @@ what to buy, the one-command install and how operators use it in the meeting.
 python3 adapters/sim_mode.py on
 ```
 
-This points the app at the built-in simulator (no VISCA-IP traffic on your network),
-so you can rehearse an installation or a meeting end to end. Turn it off with
-`python3 adapters/sim_mode.py off`.
+This legacy helper writes loopback camera addresses into local configuration files
+and keeps a backup so `python3 adapters/sim_mode.py off` can restore them. It does
+not start the simulator or prove that ATEM and other integrations are isolated.
+Use a disposable development checkout, not a live hall configuration. Follow the
+[simulation limits and handover checks](docs/FOR_KINGDOM_HALLS.md#training-without-live-equipment).
 
 ![Simulation mode: both simulated cameras connected](docs/screenshots/07-simulator.png)
 
@@ -124,7 +129,8 @@ boundaries green (`pytest tests/architecture`).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Original code: MIT, see [LICENSE](LICENSE). Installed dependencies keep their own
+terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 
@@ -139,8 +145,8 @@ vean en las pantallas del salón y en la transmisión durante la reunión.
 
 Libre y de código abierto (MIT). Construido para un salón real y probado en reuniones
 en directo; la instalación en la Raspberry Pi aún está pendiente. Cualquier salón puede
-usar la aplicación bajo MIT. Las dependencias opcionales tienen licencias propias;
-revisa el [gate de ATEM](docs/ATEM_DEPENDENCY_DECISION.md) antes de distribuir o
+usar el código original bajo MIT. Las dependencias de interfaz y las opcionales
+tienen licencias propias; consulta [los avisos](THIRD_PARTY_NOTICES.md) y el [gate de ATEM](docs/ATEM_DEPENDENCY_DECISION.md) antes de distribuir o
 desplegar ese componente.
 
 ## Qué hace
@@ -156,8 +162,8 @@ desplegar ese componente.
 - **Acceso de operador.** Una contraseña en pantalla protege los controles; un rol de
   administrador desbloquea la configuración.
 - **Integración ATEM (opcional).** El estado de las cámaras puede seguir al mezclador.
-- **Modo simulación.** Un simulador de cámaras integrado permite probarlo todo — incluso
-  el instalador completo y la interfaz de operador — sin hardware de cámaras.
+- **Modo simulación.** Un simulador de cámaras integrado permite ensayar la interfaz de
+  operador sin hardware de cámaras; no sustituye la validación física de la Pi.
 
 ## Seguridad: STOP siempre primero
 
@@ -170,8 +176,9 @@ para que STOP siempre gane:
   pendiente.
 - Si la cola está llena, **se descartan los nuevos comandos de movimiento — nunca un
   STOP**.
-- Al cerrar la aplicación o terminar una sesión, todas las cámaras configuradas se
-  detienen.
+- Al cerrar la aplicación o terminar una sesión se solicita la parada de las
+  cámaras configuradas. Confirma el resultado físico y usa la alternativa del
+  salón si falla la red.
 
 ## Requisitos
 
@@ -226,9 +233,11 @@ resolución de problemas — está en [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md)
 python3 adapters/sim_mode.py on
 ```
 
-Apunta la aplicación al simulador integrado (sin tráfico VISCA-IP en tu red) para
-ensayar una instalación o una reunión de principio a fin. Se desactiva con
-`python3 adapters/sim_mode.py off`.
+Esta herramienta heredada escribe direcciones de cámara loopback en archivos
+locales y guarda una copia para restaurarlas con `python3 adapters/sim_mode.py off`.
+No inicia el simulador ni demuestra que ATEM u otras integraciones estén aisladas.
+Úsala en un clon de desarrollo desechable, no sobre la configuración de una sala
+en uso. Consulta los [límites del ensayo](docs/FOR_KINGDOM_HALLS.md#training-without-live-equipment).
 
 ## Estado
 
@@ -239,4 +248,5 @@ sesión en modo simulación y registra los resultados en
 
 ## Licencia
 
-MIT — ver [LICENSE](LICENSE).
+Código original: MIT, ver [LICENSE](LICENSE). Las dependencias mantienen sus propias
+condiciones; consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
