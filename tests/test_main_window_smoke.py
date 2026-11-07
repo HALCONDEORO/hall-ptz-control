@@ -288,3 +288,23 @@ def test_right_panel_flash_handles_button_lifetime(_qapp, monkeypatch, deleted):
     callbacks[0]()
     if not deleted:
         assert button.styleSheet() == panel._btn_focus_base_style
+
+
+@pytest.mark.parametrize("deleted", [False, True])
+def test_main_window_blocked_flash_handles_button_lifetime(_qapp, monkeypatch, deleted):
+    from PyQt5 import sip
+    from PyQt5.QtCore import QTimer
+    from PyQt5.QtWidgets import QPushButton
+    from ui.main_window import MainWindow
+
+    callbacks = []
+    monkeypatch.setattr(QTimer, "singleShot", lambda delay, callback: callbacks.append(callback))
+    button = QPushButton()
+    button.setStyleSheet("QPushButton { color: black; }")
+    original = button.styleSheet()
+    MainWindow._flash_blocked(None, button)
+    if deleted:
+        sip.delete(button)
+    callbacks[0]()
+    if not deleted:
+        assert button.styleSheet() == original
