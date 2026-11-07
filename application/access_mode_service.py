@@ -6,16 +6,16 @@
 # Gestiona el rol de acceso actual del producto.
 # El rol se persiste en ACCESS_MODE_FILE entre reinicios de la aplicación.
 #
-# Rol por defecto: CAMERA_OPERATOR (operador de sala — #718 #719).
+# Rol por defecto: USER (operador de sala — #718 #719).
 #
 # Precedencia al determinar el rol inicial:
 #   1. Variable de entorno KHPTZ_ACCESS_ROLE (o KHPTZ_ACCESS_MODE como alias legacy).
 #   2. Archivo persistido ACCESS_MODE_FILE (si existe y contiene un valor válido).
-#   3. Defecto del producto: CAMERA_OPERATOR.
+#   3. Defecto del producto: USER.
 #
 # Migración de valores antiguos persistidos:
-#   "operator"        → BASIC_OPERATOR
-#   "admin_installer" → TECHNICIAN
+#   "operator" / "basic_operator" / "camera_operator" → USER
+#   "admin_installer" / "technician" / "system_admin" → ADMIN
 
 from __future__ import annotations
 
@@ -29,21 +29,10 @@ from domain.call_set_policy import OperatingMode
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT: OperatingMode = OperatingMode.CAMERA_OPERATOR
+_DEFAULT: OperatingMode = OperatingMode.USER
 
-# Roles que pueden guardarse en disco y seleccionarse en la UI de configuración.
-_VALID_PERSISTENT_MODES: frozenset[OperatingMode] = frozenset({
-    OperatingMode.BASIC_OPERATOR,
-    OperatingMode.CAMERA_OPERATOR,
-    OperatingMode.TECHNICIAN,
-    OperatingMode.SYSTEM_ADMIN,
-})
-
-# Mapa de migración: valor antiguo → nuevo rol canónico.
-_LEGACY_MAP: dict[str, OperatingMode] = {
-    "operator":        OperatingMode.BASIC_OPERATOR,
-    "admin_installer": OperatingMode.TECHNICIAN,
-}
+# Safety/work contexts are never access roles.
+_VALID_PERSISTENT_MODES = frozenset({OperatingMode.USER, OperatingMode.ADMIN})
 
 
 def _resolve_env_override() -> OperatingMode | None:
@@ -51,11 +40,6 @@ def _resolve_env_override() -> OperatingMode | None:
     raw = os.environ.get("KHPTZ_ACCESS_ROLE") or os.environ.get("KHPTZ_ACCESS_MODE")
     if not raw:
         return None
-    # Intenta migración de valores legacy primero.
-    if raw in _LEGACY_MAP:
-        resolved = _LEGACY_MAP[raw]
-        logger.info("access_mode: variable de entorno legacy %r → %s", raw, resolved.value)
-        return resolved
     try:
         mode = OperatingMode(raw)
         if mode in _VALID_PERSISTENT_MODES:
@@ -70,7 +54,7 @@ class AccessModeService:
     """
     Servicio de rol de acceso: carga, persiste y cambia el rol activo.
 
-    Precedencia: override de entorno > archivo persistido > CAMERA_OPERATOR.
+    Precedencia: override de entorno > archivo persistido > USER.
     Falla de forma segura (vuelve al defecto) si el archivo es inválido o corrupto.
     """
 
@@ -123,12 +107,6 @@ class AccessModeService:
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8-sig"))
             value = raw.get("access_mode", "")
-
-            # Migrar valores legacy.
-            if value in _LEGACY_MAP:
-                self._mode = _LEGACY_MAP[value]
-                logger.info("access_mode: migrado %r → %s", value, self._mode.value)
-                return
 
             candidate = OperatingMode(value)
             if candidate not in _VALID_PERSISTENT_MODES:
