@@ -139,8 +139,8 @@ Options:
                       Defaults to \$SUDO_USER, then the active graphical seat.
   --atem              Install the optional ATEM dependencies.
   --check             Validate readiness only; write nothing.
-  --allow-dirty       Permit installing from a checkout with uncommitted
-                      changes (blocked by default for customer installs).
+  --allow-dirty       Permit an uncommitted or unidentified development source
+                      (blocked by default for customer installs).
   --gui-mode MODE     Which process owns the GUI:
                         system (default) — khptz-control.service runs it as the
                           'khptz' user, bridged to the display by the scoped
@@ -206,6 +206,12 @@ info "Installing version ${VERSION} (commit ${COMMIT})"
 # installing customer systems from arbitrary/uncommitted state; a -dirty commit
 # means the installed bytes match no reviewed revision, so a later support
 # bundle cannot be tied back to anything.
+if [[ "${COMMIT}" == "unknown" && "${ALLOW_DIRTY}" != "true" ]]; then
+    fatal "Cannot identify the source revision of this checkout.
+  Install from a git clone at an approved tag or commit, with git available.
+  For an intentional development snapshot only, re-run with --allow-dirty."
+fi
+
 if [[ "${COMMIT}" == *-dirty ]] && [[ "${ALLOW_DIRTY}" != "true" ]]; then
     fatal "This checkout has uncommitted changes (commit ${COMMIT}).
   A customer install must come from a clean, identifiable revision.
