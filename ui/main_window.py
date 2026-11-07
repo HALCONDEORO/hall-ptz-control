@@ -233,20 +233,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             on_action=self._on_atem_action,
         )
         self._pip_nudge_svc = self._build_pip_nudge_service()
-        for _evt in (EventType.CAMERA_MOVE, EventType.CAMERA_ZOOM, EventType.SEAT_SELECTED):
-            self._bus.subscribe(_evt, lambda _e: self._record_activity())
-            self._bus.subscribe(_evt, lambda _e: self._atem_dispatcher.notify_manual_control())
-        # El nudge solo se cancela ante comandos que SUSTITUYEN el paneo en curso:
-        # un nuevo move (nueva velocidad de pan) o un recall de preset / sede
-        # (posición absoluta).  CAMERA_ZOOM no afecta al eje pan, así que cancelar
-        # dejaría el move() del nudge sin su stop_move() programado → deriva.
-        for _evt in (EventType.CAMERA_MOVE, EventType.SEAT_SELECTED):
-            self._bus.subscribe(
-                _evt,
-                lambda _e: self._pip_nudge_svc.cancel_for_camera(
-                    f"cam{_e.payload.get('camera', self._state.active_camera)}"
-                ),
-            )
+        from ui.pip_nudge_wiring import wire_pip_nudge_activity
+        wire_pip_nudge_activity(self)
         self._bus.subscribe(EventType.PRESET_SAVE_REQUESTED, self._on_preset_save_requested_feedback)
         self._bus.subscribe(EventType.PRESET_SAVED, self._on_preset_saved_feedback)
         self._start_atem_monitor()
