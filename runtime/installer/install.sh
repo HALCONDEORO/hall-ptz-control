@@ -171,7 +171,9 @@ require_command git      git
 require_command rsync    rsync
 require_command systemctl
 
-if [[ "${DEV_MODE}" == "true" ]]; then
+# Optional ATEM installs use pip even in product mode. Check it before the
+# read-only readiness exit and before creating users or directories.
+if [[ "${DEV_MODE}" == "true" || "${INSTALL_ATEM}" == "true" ]]; then
     require_command pip3 python3-pip
 fi
 
