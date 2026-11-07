@@ -66,3 +66,12 @@ def test_port_without_generation_support_is_treated_as_unchanged():
     port = object()
     assert capture_display_generation(port, 1) == 0
     assert display_update_is_current(port, 1, 0, selected_cam_key=1)
+
+
+def test_queued_update_dropped_after_session_poll_cancellation(adapter):
+    gen = capture_display_generation(adapter, 1)
+    adapter.cancel_polls("cam1")
+    assert not display_update_is_current(adapter, 1, gen, selected_cam_key=1)
+    new_gen = capture_display_generation(adapter, 1)
+    assert display_update_is_current(adapter, 1, new_gen, selected_cam_key=1)
+    assert adapter.display_generation(2) == 0

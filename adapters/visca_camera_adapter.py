@@ -297,7 +297,15 @@ class ViscaCameraAdapter:
         return self._result("stop_all", "all", ok, None, message=msg)
 
     def cancel_polls(self, camera_id: str) -> CommandResult:
-        logger.debug("cancel_polls: no active polls to cancel for %s", camera_id)
+        """Retire pending display observations without sending camera commands.
+
+        A started transport read can still finish within its normal timeout,
+        but must not update caches/UI. Deferred reads are skipped altogether.
+        This does not physically stop movement or interrupt the worker session.
+        """
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            self._endpoint_generations[idx] = self._endpoint_generations.get(idx, 0) + 1
         return self._result("cancel_polls", camera_id, True, None)
 
     def get_status(self, camera_id: str) -> CameraStatus:
@@ -327,10 +335,10 @@ class ViscaCameraAdapter:
     def display_generation(self, camera_key: int) -> int:
         """Return the current display generation of a camera slot (1-based).
 
-        The generation changes on every ``update_camera_ip`` call. A caller that
-        hands a result to another thread (for example a queued Qt signal) can
-        capture the generation up front and compare it again on delivery: if it
-        changed, the camera was reconfigured in between and the result must be
+        The generation changes on endpoint updates, confirmed zoom and poll
+        cancellation. A caller handing a result to another thread (for example
+        a queued Qt signal) can capture the generation up front and compare it
+        again on delivery: if it changed, the observation was retired and must be
         dropped. Query threads already check this before publishing; this closes
         the gap for events that are queued after that check.
         """
@@ -364,6 +372,11 @@ class ViscaCameraAdapter:
 
         def _fetch() -> None:
             try:
+                with self._display_query_lock:
+                    if not self._display_query_is_current(
+                        camera_key, ip, cam_id_hex, generation
+                    ):
+                        return
                 val = self._query_zoom(ip, cam_id_hex)
                 if val is not None:
                     from ptz.visca.parser import zoom_to_pct  # noqa: PLC0415
@@ -400,6 +413,11 @@ class ViscaCameraAdapter:
 
         def _fetch() -> None:
             try:
+                with self._display_query_lock:
+                    if not self._display_query_is_current(
+                        camera_key, ip, cam_id_hex, generation
+                    ):
+                        return
                 ae_mode, exp_level = self._query_ae_and_exp_comp(ip, cam_id_hex)
                 if ae_mode is None:
                     return  # No valid observation: preserve the last known state.
