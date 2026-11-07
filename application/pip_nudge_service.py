@@ -66,6 +66,7 @@ class PiPNudgeService:
         self._cfg = settings
         self._session_provider = session_provider or (lambda: True)
         self._nudge_active = False
+        self._return_nudge: tuple[int, int] | None = None
         self._pending_stop: threading.Timer | None = None
         self._generation = 0  # incrementado en cada _apply(); evita stop tardío
         # Reentrante: _apply() se invoca desde on_pip_on/off que ya tienen el lock.
@@ -95,6 +96,9 @@ class PiPNudgeService:
             if self._cfg.direction == "left":
                 pan = -pan
             self._nudge_active = True   # antes de _apply para que pip_off no lo ignore
+            # Freeze the outbound settings: live edits apply to the next ON,
+            # never to the compensation for the movement already performed.
+            self._return_nudge = (-pan, self._cfg.duration_ms)
             self._apply(pan, label="ON")
 
     def on_pip_off(self) -> None:
@@ -103,10 +107,12 @@ class PiPNudgeService:
             if not self._nudge_active:
                 return
             self._nudge_active = False
-            pan = self._cfg.pan_speed
-            if self._cfg.direction == "right":
-                pan = -pan   # fue a la derecha → vuelve a la izquierda
-            self._apply(pan, label="OFF")
+            return_nudge = self._return_nudge
+            self._return_nudge = None
+            if return_nudge is None:
+                return
+            pan, duration_ms = return_nudge
+            self._apply(pan, label="OFF", duration_ms=duration_ms)
 
     def cancel(self) -> None:
         """Cancela cualquier desplazamiento pendiente (control manual).
@@ -120,6 +126,7 @@ class PiPNudgeService:
             self._generation += 1
             self._cancel_pending_stop()
             self._nudge_active = False
+            self._return_nudge = None
 
     def update(self, pan_speed: int, direction: str, duration_ms: int) -> None:
         """Actualización en vivo desde la UI — efectiva en el próximo pip_on/off."""
@@ -143,17 +150,19 @@ class PiPNudgeService:
 
     # ── Internos ──────────────────────────────────────────────────────────────
 
-    def _apply(self, pan_speed: int, label: str) -> None:
+    def _apply(self, pan_speed: int, label: str, duration_ms: int | None = None) -> None:
+        if duration_ms is None:
+            duration_ms = self._cfg.duration_ms
         self._cancel_pending_stop()
         self._generation += 1
         gen = self._generation
         self._port.move(self._camera_id, pan_speed, 0)
         logger.info(
             "[PiPNudge] PiP %s → pan %+d durante %d ms (cam=%s)",
-            label, pan_speed, self._cfg.duration_ms, self._camera_id,
+            label, pan_speed, duration_ms, self._camera_id,
         )
         t = threading.Timer(
-            self._cfg.duration_ms / 1000.0,
+            duration_ms / 1000.0,
             self._stop_camera,
             args=(gen,),
         )
