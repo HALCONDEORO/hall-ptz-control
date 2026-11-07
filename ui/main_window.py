@@ -1236,6 +1236,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         if result.error_code == "set_action":
             # SET: confirmar con el usuario y salvar preset (permanece en UI).
             if preset_number in PLATFORM_PRESETS:
+                session_generation = self._session._session_generation
                 reply = QMessageBox.question(
                     self,
                     "Save Camera Position",
@@ -1244,6 +1245,12 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
                     QMessageBox.No,
                 )
                 if reply == QMessageBox.Yes:
+                    # The modal event loop can process inactivity shutdown or
+                    # session restart while the confirmation is on screen.
+                    if (self._shutting_down or not self.session_active
+                            or self._session._session_generation != session_generation):
+                        logger.info("Preset save cancelled: session changed during confirmation")
+                        return
                     self._bus.emit(
                         EventType.PRESET_SAVE_SLOT,
                         camera=cam,

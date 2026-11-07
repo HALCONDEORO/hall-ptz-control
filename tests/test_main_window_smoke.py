@@ -252,3 +252,36 @@ def test_custom_special_seat_builds_without_known_legacy_icon(main_window, monke
     assert button.text() == "Side room"
     assert button.x() == 10 and button.y() == 20
     assert button.icon().isNull()
+
+
+@pytest.mark.parametrize("transition", ["unchanged", "ended", "restarted", "closing", "rejected"])
+def test_platform_save_confirmation_stays_in_its_session(main_window, monkeypatch, transition):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from PyQt5.QtWidgets import QMessageBox
+    from core.events import EventType
+    from domain.call_set_policy import InputType
+
+    main_window._camera_port.refresh_zoom_display = Mock()
+    main_window._camera_port.async_refresh_ae_mode = Mock()
+    main_window.session_active = True
+    main_window._app_ctrl = Mock()
+    main_window._app_ctrl.recall_seat.return_value = SimpleNamespace(error_code="set_action")
+    main_window._bus = Mock()
+
+    def confirm_after_transition(*args, **kwargs):
+        if transition in ("ended", "restarted"):
+            main_window._session.shutdown("inactivity")
+            if transition == "restarted":
+                main_window._session.ToggleSession()
+        elif transition == "closing":
+            main_window._shutting_down = True
+        main_window._bus.reset_mock()
+        return QMessageBox.No if transition == "rejected" else QMessageBox.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", confirm_after_transition)
+    main_window._dispatch_preset_action(1, InputType.LONG_PRESS)
+    if transition == "unchanged":
+        main_window._bus.emit.assert_called_once_with(EventType.PRESET_SAVE_SLOT, camera=1, slot=1)
+    else:
+        main_window._bus.emit.assert_not_called()
