@@ -25,7 +25,8 @@ def test_passes_when_marker_and_config_present(resolver):
     resolver.provisioned_marker_file.write_text("ok\n", encoding="utf-8")
     verdict = verify_provisioned(resolver)
     assert verdict.ok is True
-    assert "verified" in verdict.summary().lower()
+    assert "Local installation file checks passed." in verdict.summary()
+    assert "Runtime operation is not verified." in verdict.summary()
 
 
 def test_fails_when_marker_missing(resolver):
@@ -114,3 +115,15 @@ class TestLauncherChecksFollowTheInstalledGuiMode:
         resolver.provisioned_marker_file.write_text("ok\n", encoding="utf-8")
         labels = [label for label, _ in verify_provisioned(resolver).checks]
         assert labels == ["Provisioned marker", "Configuration file"]
+
+
+def test_success_summary_limits_claim_to_local_files():
+    from application.install_verification import InstallVerdict
+
+    verdict = InstallVerdict(ok=True, checks=[("Configuration file", True)],
+                             advisories=["Check real equipment before use"])
+    summary = verdict.summary()
+    assert "Local installation file checks passed." in summary
+    assert "Runtime operation is not verified." in summary
+    assert "The room is installed and verified." not in summary
+    assert "Check real equipment before use" in summary
