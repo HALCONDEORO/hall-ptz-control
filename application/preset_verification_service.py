@@ -62,7 +62,7 @@ class PresetVerificationService:
                     if not isinstance(data, dict):
                         raise ValueError("expected a verification object")
                     records[key] = PresetVerification.from_dict(data)
-                except (KeyError, ValueError, TypeError) as exc:
+                except (KeyError, ValueError, TypeError, OverflowError) as exc:
                     logger.warning("Skipping corrupt verification record %r: %s", key, exc)
             return records
         except (json.JSONDecodeError, UnicodeError, OSError) as exc:

@@ -32,3 +32,16 @@ def test_invalid_utf8_is_ignored(tmp_path):
     path = tmp_path / 'verification.json'
     path.write_bytes(b'\xff\xfe\x80')
     assert PresetVerificationService(path).load_all() == {}
+
+
+@pytest.mark.parametrize('literal', ['1e999', '-1e999'])
+def test_overflow_preset_does_not_hide_good_record(tmp_path, literal):
+    path = tmp_path / 'verification.json'
+    good = PresetVerification('seat_004', 'comments', 4,
+                              status=VerificationStatus.OK).to_dict()
+    # Legal JSON numeric syntax overflows Python's float before int conversion.
+    path.write_text('{"broken":{"preset":' + literal + '},"good":'
+                    + json.dumps(good) + '}')
+    records = PresetVerificationService(path).load_all()
+    assert list(records) == ['good']
+    assert records['good'].is_verified
