@@ -41,6 +41,7 @@ class _StubManager:
     def __init__(self):
         self.workers: dict[str, _StubWorker] = {}
         self.invalidated: list[str] = []
+        self.ae_mode = {1: "auto", 2: "auto"}
 
     def worker(self, ip: str) -> _StubWorker:
         self.workers.setdefault(ip, _StubWorker())
