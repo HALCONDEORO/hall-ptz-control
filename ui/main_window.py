@@ -241,7 +241,12 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         # (posición absoluta).  CAMERA_ZOOM no afecta al eje pan, así que cancelar
         # dejaría el move() del nudge sin su stop_move() programado → deriva.
         for _evt in (EventType.CAMERA_MOVE, EventType.SEAT_SELECTED):
-            self._bus.subscribe(_evt, lambda _e: self._pip_nudge_svc.cancel())
+            self._bus.subscribe(
+                _evt,
+                lambda _e: self._pip_nudge_svc.cancel_for_camera(
+                    f"cam{_e.payload.get('camera', self._state.active_camera)}"
+                ),
+            )
         self._bus.subscribe(EventType.PRESET_SAVE_REQUESTED, self._on_preset_save_requested_feedback)
         self._bus.subscribe(EventType.PRESET_SAVED, self._on_preset_saved_feedback)
         self._start_atem_monitor()
