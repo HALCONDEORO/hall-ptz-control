@@ -433,11 +433,12 @@ class NamesPanel(QWidget):
     def _on_order_changed(self, new_order: list):
         """
         Reconstruye self.names in-place preservando los nombres asignados
-        (no aparecen en new_order porque están ocultos en la lista).
+        y los ocultos por búsqueda, que no aparecen en new_order.
         """
+        visible_names = set(new_order)
         visible_iter = iter(new_order)
         reconstructed = [
-            name if name in self._assigned else next(visible_iter)
+            next(visible_iter) if name in visible_names else name
             for name in self.names
         ]
         self.names[:] = reconstructed
