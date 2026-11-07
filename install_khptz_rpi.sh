@@ -271,7 +271,13 @@ step "Validating Raspberry Pi readiness"
 # product layout and then installing the developer one validates the wrong
 # thing, and lets a check pass that the install then fails.
 _CHECK_ARGS=(--check)
+# Readiness must validate the selected display owner, not the system default.
+_CHECK_ARGS+=(--gui-mode "${GUI_MODE}")
 [[ "${DEV_MODE}" == "true" ]] && _CHECK_ARGS+=(--dev)
+# Optional dependencies must be checked for the requested install, too.
+for _arg in "${PASSTHROUGH[@]}"; do
+    [[ "${_arg}" != "--atem" ]] || _CHECK_ARGS+=(--atem)
+done
 
 if ! bash "${INSTALLER}" "${_CHECK_ARGS[@]}"; then
     fatal "This Pi is not ready to install KHPTZ. Fix the FAIL items listed above and re-run."

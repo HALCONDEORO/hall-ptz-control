@@ -253,3 +253,52 @@ class TestIdempotenceAndSafety:
     def test_never_deletes_customer_paths(self, script_text):
         assert "rm -rf /etc/khptz" not in script_text
         assert "rm -rf /var/lib/khptz" not in script_text
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or sys.platform == "win32",
+                    reason="requires a native POSIX bash")
+@pytest.mark.parametrize("mode_args,expected", [
+    ([], ["--check", "--gui-mode", "system"]),
+    (["--gui-mode", "user"], ["--check", "--gui-mode", "user"]),
+    (["--gui-mode=user", "--dev"], ["--check", "--gui-mode", "user", "--dev"]),
+    (["--gui-mode", "user", "--atem"], ["--check", "--gui-mode", "user", "--atem"]),
+])
+def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
+    """Run the real wrapper in check-only mode with an inert installer.
+
+    Replace only the root guard in this scratch copy so CI needs no root.
+    All host lookups are stubbed; the fake installer only records arguments.
+    """
+    import os
+
+    root_guard = 'if [[ "${EUID}" -ne 0 ]]; then'
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert text.count(root_guard) == 1
+    wrapper = tmp_path / SCRIPT.name
+    wrapper.write_text(text.replace(root_guard, 'if false; then'), encoding="utf-8")
+    installer = tmp_path / "runtime" / "installer" / "install.sh"
+    installer.parent.mkdir(parents=True)
+    installer.write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$RECORDED_ARGS"\n',
+                         encoding="utf-8")
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    host_commands = {
+        "id": '#!/bin/bash\nif [[ "$1" == "-u" ]]; then echo 1000; fi\nexit 0\n',
+        "getent": '#!/bin/bash\necho "desktop:x:1000:1000::/synthetic/home:/bin/bash"\n',
+        "git": '#!/bin/bash\nexit 1\n',
+        "loginctl": '#!/bin/bash\nexit 1\n',
+    }
+    for name, content in host_commands.items():
+        command = stubs / name
+        command.write_text(content, encoding="utf-8")
+        command.chmod(0o755)
+    recorded = tmp_path / "args.txt"
+    env = dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}",
+               RECORDED_ARGS=str(recorded))
+    result = subprocess.run(
+        ["bash", str(wrapper), "--check", "--wizard-user", "desktop", *mode_args],
+        capture_output=True, text=True, env=env, cwd=str(tmp_path),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert recorded.read_text(encoding="utf-8").splitlines() == expected
+    assert "Check-only run complete" in result.stdout
