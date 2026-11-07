@@ -33,7 +33,8 @@ def build_items_from_config(
     with enabled=False so the runner marks them SKIPPED without crashing.
 
     has_verified_ptz is populated from PresetVerificationService when a record
-    with key "{seat_id}:{camera_role}" exists and its status is OK; None otherwise.
+    with matching key, seat, camera and preset exists. A matching record yields
+    True for OK or False for another status; absent/mismatched metadata yields None.
     """
     from config import SEAT_POSITIONS, PRESET_MAP
     from application.preset_verification_service import PresetVerificationService
@@ -47,6 +48,13 @@ def build_items_from_config(
         camera_index = 1 if seat_number <= 3 else 2
         seat_id = f"seat_{seat_number:03d}"
         v = verifications.get(f"{seat_id}:{camera_role}")
+        # A key alone is not calibration evidence for this target. Old/imported
+        # metadata can describe a different seat, camera or preset number.
+        if v is not None and (
+            not in_map or v.seat_id != seat_id
+            or v.camera_id != camera_role or v.preset != seat_number
+        ):
+            v = None
         items.append(PresetTestItem(
             item_id=seat_id,
             label=str(seat_number),
@@ -73,7 +81,8 @@ def build_items_from_assigned_names(
     enabled=False so the runner marks them SKIPPED without sending a command.
 
     has_verified_ptz is populated from PresetVerificationService when a record
-    with key "{seat_id}:{camera_role}" exists and its status is OK; None otherwise.
+    with matching key, seat, camera and preset exists. A matching record yields
+    True for OK or False for another status; absent/mismatched metadata yields None.
     """
     from config import PRESET_MAP, load_names_data
     from application.preset_verification_service import PresetVerificationService
@@ -100,6 +109,13 @@ def build_items_from_assigned_names(
         camera_index = 1 if seat_number <= 3 else 2
         seat_id = f"seat_{seat_number:03d}"
         v = verifications.get(f"{seat_id}:{camera_role}")
+        # A key alone is not calibration evidence for this target. Old/imported
+        # metadata can describe a different seat, camera or preset number.
+        if v is not None and (
+            not in_map or v.seat_id != seat_id
+            or v.camera_id != camera_role or v.preset != seat_number
+        ):
+            v = None
         items.append(PresetTestItem(
             item_id=seat_id,
             label=str(seat_number),
