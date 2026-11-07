@@ -49,6 +49,9 @@ class _StubManager:
     def invalidate_zoom(self, ip: str) -> None:
         self.invalidated.append(ip)
 
+    def set_backlight(self, ip: str, enabled: bool) -> None:
+        self.backlight_feedback = (ip, enabled)
+
 
 _CAM_CONFIGS = {1: ("10.0.0.1", "81"), 2: ("10.0.0.2", "82")}
 

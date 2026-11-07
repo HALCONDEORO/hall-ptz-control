@@ -472,7 +472,18 @@ class RightPanel:
         def _on_backlight_clicked():
             port = _get_port()
             if port:
-                _run_off_ui(port.backlight_toggle, _active_cam_id())
+                camera_id = _active_cam_id()
+
+                def _toggle_and_refresh():
+                    result = port.backlight_toggle(camera_id)
+                    if result is not None and result.ok:
+                        # MainWindow reads the confirmed manager state for the
+                        # currently selected camera, never the old click target.
+                        QtCore.QMetaObject.invokeMethod(
+                            mw, "_update_backlight_ui", Qt.QueuedConnection,
+                        )
+
+                _run_off_ui(_toggle_and_refresh)
 
         mw.BtnBacklight.clicked.connect(_on_backlight_clicked)
 
