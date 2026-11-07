@@ -625,7 +625,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             seat_number = seat.preset
             x, y = seat.x, seat.y
             if seat.type == "special" or seat_number in (128, 129, 130, 131):
-                button = build_special_seat_button(seat_number, x, y, parent=self)
+                button = build_special_seat_button(seat_number, x, y, parent=self, label=seat.label)
                 button.init_preset_actions(
                     seat_number,
                     call_cb=self._call_preset_from_button,
