@@ -78,6 +78,12 @@ class SeatNamesController:
 
     def _on_names_list_changed(self, old_name: Optional[str] = None, new_name: Optional[str] = None):
         if old_name and new_name:
+            # Undo changes seat positions, not the attendee's current name.
+            # Migrate every saved position snapshot alongside the live map.
+            for snapshot in self._undo_stack:
+                for key, name in snapshot.items():
+                    if name == old_name:
+                        snapshot[key] = new_name
             for key, v in self._w._seat_names.items():
                 if v == old_name:
                     self._w._seat_names[key] = new_name
