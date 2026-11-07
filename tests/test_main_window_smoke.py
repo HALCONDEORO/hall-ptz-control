@@ -252,3 +252,18 @@ def test_custom_special_seat_builds_without_known_legacy_icon(main_window, monke
     assert button.text() == "Side room"
     assert button.x() == 10 and button.y() == 20
     assert button.icon().isNull()
+
+
+def test_session_end_cancels_unconfirmed_seat_save(main_window, monkeypatch):
+    from unittest.mock import Mock
+    monkeypatch.setattr(main_window._camera_port, "refresh_zoom_display", Mock())
+    monkeypatch.setattr(main_window._camera_port, "async_refresh_ae_mode", Mock())
+    main_window._enter_seat_selection(37)
+    main_window._bus = Mock()
+    main_window._session.shutdown("manual")
+    assert main_window._seat_pending is None
+    assert main_window._seat_pending_camera is None
+    main_window._bus.reset_mock()
+    main_window.session_active = True  # a later session must not inherit Save
+    main_window._exit_seat_selection(save=True)
+    main_window._bus.emit.assert_not_called()
