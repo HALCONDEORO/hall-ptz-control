@@ -43,7 +43,7 @@ from typing import ClassVar, Optional  # reemplaza `int | None` (sintaxis 3.10+)
 logger = logging.getLogger(__name__)
 
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import Qt, QPoint, QTimer, pyqtSignal
+from PyQt5.QtCore import QEvent, Qt, QPoint, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt5.QtWidgets import (
     QApplication, QGraphicsOpacityEffect, QMessageBox, QPushButton, QToolButton,
@@ -224,6 +224,18 @@ class PresetActionMixin:
 
 # ── Qt event overrides ────────────────────────────────────────────────────
 
+    def event(self, event):
+        # A hidden/disabled button or lost mouse grab may never get release.
+        # Cancel both the timer and the pending tap, including queued timeouts.
+        if hasattr(self, '_long_press_timer') and (
+            event.type() in (QEvent.Hide, QEvent.UngrabMouse, QEvent.WindowDeactivate)
+            or (event.type() == QEvent.EnabledChange and not self.isEnabled())
+        ):
+            self._long_press_timer.stop()
+            self._press_pos = None
+            self.setDown(False)
+        return super().event(event)
+
     def mousePressEvent(self, event):
         if not hasattr(self, '_long_press_timer'):
             super().mousePressEvent(event)
@@ -243,7 +255,7 @@ class PresetActionMixin:
             return
         if event.button() == Qt.LeftButton:
             self._long_press_timer.stop()
-            if not self._long_press_fired:
+            if self._press_pos is not None and not self._long_press_fired:
                 self._call_cb(self._preset_number)
         self._press_pos = None
         super().mouseReleaseEvent(event)
@@ -252,6 +264,8 @@ class PresetActionMixin:
         event.accept()  # suppress default context menu on right-click
 
     def _on_long_press(self) -> None:
+        if self._press_pos is None:
+            return
         self._long_press_fired = True
         self._set_cb(self._preset_number)
 
