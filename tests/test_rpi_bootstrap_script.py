@@ -296,7 +296,7 @@ def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
     env = dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}",
                RECORDED_ARGS=str(recorded))
     result = subprocess.run(
-        ["bash", str(wrapper), "--check", "--wizard-user", "desktop", *mode_args],
+        ["bash", str(wrapper), "--allow-dirty", "--check", "--wizard-user", "desktop", *mode_args],
         capture_output=True, text=True, env=env, cwd=str(tmp_path),
     )
     assert result.returncode == 0, result.stdout + result.stderr
