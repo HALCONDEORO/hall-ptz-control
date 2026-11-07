@@ -171,6 +171,7 @@ class PiPNudgeService:
             if gen != self._generation:
                 return  # un _apply() posterior ya tomó el control
             self._pending_stop = None
-        # stop_move() fuera del lock: solo encola un comando VISCA, pero así
-        # evitamos retener el lock durante la llamada al puerto.
-        self._port.stop_move(self._camera_id)
+            # Keep validation and STOP enqueue atomic against cancel/_apply.
+            # Otherwise a new manual move can be queued after cancellation,
+            # followed by this expired timer's stale priority STOP.
+            self._port.stop_move(self._camera_id)
