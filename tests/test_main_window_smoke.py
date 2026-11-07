@@ -193,3 +193,45 @@ def test_current_queued_display_updates_are_delivered(main_window, _qapp):
     _qapp.processEvents()
     main_window._set_zoom_feedback.assert_called_once_with(75)
     main_window._update_exposure_ui.assert_called_once()
+
+
+def test_seat_save_cannot_follow_camera_selection_change(main_window, monkeypatch):
+    from unittest.mock import Mock
+    # This regression concerns preset targeting, not background display reads.
+    monkeypatch.setattr(main_window._camera_port, "refresh_zoom_display", Mock())
+    monkeypatch.setattr(main_window._camera_port, "async_refresh_ae_mode", Mock())
+    main_window.Cam2.click()
+    main_window._enter_seat_selection(37)
+    main_window.Cam1.click()
+    main_window._bus = Mock()
+    main_window._exit_seat_selection(save=True)
+    main_window._bus.emit.assert_not_called()
+    assert main_window._seat_pending is None
+    assert not main_window._btn_save_seat.isVisible()
+
+
+def test_seat_save_keeps_selected_camera_when_unchanged(main_window, monkeypatch):
+    from unittest.mock import Mock
+    # This regression concerns preset targeting, not background display reads.
+    monkeypatch.setattr(main_window._camera_port, "refresh_zoom_display", Mock())
+    monkeypatch.setattr(main_window._camera_port, "async_refresh_ae_mode", Mock())
+    from core.events import EventType
+    main_window.Cam2.click()
+    main_window._enter_seat_selection(37)
+    main_window._bus = Mock()
+    main_window._exit_seat_selection(save=True)
+    main_window._bus.emit.assert_called_once_with(
+        EventType.PRESET_SAVE_SLOT, camera=2, slot=37,
+    )
+
+
+def test_cancelled_seat_selection_cannot_be_saved_later(main_window, monkeypatch):
+    from unittest.mock import Mock
+    # This regression concerns preset targeting, not background display reads.
+    monkeypatch.setattr(main_window._camera_port, "refresh_zoom_display", Mock())
+    monkeypatch.setattr(main_window._camera_port, "async_refresh_ae_mode", Mock())
+    main_window._enter_seat_selection(37)
+    main_window._bus = Mock()
+    main_window._exit_seat_selection(save=False)
+    main_window._exit_seat_selection(save=True)
+    main_window._bus.emit.assert_not_called()

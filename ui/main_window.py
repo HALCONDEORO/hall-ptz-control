@@ -141,6 +141,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         self.session_active  = False
         self._seat_pending: Optional[int] = None
+        self._seat_pending_camera: Optional[int] = None
         self._last_activity: float = time.time()
         self._pan_cap:        int = PAN_SPEED_MAX   # 24 — watchdog lo reduce en error move
         self._tilt_cap:       int = TILT_SPEED_MAX  # 20 — watchdog lo reduce en error move
@@ -1304,6 +1305,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         if preset_number not in PLATFORM_PRESETS and not self.Cam2.isChecked():
             self.Cam2.click()
 
+        self._seat_pending_camera = 1 if self.Cam1.isChecked() else 2
         for n in self._visible_preset_set():
             btn = getattr(self, f"Seat{n}", None)
             if btn is None:
@@ -1334,7 +1336,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
     def _exit_seat_selection(self, save: bool) -> None:
         preset_number = self._seat_pending
+        pending_camera = self._seat_pending_camera
         self._seat_pending = None
+        self._seat_pending_camera = None
         self._btn_save_seat.hide()
         self._btn_cancel_seat.hide()
 
@@ -1349,7 +1353,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         if save and preset_number is not None:
             cam = 1 if self.Cam1.isChecked() else 2
-            self._bus.emit(EventType.PRESET_SAVE_SLOT, camera=cam, slot=preset_number)
+            if cam != pending_camera:
+                logger.warning("Seat preset save cancelled: camera changed during selection")
+                self._flash_blocked(self.Cam1 if cam == 1 else self.Cam2)
+                return
+            self._bus.emit(EventType.PRESET_SAVE_SLOT, camera=pending_camera, slot=preset_number)
             seat_btn = getattr(self, f"Seat{preset_number}", None)
             if seat_btn is not None and hasattr(seat_btn, 'show_saved'):
                 seat_btn.show_saved()
