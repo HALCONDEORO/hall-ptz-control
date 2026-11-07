@@ -1,0 +1,14 @@
+# Disposable write-side rehearsal, not a Raspberry Pi hardware validation.
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get -o APT::Update::Error-Mode=any update \
+    && apt-get install -y --no-install-recommends \
+        python3 python3-pyqt5 python3-pyqt5.qtsvg python3-yaml \
+        git rsync passwd util-linux systemd sudo ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+# Only the system manager is simulated. Files, users and permissions are real.
+RUN printf '#!/bin/sh\necho "[stub systemctl] $*"\nexit 0\n' > /usr/local/bin/systemctl \
+    && chmod 0755 /usr/local/bin/systemctl
+WORKDIR /src
+COPY . /src
+CMD ["bash", "/src/tests/installer/bookworm_rehearsal.sh"]

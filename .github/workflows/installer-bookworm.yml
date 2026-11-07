@@ -1,0 +1,49 @@
+name: Installer (Bookworm rehearsal)
+on:
+  pull_request:
+    paths:
+      - 'runtime/installer/**'
+      - 'runtime/systemd/**'
+      - 'runtime/secret_manager.py'
+      - 'runtime/provision.py'
+      - 'application/authentication.py'
+      - 'tests/installer/**'
+      - '.github/workflows/installer-bookworm.yml'
+  push:
+    paths:
+      - 'runtime/installer/**'
+      - 'runtime/systemd/**'
+      - 'tests/installer/**'
+      - '.github/workflows/installer-bookworm.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: installer-bookworm-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bookworm-amd64:
+    name: Bookworm Python 3.11 install (amd64, not Pi hardware)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build disposable Bookworm image
+        run: docker build --progress=plain -f tests/installer/Dockerfile.bookworm -t khptz-bookworm-test .
+      - name: Install, reinstall, switch modes and check distinct identities
+        run: docker run --rm khptz-bookworm-test
+      - name: Prove a broken install is rejected
+        run: |
+          set -euo pipefail
+          if docker run --rm --entrypoint /bin/bash khptz-bookworm-test -c \
+            'printf "#!/bin/sh\nexit 0\n" > /usr/local/sbin/useradd
+             chmod +x /usr/local/sbin/useradd
+             bash /src/tests/installer/container_install_test.sh'
+          then
+            echo 'ERROR: sabotaged user creation still passed'
+            exit 1
+          fi
+          echo 'PASS: broken user creation was rejected'
