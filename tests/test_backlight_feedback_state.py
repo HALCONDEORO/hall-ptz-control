@@ -1,5 +1,9 @@
 """Confirmed backlight control must update the state consumed by the UI."""
 from types import SimpleNamespace
+from pathlib import Path
+import os
+import subprocess
+import sys
 from unittest.mock import Mock
 
 import pytest
@@ -20,7 +24,25 @@ def test_confirmed_backlight_updates_manager_feedback():
 
 
 @pytest.mark.parametrize("ok", [True, False])
-def test_backlight_button_applies_confirmed_feedback_on_ui_thread(monkeypatch, ok):
+def test_backlight_button_applies_confirmed_feedback_on_ui_thread(ok):
+    # Collection-time Qt stubs can mutate the real QtWidgets module itself.
+    # Exercise actual widgets in a fresh process, never skip this regression.
+    script = (
+        "import runpy, sys, pytest; "
+        "namespace = runpy.run_path(sys.argv[1]); "
+        "patch = pytest.MonkeyPatch(); "
+        "namespace['_assert_backlight_ui_feedback'](patch, sys.argv[2] == 'True')"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script, str(Path(__file__).resolve()), str(ok)],
+        cwd=Path(__file__).resolve().parents[1],
+        env={**os.environ, "QT_QPA_PLATFORM": "offscreen"},
+        capture_output=True, text=True, timeout=20,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def _assert_backlight_ui_feedback(monkeypatch, ok):
     from conftest import ensure_real_qt
     ensure_real_qt()
     from PyQt5.QtCore import QObject, pyqtSlot
