@@ -7,3 +7,14 @@ sim_ip_backup.json
 *.log
 .DS_Store
 .pytest-runtime/
+
+# Developer-mode install artifacts: install.sh --dev uses the checkout itself
+# as the install dir and writes its state/config there; rollback.sh --dev adds
+# its own marker. Without these entries every dev install dirties the tree;
+# the dirty-checkout guard in install_khptz_rpi.sh then refuses customer
+# installs from it.
+/install-state.env
+/PREVIOUS_VERSION
+/config.yaml
+/config.bak
+/config.corrupt.*
