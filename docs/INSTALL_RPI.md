@@ -76,27 +76,32 @@ USB drive for offline backup/restore testing
 
 ## Raspberry Pi baseline and system dependencies
 
-Recommended baseline for current MVP validation:
+Intended software baseline for the installation:
 
-- Raspberry Pi 4 with Raspberry Pi OS Bullseye (Debian 11) 64-bit is the target;
-- Raspberry Pi 5 cannot run Bullseye. Bookworm/Trixie require a separate,
-  unvalidated path. See the [manufacturer compatibility note](https://www.raspberrypi.com/products/raspberry-pi-5/);
-- **Python 3.9.2** (the supported target) available through the OS package
-  manager — this is the system Python on Bullseye. Newer 3.10+ may work but is
-  not validated;
+- Raspberry Pi OS **Bookworm (Debian 12) 64-bit Desktop** with system
+  **Python 3.11** installed through the OS package manager;
+- the Bookworm container installation rehearsal passed. This is not physical
+  validation of a Pi, X11 session, display, touchscreen or cameras. Record the
+  actual Pi model and installed OS on site before deciding any changes;
+- Raspberry Pi 5 cannot run Bullseye. See the
+  [manufacturer compatibility note](https://www.raspberrypi.com/products/raspberry-pi-5/).
+  Trixie remains unvalidated;
 - PyQt5 installed through `apt` on Raspberry Pi OS;
 - local network access to cameras;
 - SSH access only when authorised for installation/support.
 
-Known limits on newer OS releases (Bullseye is the software target, not a recorded hardware PASS):
+Session and optional-dependency limits:
 
-- **Bookworm/Trixie default to Wayland** (wayfire/labwc). The GUI units assume
+- **Bookworm/Trixie default to Wayland** (wayfire/labwc). The GUI units require
   X11 (`DISPLAY=:0`, `xhost`). Switch the session to X11
-  (`raspi-config` -> Advanced -> Wayland -> X11) before installing, or treat
-  the run as exploratory.
-- **Do not use `--atem` or `--dev` on Bookworm/Trixie**: those options use
-  `pip3`, which PEP 668 blocks there (`externally-managed-environment`), and
-  the install aborts halfway. On Bullseye they are unaffected.
+  (`raspi-config` -> Advanced -> Wayland -> X11) before installing. A container
+  rehearsal does not verify the physical desktop session.
+- Keep the default **system GUI mode**. User GUI mode is not approved for
+  local password authentication; do not weaken secret permissions to use it.
+- **Do not use `--atem` or `--dev` on Bookworm/Trixie** without their separate
+  dependency validation: those paths use `pip3`, which PEP 668 can block
+  (`externally-managed-environment`). The standard system-mode rehearsal does
+  not approve these optional paths.
 - Install from a **git clone at an approved tag**, not from a copied source
   snapshot: a snapshot has no identifiable revision and rollback cannot work.
   Before installing, run `git remote -v` and `git status --ignored` in the
