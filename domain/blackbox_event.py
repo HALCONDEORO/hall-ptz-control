@@ -126,10 +126,7 @@ class BlackBoxEvent:
 
 # ── Redacted-field sentinel ───────────────────────────────────────────────────
 
-_SECRET_KEYS = frozenset({
-    "password", "token", "secret", "private_key",
-    "ssh_key", "license_private_key", "api_key", "credential",
-})
+
 
 
 def redact_event_dict(data: dict[str, Any]) -> dict[str, Any]:
@@ -148,7 +145,7 @@ def redact_event_dict(data: dict[str, Any]) -> dict[str, Any]:
     This is a lightweight best-effort guard. Full redaction policy lives in
     domain/redaction.py and application/redaction_service.py.
     """
-    from domain.redaction import RedactionGuard
+    from domain.redaction import RedactionGuard, is_secret_key
 
     guard = RedactionGuard()
 
@@ -163,12 +160,10 @@ def redact_event_dict(data: dict[str, Any]) -> dict[str, Any]:
 
     result: dict[str, Any] = {}
     for key, value in data.items():
-        key_str = str(key).lower()
-        is_secret_key = key in _SECRET_KEYS or any(s in key_str for s in _SECRET_KEYS)
         if isinstance(value, dict):
             # Preserve the established container contract; redact its leaves.
             result[key] = redact_event_dict(value)
-        elif is_secret_key:
+        elif is_secret_key(str(key)):
             result[key] = "[REDACTED]"
         else:
             result[key] = redact_value(value)

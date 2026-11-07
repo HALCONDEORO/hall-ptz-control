@@ -47,3 +47,32 @@ def test_exported_incident_and_events_do_not_leak_sequence_or_text_secrets(tmp_p
             assert "SyntheticDiagnostic" in output
             assert "REDACTED" in output
     assert incident.read_text(encoding="utf-8") == original
+
+
+def test_zip_redacts_all_shared_secret_keys_and_quoted_values(tmp_path):
+    keys = ["passwd", "pwd", "authorization", "auth", "signing_key",
+            "license_key", "licence_key", "access_key", "apikey", "privatekey",
+            "client_secret", "bearer", "ssh_password", "license_private_key"]
+    payload = {"last_events": [[{key: "SYNTHETIC_KEY_" + key for key in keys}]],
+               "summary": 'password="safe words SYNTHETIC_QUOTED_TAIL" host=test',
+               "extra": ["token='safe words SYNTHETIC_SINGLE_TAIL' next=ok",
+                         'password="escaped \\" words SYNTHETIC_ESCAPED_TAIL" end=ok',
+                         'password="unterminated SYNTHETIC_UNCLOSED_TAIL']}
+
+    class Recorder:
+        def export_for_support(self, maximum):
+            return [payload]
+
+    incidents = tmp_path / "incidents"
+    incidents.mkdir()
+    (incidents / "incident-quoted.json").write_text(json.dumps(payload), encoding="utf-8")
+    bundle = SupportBundleService(output_dir=tmp_path / "out", incidents_dir=incidents,
+                                  flight_recorder=Recorder()).create()
+    assert bundle is not None
+    with zipfile.ZipFile(bundle) as archive:
+        for name in ("blackbox/recent_events.jsonl", "blackbox/incidents/incident-quoted.json"):
+            output = archive.read(name).decode("utf-8")
+            assert "SYNTHETIC_" not in output
+            assert "host=test" in output
+            assert "next=ok" in output
+            assert "end=ok" in output
