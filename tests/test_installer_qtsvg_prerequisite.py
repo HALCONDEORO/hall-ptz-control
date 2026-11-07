@@ -10,6 +10,7 @@ def test_missing_qtsvg_fails_preflight_with_package_hint():
     start = source.index('require_pyqt5() {')
     end = source.index('\n}\n', start) + 3
     script = '''
+PYTHON_BIN=python3
 warn() { echo "WARN: $*"; }
 error() { echo "ERROR: $*"; exit 1; }
 python3() {

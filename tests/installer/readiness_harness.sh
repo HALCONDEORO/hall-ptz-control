@@ -83,5 +83,11 @@ fi
 
 # ── Run the real readiness check with only the stubs in front ─────────────────
 
-PATH="${STUB_DIR}:${PATH}" bash "${RUN_INSTALLER}" --check
+# The product always probes /usr/bin/python3. The harness deliberately maps
+# that host command to the test environment interpreter, where CI dependencies
+# are installed, without changing the production script's interpreter choice.
+PATH="${STUB_DIR}:${PATH}" bash -c '
+    function /usr/bin/python3() { command python3 "$@"; }
+    source "$1" --check
+' readiness-harness "${RUN_INSTALLER}"
 

@@ -17,7 +17,8 @@ command() {
     builtin command "$@"
 }
 id() { echo 0; }
-python3() {
+function /usr/bin/python3() {
+    [[ "$*" != *"import pip"* ]] || return 1
     case "$*" in
         *'sys.version_info.major)'*) echo 3 ;;
         *'sys.version_info.minor)'*) echo 9 ;;
@@ -30,15 +31,15 @@ systemctl() { echo MUTATION; return 99; }
 useradd() { echo MUTATION; return 99; }
 install() { echo MUTATION; return 99; }
 chown() { echo MUTATION; return 99; }
-export -f command id python3 git rsync systemctl useradd install chown
-bash "$1" --atem ${2}
+set -- --atem ${2}
+source "$INSTALLER_UNDER_TEST"
 '''
     result = subprocess.run(
         ['bash', '-c', script, 'test', str(ROOT / 'runtime/installer/install.sh'),
-         '--check' if check else ''], capture_output=True, text=True, env=os.environ.copy())
+         '--check' if check else ''], capture_output=True, text=True, env=dict(os.environ, INSTALLER_UNDER_TEST=str(ROOT / 'runtime/installer/install.sh')))
     output = result.stdout + result.stderr
     assert result.returncode != 0, output
-    assert 'Required command not found: pip3' in output, output
+    assert 'Required Python module not available: pip' in output, output
     assert 'sudo apt install -y python3-pip' in output, output
     assert 'MUTATION' not in output, output
 

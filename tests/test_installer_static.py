@@ -67,7 +67,7 @@ def _product_paths_from_sh() -> dict[str, str]:
 class TestRequireCommandCoverage:
 
     def test_python3_is_checked(self):
-        assert "require_command python3" in _sh()
+        assert 'require_command "${PYTHON_BIN}" python3' in _sh()
 
     def test_git_is_checked(self):
         assert "require_command git" in _sh()
@@ -173,7 +173,9 @@ class TestProductModeDependencyPolicy:
             flags=re.DOTALL,
         )
         assert atem_block is not None, "No INSTALL_ATEM guard found"
-        assert "requirements-atem.txt" in atem_block.group(0)
+        atem_install = sh[sh.index("# ATEM support: install separately"):]
+        assert "requirements-atem.txt" in atem_install
+        assert '"${PYTHON_BIN}" -m pip install' in atem_install
 
     def test_atem_flag_documented_in_help(self):
         sh = _sh()
