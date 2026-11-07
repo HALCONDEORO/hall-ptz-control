@@ -845,7 +845,16 @@ else
     # rollback target. Empty on a first install — there is nothing to go back
     # to, and recording the ref we just installed would make `rollback.sh` a
     # no-op that looks like it worked.
-    PREVIOUS_REF="${PREV_INSTALLED_REF}"
+    if [[ "${PREV_INSTALLED_REF}" == "unknown" ]]; then
+        # The previous install came from a source that was not a git checkout
+        # (a tarball, a copied tree): "unknown" is a placeholder, not a ref.
+        # Recording it as the rollback target would make rollback.sh try to
+        # check out a ref literally named "unknown" and fail with git's
+        # pathspec error. Record no target instead.
+        PREVIOUS_REF=""
+    else
+        PREVIOUS_REF="${PREV_INSTALLED_REF}"
+    fi
 fi
 
 INSTALLED_VERSION="$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"

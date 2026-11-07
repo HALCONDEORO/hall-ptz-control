@@ -202,6 +202,21 @@ class TestShellRobustness:
         assert 'PREVIOUS_REF="${PREV_ROLLBACK_REF}"' in branch
 
 
+class TestUnknownRefIsNotARollbackTarget:
+    """An install from a non-git source records KHPTZ_INSTALLED_REF=unknown.
+    The next checkout-based install must not carry that placeholder into
+    KHPTZ_PREVIOUS_REF, or rollback.sh would try to check out a ref literally
+    named 'unknown' and fail with git's pathspec error."""
+
+    def test_unknown_previous_ref_records_no_target(self):
+        sh = _install_sh()
+        idx = sh.find('if [[ "${PREV_INSTALLED_REF}" == "${SOURCE_REF}" ]]')
+        assert idx != -1, "same-ref branch not found"
+        branch = sh[idx:sh.find("\nfi\n", idx)]
+        assert '"${PREV_INSTALLED_REF}" == "unknown"' in branch
+        assert 'PREVIOUS_REF=""' in branch
+
+
 # ── customer data / provisioning safety ──────────────────────────────────────
 
 class TestRollbackSafety:
