@@ -590,7 +590,7 @@ class RightPanel:
         # ── Botón ⚙ Settings — visible cuando el rol tiene acceso a configuración
         btn_gear = QPushButton('⚙  Settings', self._container)
         btn_gear.setFixedHeight(36)
-        btn_gear.setToolTip('Camera and system configuration (Technician / Admin)')
+        btn_gear.setToolTip('Camera and system configuration (Admin)')
         btn_gear.setStyleSheet(
             "QPushButton { background: rgba(80,80,80,50); border: 1px solid #B8B8B8;"
             " border-radius: 8px; font: 600 13px 'Inter Tight', 'Segoe UI'; color: #444; padding: 0 14px; }"
@@ -601,9 +601,9 @@ class RightPanel:
         self._btn_gear = btn_gear
 
         # ── Botón ← Operador — sale del modo técnico inline (sin contraseña)
-        btn_exit_admin = QPushButton('← Operator', self._container)
+        btn_exit_admin = QPushButton('← User', self._container)
         btn_exit_admin.setFixedHeight(36)
-        btn_exit_admin.setToolTip('Switch back to Operator mode')
+        btn_exit_admin.setToolTip('Switch back to User mode')
         btn_exit_admin.setStyleSheet(
             "QPushButton { background: rgba(80,80,80,30); border: 1px solid #C8C8C8;"
             " border-radius: 8px; font: 600 13px 'Inter Tight', 'Segoe UI'; color: #666; padding: 0 14px; }"
@@ -617,7 +617,7 @@ class RightPanel:
         # ── Botón 🔑 Admin Mode — sube a Técnico inline con contraseña (no reinicia)
         btn_enter_admin = QPushButton('Admin Mode', self._container)
         btn_enter_admin.setFixedHeight(36)
-        btn_enter_admin.setToolTip('Enter Technician mode with password (no restart required)')
+        btn_enter_admin.setToolTip('Enter Admin mode with password (no restart required)')
         btn_enter_admin.setStyleSheet(
             "QPushButton { background: rgba(46,82,41,0.08); border: 1px solid rgba(46,82,41,0.30);"
             " border-radius: 8px; font: 600 13px 'Inter Tight', 'Segoe UI';"
@@ -636,15 +636,14 @@ class RightPanel:
     def _update_mode_buttons(self):
         """Actualiza visibilidad de los botones de rol según el modo activo.
 
-        Operador (CAMERA_OPERATOR / BASIC_OPERATOR):
+        Usuario (USER):
             [ 🔑 Admin Mode ]
 
-        Técnico / Admin (TECHNICIAN / SYSTEM_ADMIN):
+        Admin (ADMIN):
             [ ⚙ Settings ]  [ ← Operador ]
         """
         from domain.call_set_policy import OperatingMode
-        _SETTINGS_ROLES = {OperatingMode.TECHNICIAN, OperatingMode.SYSTEM_ADMIN,
-                           OperatingMode.ADMIN_INSTALLER}
+        _SETTINGS_ROLES = {OperatingMode.ADMIN}
         has_settings = self._mw._access_mode_svc.mode in _SETTINGS_ROLES
         self._btn_gear.setVisible(has_settings)
         self._btn_exit_admin.setVisible(has_settings)

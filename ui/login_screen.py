@@ -24,11 +24,11 @@ from application.login_audit import record_login_event, read_last_login_timestam
 logger = logging.getLogger(__name__)
 
 # Login mode → persistent role granted on success.
-#   operator   → CAMERA_OPERATOR (limited: PTZ, names, reconnect)
-#   admin      → SYSTEM_ADMIN    (full access)
+#   operator   → USER (limited: PTZ, names, reconnect)
+#   admin      → ADMIN    (full access)
 _MODE_ROLE = {
-    'operator':  OperatingMode.CAMERA_OPERATOR,
-    'admin':     OperatingMode.SYSTEM_ADMIN,
+    'operator':  OperatingMode.USER,
+    'admin':     OperatingMode.ADMIN,
 }
 
 
@@ -64,10 +64,10 @@ class LoginScreen(QWidget):
         self.remaining_seconds = 0
 
         # Modo de login y rol resultante.
-        #   'operator'  (defecto) → CAMERA_OPERATOR
-        #   'admin'               → SYSTEM_ADMIN
+        #   'operator'  (defecto) → USER
+        #   'admin'               → ADMIN
         self._mode = 'operator'
-        self.authenticated_role = OperatingMode.CAMERA_OPERATOR
+        self.authenticated_role = OperatingMode.USER
         # True solo tras una autenticación manual real (no en sim/bypass).
         self.authenticated = False
 
@@ -206,7 +206,7 @@ class LoginScreen(QWidget):
         card_layout.addSpacing(8)
 
         # ── Subtitle ──────────────────────────────────────────────────────────
-        subtitle = QLabel('Operator Access')
+        subtitle = QLabel('User Access')
         subtitle.setStyleSheet(
             "QLabel {"
             "  font: 400 19px 'Inter Tight', 'Segoe UI', sans-serif;"
@@ -412,12 +412,12 @@ class LoginScreen(QWidget):
         self.password_input.setVisible(not self._operator_auto)
 
         if mode == 'operator':
-            self._subtitle.setText('Operator Access')
+            self._subtitle.setText('User Access')
             self.switch_btn.setText('Admin login →')
             self.switch_btn.setVisible(True)
         elif mode == 'admin':
-            self._subtitle.setText('Administrator Access')
-            self.switch_btn.setText('← Operator login')
+            self._subtitle.setText('Admin Access')
+            self.switch_btn.setText('← User login')
             self.switch_btn.setVisible(True)
 
         if self._operator_auto:
@@ -550,7 +550,7 @@ class LoginScreen(QWidget):
         """Manejar login exitoso."""
         # El rol concedido depende del modo con el que se autenticó.
         self.authenticated_role = _MODE_ROLE.get(
-            self._mode, OperatingMode.CAMERA_OPERATOR
+            self._mode, OperatingMode.USER
         )
         self.authenticated = True
         _record_login_event(success=True, attempts=self.attempts)
