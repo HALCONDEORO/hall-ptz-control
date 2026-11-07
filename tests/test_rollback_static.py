@@ -354,6 +354,27 @@ class TestOfflineFetchIsBestEffort:
         assert "local refs" in body
 
 
+class TestCheckoutPositionNote:
+    """A product rollback moves the source checkout to the rolled-back ref and
+    leaves it there: the operator must be told, or the next install.sh run
+    from that checkout silently redeploys the rolled-back ref. The note must
+    not claim a detached HEAD (--to accepts branches) and must not print in
+    dry-run (nothing was checked out). Paths get printf %q quoting."""
+
+    def test_note_states_position_without_detached_claim(self):
+        sh = _sh()
+        assert "now sits at" in sh
+        assert "git -C %q checkout -" in sh
+        note = sh[sh.find("now sits at"):]
+        assert "detached HEAD" not in note.split("fi", 1)[0]
+
+    def test_note_suppressed_in_dry_run_and_dev_mode(self):
+        sh = _sh()
+        idx = sh.find("now sits at")
+        gate = sh[:idx].rfind('if [[')
+        assert '[[ "${DRY_RUN}" != "1" && "${DEV_MODE}" == "false" ]]' in sh[gate:idx]
+
+
 class TestUserModeSkipsSystemStart:
     """#15: GUI_MODE=user means the app runs as the desktop user — there is
     no system service to (re)start and forcing one could duplicate it."""
