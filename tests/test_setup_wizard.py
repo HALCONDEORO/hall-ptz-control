@@ -427,3 +427,70 @@ class TestDonePageRuntimeClaims:
         assert "does not confirm" in text
         for command in ("khptz verify-install", "khptz status", "khptz doctor"):
             assert command in text
+
+
+class TestInstallingPageCloseLifecycle:
+    """Closing the GUI is not cancellation of the privileged provisioner."""
+
+    @pytest.mark.parametrize("finish", ["reject", "accept", "close"])
+    def test_closing_wizard_stops_polling_without_resubmitting(self, _qapp, finish):
+        from ui.setup_wizard import SetupWizard
+
+        class PendingHandoff(_FakeHandoff):
+            def __init__(self):
+                super().__init__()
+                self.begins = 0
+                self.polls = 0
+
+            def begin(self, answers):
+                self.begins += 1
+
+            def poll(self):
+                self.polls += 1
+                return None
+
+        handoff = PendingHandoff()
+        wizard = SetupWizard(handoff=handoff)
+        wizard.show()
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        assert page._timer.isActive()
+        getattr(wizard, finish)()
+        assert not page._timer.isActive()
+        assert handoff.begins == 1
+        assert handoff.polls == 0
+        assert not page.isComplete()
+        # Nothing in closing pretends to cancel/undo the root-side operation.
+        assert page._result is None
+
+    def test_pending_page_warns_that_closing_does_not_cancel_application(self, _qapp):
+        from PyQt5.QtWidgets import QLabel
+        from ui.setup_wizard import SetupWizard
+
+        wizard = SetupWizard(handoff=_FakeHandoff())
+        page = _page(wizard, "InstallingPage")
+        text = "\n".join(label.text() for label in page.findChildren(QLabel))
+        assert "Cerrar esta ventana no cancela" in text
+        assert "no inicies otro intento" in text
+
+    def test_reentering_after_failure_resets_previous_result_and_rearms_timer(self, _qapp):
+        from application.provision_handoff import HandoffResult
+        from ui.setup_wizard import SetupWizard
+
+        handoff = _FakeHandoff(result=HandoffResult(ok=False, error="synthetic failure"))
+        wizard = SetupWizard(handoff=handoff)
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        page._poll_once()
+        assert not page._timer.isActive()
+        assert not page.isComplete()
+        assert "synthetic failure" in page._status.text()
+        page.cleanupPage()
+        handoff._result = None
+        page.initializePage()
+        assert page._result is None
+        assert not page._done
+        assert not page.isComplete()
+        assert page._timer.isActive()
+        assert "synthetic failure" not in page._status.text()
+        wizard.reject()
