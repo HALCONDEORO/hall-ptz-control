@@ -66,11 +66,22 @@ info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 step()  { echo; echo "==> $*"; }
 
+# Track the boundary where the child may start changing the appliance.
+# A failed install can be partial; never claim that it rolled back completely.
+INSTALL_STARTED=false
+
 fatal() {
     echo >&2
-    echo "[FATAL] $*" >&2
+    echo "[ERROR] $*" >&2
     echo >&2
-    echo "Installation stopped. Nothing further was changed." >&2
+    if [[ "${INSTALL_STARTED}" == "true" ]]; then
+        echo "La instalacion se ha detenido y puede haber cambios parciales." >&2
+        echo "No borres archivos, no restaures y no repitas la instalacion a ciegas." >&2
+        echo "Siguiente paso: conserva esta salida y pide revision tecnica antes de continuar." >&2
+    else
+        echo "El wrapper no ha iniciado la instalacion." >&2
+        echo "Siguiente paso: corrige el problema indicado y repite la comprobacion --check." >&2
+    fi
     exit 30
 }
 
@@ -181,18 +192,20 @@ fi
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 
-step "Checking how this script was started"
+step "Comprobando como se ha iniciado"
 
 if [[ "${EUID}" -ne 0 ]]; then
-    fatal "This installer must run as root. Use:
-    sudo bash ${SELF} --wizard-user ${SUDO_USER:-${USER:-pi}}"
+    printf -v _permission_check_cmd 'sudo bash %q --wizard-user %q --check' \
+        "${SELF}" "${WIZARD_USER:-${SUDO_USER:-${USER:-pi}}}"
+    fatal "Se necesitan permisos de administrador. Para comprobar SIN instalar, usa:
+    ${_permission_check_cmd}"
 fi
 
 [[ -f "${INSTALLER}" ]] || fatal "Could not find the installer at:
     ${INSTALLER}
   This script must stay inside the KHPTZ repository checkout."
 
-info "Repository root: ${REPO_ROOT}"
+info "Carpeta del programa: ${REPO_ROOT}"
 
 # Version/commit identity, so a support bundle can be tied to what was installed.
 VERSION="unknown"
@@ -212,7 +225,7 @@ if command -v git >/dev/null 2>&1 && _git rev-parse --short HEAD >/dev/null 2>&1
         COMMIT="${COMMIT}-dirty"
     fi
 fi
-info "Installing version ${VERSION} (commit ${COMMIT})"
+info "Version que se va a comprobar: ${VERSION} (commit ${COMMIT})"
 
 # Refuse to deploy an unidentified or modified checkout onto a customer
 # appliance unless the operator explicitly opts in. CLAUDE.md forbids
@@ -235,7 +248,7 @@ fi
 # The GUI, its X session and the setup wizard all belong to the logged-in
 # desktop user, not to root and not to the khptz service user.
 
-step "Identifying the desktop user"
+step "Buscando el usuario del escritorio"
 
 if [[ -z "${WIZARD_USER}" ]]; then
     WIZARD_USER="${SUDO_USER:-}"
@@ -264,14 +277,14 @@ WIZARD_HOME="$(getent passwd "${WIZARD_USER}" | cut -d: -f6)"
 WIZARD_UID="$(id -u "${WIZARD_USER}")"
 [[ -n "${WIZARD_HOME}" ]] || fatal "User '${WIZARD_USER}' has no home directory."
 
-info "Desktop user: ${WIZARD_USER} (uid ${WIZARD_UID}, home ${WIZARD_HOME})"
+info "Usuario del escritorio: ${WIZARD_USER} (uid ${WIZARD_UID}, home ${WIZARD_HOME})"
 
 # ── Display session ───────────────────────────────────────────────────────────
 # Informational only. Display access itself is granted by the wizard's
 # integration step (scripts/repair_rpi_runtime.sh), which installs a per-login
 # helper running `xhost +SI:localuser:khptz`. See the cleanup step below.
 
-step "Checking the display session"
+step "Comprobando la sesion de escritorio"
 
 if command -v loginctl >/dev/null 2>&1 \
    && loginctl show-user "${WIZARD_USER}" --property=State 2>/dev/null | grep -q "active"; then
@@ -283,7 +296,7 @@ fi
 
 # ── Readiness check ───────────────────────────────────────────────────────────
 
-step "Validating Raspberry Pi readiness"
+step "Comprobando requisitos, sin instalar"
 
 # --dev must reach the check too: it selects a different path layout
 # (/home/<user>/khptz instead of /opt/khptz) and requires pip3. Checking the
@@ -299,12 +312,12 @@ for _arg in "${PASSTHROUGH[@]}"; do
 done
 
 if ! bash "${INSTALLER}" "${_CHECK_ARGS[@]}"; then
-    fatal "This Pi is not ready to install KHPTZ. Fix the FAIL items listed above and re-run."
+    fatal "La comprobacion no ha pasado. Corrige el primer FAIL o ERROR anterior; no instales todavia."
 fi
 
 if [[ "${CHECK_ONLY}" == "true" ]]; then
     echo
-    info "Check-only run complete. Nothing was installed."
+    info "Comprobacion terminada. No se ha instalado nada."
     printf 'Siguiente paso: ejecutar la instalacion desde la revision aprobada: sudo bash %q --wizard-user %q' "${SELF}" "${WIZARD_USER}"
     if [[ ${#PASSTHROUGH[@]} -gt 0 ]]; then printf ' %q' "${PASSTHROUGH[@]}"; fi
     [[ "${ALLOW_DIRTY}" != "true" ]] || printf ' --allow-dirty'
@@ -314,10 +327,11 @@ fi
 
 # ── Install / repair ──────────────────────────────────────────────────────────
 
-step "Installing KHPTZ (safe to re-run)"
+step "Instalando KHPTZ: conserva esta salida si aparece un error"
+INSTALL_STARTED=true
 
 if ! bash "${INSTALLER}" --wizard-user "${WIZARD_USER}" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}; then
-    fatal "The installer did not complete. See the output above."
+    fatal "El instalador no ha terminado. Revisa el primer ERROR de la salida anterior."
 fi
 
 # ── Remove the superseded display drop-in ─────────────────────────────────────
@@ -337,7 +351,7 @@ fi
 # Removing it here means re-running this script repairs an already-affected
 # machine rather than only avoiding the problem on fresh installs (#883).
 
-step "Removing the superseded display drop-in"
+step "Revisando la integracion de pantalla anterior"
 
 if [[ -e "${DROPIN_FILE}" ]]; then
     rm -f -- "${DROPIN_FILE}"
@@ -361,7 +375,7 @@ info "Display access is granted per-login by the wizard integration step."
 # installer. Running as khptz also makes the check reflect what the service
 # actually sees.
 
-step "Running diagnostics"
+step "Comprobando la instalacion con el diagnostico"
 
 DOCTOR_RC=0
 if id khptz >/dev/null 2>&1 && command -v khptz >/dev/null 2>&1; then
@@ -387,7 +401,7 @@ fi
 #   - if it is already running, it is not stuck in a restart loop (the exact
 #     failure mode the first install hit before the display fix).
 
-step "Verifying the GUI is wired to start"
+step "Comprobando el arranque automatico de la pantalla"
 
 if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemctl not found — cannot confirm the GUI will start"
@@ -451,36 +465,29 @@ fi
 echo
 echo "======================================================================"
 case "${DOCTOR_RC}" in
-    0)
-        echo " SUCCESS — KHPTZ ${VERSION} is installed and healthy."
-        echo
-        echo " Next action:  reboot, then log in as ${WIZARD_USER}."
-        echo "               The touchscreen application starts automatically."
-        RC=0
-        ;;
-    10)
-        echo " SUCCESS — KHPTZ ${VERSION} is installed and operational."
-        echo " Deployment recommendations remain (listed above); none of them block use."
-        echo
-        echo " Next action:  reboot, then log in as ${WIZARD_USER}."
+    0|10)
+        echo " INSTALADO: el diagnostico no indica bloqueos."
+        if [[ "${DOCTOR_RC}" == "10" ]]; then
+            echo " Quedan recomendaciones no bloqueantes; conservalas para la entrega."
+        fi
+        echo " Siguiente paso: reinicia cuando sea seguro y entra en el escritorio como ${WIZARD_USER}."
+        echo " Comprueba pantalla, camaras y STOP con el tecnico antes de una reunion."
+        echo " Esta salida no certifica el equipo fisico."
         RC=0
         ;;
     20)
-        echo " INSTALLED — configuration is still required."
-        echo
-        echo " Next action:  run the setup wizard as the desktop user:"
-        echo "                 sudo -u ${WIZARD_USER} khptz setup --force"
-        echo "               Then re-run this script to confirm."
+        echo " INSTALADO, PENDIENTE: falta configurar o comprobar algun componente."
+        echo " Siguiente paso: revisa el primer problema pendiente indicado arriba."
+        echo " Si falta la configuracion inicial, abre una terminal del escritorio y ejecuta:"
+        echo "                 khptz setup"
+        echo " Si ya estaba configurado o el fallo es de arranque/permisos, pide revision tecnica."
+        echo " No uses --force ni reinstales como solucion generica."
         RC=20
         ;;
     *)
-        echo " FAILED — KHPTZ cannot run on this system yet."
-        echo
-        echo " Next action:  fix the items marked FAIL above, then re-run:"
-        echo "                 sudo bash ${SELF} --wizard-user ${WIZARD_USER}"
-        echo
-        echo " If you need help, collect diagnostics with:"
-        echo "                 khptz support-bundle"
+        echo " DETENIDO: el equipo no esta listo para usarse."
+        echo " Siguiente paso: conserva esta salida y pide revision del primer FAIL indicado arriba."
+        echo " No reinstales, borres datos ni restaures sin una copia verificada y un plan."
         RC=30
         ;;
 esac

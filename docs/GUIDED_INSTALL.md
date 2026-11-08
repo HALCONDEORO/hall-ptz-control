@@ -61,3 +61,5 @@ Para deshacerlo, revertir el PR; no se crea estado ni hay migracion de datos.
 El wrapper pasa `--no-check-next-action` al hijo solo en la comprobacion: el
 hijo conserva diagnosticos y exit code, pero deja al wrapper el unico siguiente
 paso. `install.sh --check` directo conserva su salida anterior.
+
+Para la persona que esta delante de la Pi: [Instalar paso a paso](INSTALL_HUMANO.md).

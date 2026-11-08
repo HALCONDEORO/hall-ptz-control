@@ -102,7 +102,7 @@ def test_actual_wrapper_guide_runs_without_installing_or_root():
                             capture_output=True, text=True, timeout=10)
     assert result.returncode == 20
     assert result.stdout.count("Siguiente paso:") == 1
-    assert "Checking how this script was started" not in result.stdout
+    assert "Comprobando como se ha iniciado" not in result.stdout
     assert "Detener" in result.stdout  # test runner is not a validated Pi
 
 
@@ -156,7 +156,7 @@ def test_guide_rejects_install_options_before_host_access(extra):
                             capture_output=True, text=True, timeout=10)
     assert result.returncode == 30
     assert "--guide accepts only" in result.stderr
-    assert "Checking how this script was started" not in result.stdout
+    assert "Comprobando como se ha iniciado" not in result.stdout
 
 
 @pytest.mark.parametrize("mode,expected", [("real", 0), ("stripped", 30)])
