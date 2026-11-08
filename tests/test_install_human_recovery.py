@@ -60,3 +60,30 @@ def test_human_guide_warns_before_probes_and_recovery_not_auto_install():
     assert "rollback total" in doc
     assert "no eludas" in doc.lower()
     assert "Pi 5" in doc and "validacion" in doc
+
+
+@pytest.mark.parametrize("mode", [[], ["--check"], ["--dev"], ["--gui-mode", "user"]])
+def test_permission_recipe_always_checks_never_installs(tmp_path, mode):
+    """Run the real wrapper up to a forced non-root gate; no child is run."""
+    import os
+    import shlex
+
+    checkout = tmp_path / "approved source with spaces"
+    checkout.mkdir()
+    wrapper = checkout / "install_khptz_rpi.sh"
+    # Force only the guard, so this also exercises the recipe if CI runs as root.
+    text = SOURCE.replace('if [[ "${EUID}" -ne 0 ]]; then', 'if true; then')
+    wrapper.write_text(text)
+    result = subprocess.run(['bash', str(wrapper), '--wizard-user', 'desktop user', *mode],
+                            env=dict(os.environ, USER='wrong-default'),
+                            capture_output=True, text=True, timeout=10)
+    assert result.returncode == 30
+    recipes = [line.strip() for line in result.stderr.splitlines()
+               if line.strip().startswith('sudo bash ')]
+    assert len(recipes) == 1
+    assert shlex.split(recipes[0]) == ['sudo', 'bash', str(wrapper), '--wizard-user',
+                                      'desktop user', '--check']
+    assert 'SIN instalar' in result.stderr
+    assert 'no ha iniciado la instalacion' in result.stderr
+    assert result.stderr.count('Siguiente paso:') == 1
+    assert 'Carpeta del programa:' not in result.stdout
