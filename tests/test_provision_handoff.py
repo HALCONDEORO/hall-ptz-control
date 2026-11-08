@@ -156,3 +156,30 @@ class TestEndToEndWithPrivilegedSide:
         assert result is not None and result.ok is True
         assert (resolver.config_dir / "config.yaml").exists()
         assert not req.exists(), "privileged side must shred the request"
+
+
+class TestTimeoutGuidance:
+    def test_timeout_says_result_unknown_and_no_blind_retry(self):
+        from application.provision_handoff import HandoffResult
+
+        text = HandoffResult(ok=False, timed_out=True).summary()
+        assert "No se ha recibido" in text
+        assert "puede seguir" in text
+        assert "no reintentes" in text
+        assert "tecnico" in text
+        assert "try again" not in text.lower()
+
+    def test_timeout_does_not_cancel_request_or_hide_late_result(self, tmp_path):
+        req, res = tmp_path / "request.json", tmp_path / "result.json"
+        clock = [0.0]
+        handoff = ProvisionHandoff(req, res, timeout_s=2, monotonic=lambda: clock[0])
+        handoff.begin(_answers())
+        before = req.read_bytes()
+        clock[0] = 3
+        result = handoff.poll()
+        assert result is not None and result.timed_out and not result.ok
+        assert req.read_bytes() == before
+        res.write_text('{"ok": true, "written": ["fixture-only"]}', encoding="utf-8")
+        late = handoff.poll()
+        assert late is not None and late.ok and not late.timed_out
+        assert late.written == ["fixture-only"]

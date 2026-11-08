@@ -494,3 +494,37 @@ class TestInstallingPageCloseLifecycle:
         assert page._timer.isActive()
         assert "synthetic failure" not in page._status.text()
         wizard.reject()
+
+
+class TestInstallingTimeoutGuidance:
+    def test_timeout_stops_polling_but_does_not_unlock_next(self, wizard):
+        from application.provision_handoff import HandoffResult
+
+        class TimedOut:
+            poll_interval_s = 60
+            starts = 0
+
+            def begin(self, answers):
+                self.starts += 1
+
+            def poll(self):
+                return HandoffResult(ok=False, timed_out=True)
+
+        fake = TimedOut()
+        from PyQt5.QtWidgets import QWizard
+
+        wizard.handoff = fake
+        page = _page(wizard, "InstallingPage")
+        pid = next(i for i in wizard.pageIds() if wizard.page(i) is page)
+        wizard.setStartId(pid)
+        wizard.show()
+        page._poll_once()
+        assert not page._timer.isActive()
+        assert not page.isComplete()
+        assert page._result.timed_out
+        assert "no reintentes" in page._status.text()
+        assert not wizard.button(QWizard.NextButton).isEnabled()
+        wizard.button(QWizard.NextButton).click()
+        assert wizard.currentId() == pid
+        assert fake.starts == 1
+        wizard.reject()
