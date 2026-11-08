@@ -195,8 +195,10 @@ fi
 step "Comprobando como se ha iniciado"
 
 if [[ "${EUID}" -ne 0 ]]; then
-    fatal "La comprobacion necesita permisos de administrador. Usa:
-    sudo bash ${SELF} --wizard-user ${SUDO_USER:-${USER:-pi}}"
+    printf -v _permission_check_cmd 'sudo bash %q --wizard-user %q --check' \
+        "${SELF}" "${WIZARD_USER:-${SUDO_USER:-${USER:-pi}}}"
+    fatal "Se necesitan permisos de administrador. Para comprobar SIN instalar, usa:
+    ${_permission_check_cmd}"
 fi
 
 [[ -f "${INSTALLER}" ]] || fatal "Could not find the installer at:
