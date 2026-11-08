@@ -43,7 +43,8 @@ class HandoffResult:
     ``ok`` mirrors the privileged side's result. ``issues`` carries validation
     problems (field/message) when the answers were rejected; ``error`` carries an
     unexpected failure; ``timed_out`` means no result appeared before the
-    deadline (the wizard should let the operator retry).
+    deadline. This does not cancel the privileged operation or establish its
+    outcome; an operator must check that outcome before retrying.
     """
     ok: bool
     timed_out: bool = False
@@ -56,7 +57,11 @@ class HandoffResult:
         if self.ok:
             return "Setup complete — the room is installed and the service is enabled."
         if self.timed_out:
-            return "Setup did not finish in time. Check the device and try again."
+            return (
+                "No se ha recibido el resultado a tiempo. El sistema puede seguir "
+                "aplicando cambios. Conserva el mensaje y pide al tecnico que "
+                "compruebe el resultado; no reintentes ni reinicies a ciegas."
+            )
         if self.issues:
             joined = "; ".join(i.get("message", "") for i in self.issues)
             return f"Setup could not start: {joined}"
@@ -99,8 +104,9 @@ class ProvisionHandoff:
     def begin(self, answers: ProvisioningAnswers) -> None:
         """Write the request (0600) and arm the deadline. Clears any stale result.
 
-        Idempotent enough to retry: a fresh begin() overwrites the request and
-        removes a leftover result so poll() does not read a previous run's answer.
+        A fresh begin() overwrites the request and removes a leftover result.
+        This does not make retries safe while an earlier operation is active;
+        callers must establish its outcome before submitting another request.
         """
         try:
             self._result_path.unlink()
