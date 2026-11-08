@@ -78,6 +78,7 @@ fatal() {
 
 WIZARD_USER=""
 CHECK_ONLY=false
+GUIDE_ONLY=false
 ALLOW_DIRTY=false
 # Which launcher owns the GUI (#885). Mirrors install.sh's default so the
 # post-install verification below knows which unit to check.
@@ -104,6 +105,8 @@ while [[ $# -gt 0 ]]; do
             WIZARD_USER="$2"; shift 2 ;;
         --wizard-user=*)
             WIZARD_USER="${1#*=}"; shift ;;
+        --guide)
+            GUIDE_ONLY=true; shift ;;
         --check)
             CHECK_ONLY=true; shift ;;
         --allow-dirty)
@@ -138,6 +141,7 @@ Options:
   --wizard-user USER  Desktop user that owns the GUI and the setup wizard.
                       Defaults to \$SUDO_USER, then the active graphical seat.
   --atem              Install the optional ATEM dependencies.
+  --guide             Read-only platform guide; prints one next step, no probes.
   --check             Validate readiness only; write nothing.
   --allow-dirty       Permit an uncommitted or unidentified development source
                       (blocked by default for customer installs).
@@ -165,6 +169,15 @@ HELP
             fatal "Unknown option: $1 (run with --help to see the supported flags)" ;;
     esac
 done
+
+# The guide runs before root/readiness checks and cannot install anything.
+if [[ "${GUIDE_ONLY}" == "true" ]]; then
+    if [[ "${CHECK_ONLY}" == "true" || "${ALLOW_DIRTY}" == "true" || ${#PASSTHROUGH[@]} -gt 0 ]]; then
+        fatal "--guide accepts only --wizard-user; run --check separately."
+    fi
+    cd "${REPO_ROOT}"
+    exec /usr/bin/python3 -B -m runtime.install_guide --wizard-user "${WIZARD_USER}"
+fi
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 
@@ -292,6 +305,10 @@ fi
 if [[ "${CHECK_ONLY}" == "true" ]]; then
     echo
     info "Check-only run complete. Nothing was installed."
+    printf 'Siguiente paso: ejecutar la instalacion desde la revision aprobada: sudo bash %q --wizard-user %q' "${SELF}" "${WIZARD_USER}"
+    if [[ ${#PASSTHROUGH[@]} -gt 0 ]]; then printf ' %q' "${PASSTHROUGH[@]}"; fi
+    [[ "${ALLOW_DIRTY}" != "true" ]] || printf ' --allow-dirty'
+    printf '\n'
     exit 0
 fi
 

@@ -290,6 +290,10 @@ def cmd_doctor(args) -> int:
     # the appliance is unusable, needs configuration, or is ready (#887).
     print(f"  Outcome: {report.outcome.value}")
     print(f"           {report.outcome_description}")
+    if getattr(args, "guide", False):
+        from runtime.install_guide import doctor_next_step
+        print(f"  Siguiente paso: {doctor_next_step(report.exit_code)}")
+        return report.exit_code
     actions = report.action_list()
     if actions:
         print("")
@@ -814,6 +818,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_p.add_argument(
         "--json", action="store_true", default=False,
         help="Output structured JSON (DoctorCheckResult format) instead of human text",
+    )
+
+    doctor_p.add_argument(
+        "--guide", action="store_true", default=False,
+        help="Show one primary next step after diagnostics (normal probes still run)",
     )
 
     fingerprint_p = sub.add_parser("fingerprint", help="Print installation fingerprint (safe state hash)")
