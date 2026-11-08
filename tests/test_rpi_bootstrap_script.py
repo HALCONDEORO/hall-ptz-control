@@ -247,7 +247,7 @@ class TestIdempotenceAndSafety:
     def test_readiness_check_uses_the_same_layout_as_the_install(self, script_text):
         """--dev selects /home/<user>/khptz instead of /opt/khptz and requires
         pip3, so the check must receive it as well."""
-        assert "_CHECK_ARGS=(--check)" in script_text
+        assert "_CHECK_ARGS=(--check --no-check-next-action)" in script_text
         assert '_CHECK_ARGS+=(--dev)' in script_text
 
     def test_never_deletes_customer_paths(self, script_text):
@@ -258,10 +258,10 @@ class TestIdempotenceAndSafety:
 @pytest.mark.skipif(shutil.which("bash") is None or sys.platform == "win32",
                     reason="requires a native POSIX bash")
 @pytest.mark.parametrize("mode_args,expected", [
-    ([], ["--check", "--gui-mode", "system"]),
-    (["--gui-mode", "user"], ["--check", "--gui-mode", "user"]),
-    (["--gui-mode=user", "--dev"], ["--check", "--gui-mode", "user", "--dev"]),
-    (["--gui-mode", "user", "--atem"], ["--check", "--gui-mode", "user", "--atem"]),
+    ([], ["--check", "--no-check-next-action", "--gui-mode", "system"]),
+    (["--gui-mode", "user"], ["--check", "--no-check-next-action", "--gui-mode", "user"]),
+    (["--gui-mode=user", "--dev"], ["--check", "--no-check-next-action", "--gui-mode", "user", "--dev"]),
+    (["--gui-mode", "user", "--atem"], ["--check", "--no-check-next-action", "--gui-mode", "user", "--atem"]),
 ])
 def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
     """Run the real wrapper in check-only mode with an inert installer.
