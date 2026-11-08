@@ -111,3 +111,13 @@ persona que pueda recuperar el equipo si fallan.
 ![Errores y siguientes pasos](screenshots/install-human-recovery.png)
 
 Son ramas reales del wrapper con estados sinteticos, sin ejecutar instalacion.
+
+### Si aparece «termino antes del resumen»
+
+Ha fallado una orden del wrapper fuera de los errores previstos. El resumen
+adicional conserva el codigo de error original y no hace reparaciones. Si la
+instalacion ya habia comenzado, puede haber cambios parciales. Guarda el primer
+error, no solo el resumen final. El aviso no garantiza captura ante un corte de
+corriente, cierre forzoso del proceso o fallo del propio sistema de archivos.
+
+![Ejemplo de salida inesperada con fallo sintetico](screenshots/install-unexpected-exit.png)

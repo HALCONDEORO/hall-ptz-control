@@ -69,8 +69,10 @@ step()  { echo; echo "==> $*"; }
 # Track the boundary where the child may start changing the appliance.
 # A failed install can be partial; never claim that it rolled back completely.
 INSTALL_STARTED=false
+FAILURE_REPORTED=false
 
 fatal() {
+    FAILURE_REPORTED=true
     echo >&2
     echo "[ERROR] $*" >&2
     echo >&2
@@ -84,6 +86,26 @@ fatal() {
     fi
     exit 30
 }
+
+# Only add context to an unexpected nonzero exit. Preserve its original code
+# and preceding stderr; never retry, restart, restore or remove anything here.
+_report_unexpected_exit() {
+    local rc=$?
+    trap - EXIT
+    if [[ "${rc}" -ne 0 && "${FAILURE_REPORTED}" != "true" ]]; then
+        echo >&2
+        echo "[ERROR] La operacion termino antes del resumen (codigo ${rc})." >&2
+        if [[ "${INSTALL_STARTED}" == "true" ]]; then
+            echo "Puede haber cambios parciales; no se garantiza un rollback completo." >&2
+            echo "Siguiente paso: conserva el primer error y pide revision antes de repetir, borrar o restaurar." >&2
+        else
+            echo "El wrapper no habia iniciado la instalacion." >&2
+            echo "Siguiente paso: conserva el primer error y revisa los requisitos antes de continuar." >&2
+        fi
+    fi
+    exit "${rc}"
+}
+trap _report_unexpected_exit EXIT
 
 # ── Arguments ─────────────────────────────────────────────────────────────────
 
@@ -494,4 +516,5 @@ esac
 echo " Version ${VERSION} (commit ${COMMIT})"
 echo "======================================================================"
 
+FAILURE_REPORTED=true
 exit "${RC}"
