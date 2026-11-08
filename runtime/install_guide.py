@@ -79,7 +79,7 @@ def main(argv=None) -> int:
     print("KH PTZ - Guia de instalacion (solo lectura)")
     print(f"Pi: {model} | Sistema: {codename} | Arquitectura: {arch}")
     print(f"Python: {platform.python_version()} | Sesion: {session}")
-    print("Base validada: Pi 4 / Bullseye 64-bit / Python 3.9 / X11.")
+    print("Base objetivo de software: Pi 4 / Bullseye 64-bit / Python 3.9 / X11.")
     print("No instala, no inicia doctor ni el asistente, no prueba camaras ni red.")
     action, code = next_step(
         model=model, codename=codename, architecture=arch,

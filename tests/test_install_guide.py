@@ -157,3 +157,49 @@ def test_guide_rejects_install_options_before_host_access(extra):
     assert result.returncode == 30
     assert "--guide accepts only" in result.stderr
     assert "Checking how this script was started" not in result.stdout
+
+
+@pytest.mark.parametrize("mode,expected", [("real", 0), ("stripped", 30)])
+def test_composed_wrapper_and_real_child_have_one_next_action(mode, expected):
+    """Run wrapper readiness+completion with actual child, stubbed host probes."""
+    source = (ROOT / "install_khptz_rpi.sh").read_text()
+    start = source.index('_CHECK_ARGS=(--check')
+    end = source.index('# ── Install / repair', start)
+    harness = ROOT / "tests/installer/readiness_harness.sh"
+    # bash() dispatches the wrapper's child call to the existing inert harness.
+    # That harness runs the REAL child checks, not a success-only fake.
+    script = f'''
+set -euo pipefail
+CHECK_ONLY=true; DEV_MODE=false; ALLOW_DIRTY=false; GUI_MODE=system
+PASSTHROUGH=(); SELF=/approved/install_khptz_rpi.sh; WIZARD_USER=desktop
+INSTALLER=unused
+info() {{ echo "$*"; }}
+fatal() {{ echo "FATAL: $*"; exit 30; }}
+bash() {{ shift; command bash {str(harness)!r} {mode} "$@"; }}
+''' + source[start:end]
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert result.returncode == expected, result.stdout + result.stderr
+    assert "Run without --check" not in result.stdout
+    assert "=== KHPTZ Installer Readiness Check ===" in result.stdout
+    if mode == "real":
+        assert result.stdout.count("Siguiente paso:") == 1
+        assert "All required checks passed" in result.stdout
+    else:
+        assert "[FAIL]" in result.stdout
+        assert "blocking check(s) failed" in result.stdout
+        assert "Siguiente paso:" not in result.stdout
+
+
+def test_direct_child_check_retains_its_original_next_action():
+    harness = ROOT / "tests/installer/readiness_harness.sh"
+    result = subprocess.run(["bash", str(harness), "real"], capture_output=True, text=True)
+    assert result.returncode == 0
+    assert result.stdout.count("Run without --check") == 1
+
+
+def test_child_suppression_flag_cannot_enter_write_side():
+    result = subprocess.run(["bash", str(ROOT / "runtime/installer/install.sh"),
+                             "--no-check-next-action"], capture_output=True, text=True)
+    assert result.returncode == 1
+    assert "requires --check" in result.stderr
+    assert "Checking prerequisites" not in result.stdout

@@ -39,7 +39,7 @@ de red y camaras**: ejecutarlo solo con permiso para el equipo correspondiente.
 Una configuracion pendiente pide revisar el primer problema pendiente;
 no manda reabrir el asistente con `--force` ni sobrescribir datos a ciegas.
 
-La base validada hoy es Bullseye 64-bit/Python 3.9 en Pi 4 con X11. Detectarla
+La base objetivo de software es Bullseye 64-bit/Python 3.9 en Pi 4 con X11. Detectarla
 no prueba esta unidad concreta, pantalla, reinicio ni camaras. Pi 5, Bookworm,
 Trixie, Wayland y Python nuevos no se declaran compatibles: el ensayo Bookworm
 en contenedor no es validacion fisica. Ninguna ruta de la guia habilita un
@@ -57,3 +57,7 @@ estado sustituidas por fixtures. No representa pruebas en Raspberry Pi real.
 Cambio limitado a orientacion, salida de comprobacion y opcion del diagnostico.
 No cambia aprovisionamiento, permisos, servicios, hardening, backup ni restore.
 Para deshacerlo, revertir el PR; no se crea estado ni hay migracion de datos.
+
+El wrapper pasa `--no-check-next-action` al hijo solo en la comprobacion: el
+hijo conserva diagnosticos y exit code, pero deja al wrapper el unico siguiente
+paso. `install.sh --check` directo conserva su salida anterior.

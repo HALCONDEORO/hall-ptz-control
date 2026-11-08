@@ -34,6 +34,7 @@ set -euo pipefail
 DEV_MODE=false
 INSTALL_ATEM=false
 CHECK_MODE=false
+SHOW_CHECK_NEXT_ACTION=true
 WIZARD_USER=""
 # Which process owns the GUI (#885).
 #   system — khptz-control.service runs it as the 'khptz' system user, bridged to
@@ -48,6 +49,7 @@ while [[ $# -gt 0 ]]; do
         --dev)   DEV_MODE=true; shift ;;
         --atem)  INSTALL_ATEM=true; shift ;;
         --check) CHECK_MODE=true; shift ;;
+        --no-check-next-action) SHOW_CHECK_NEXT_ACTION=false; shift ;;
         --wizard-user)
             [[ $# -ge 2 && -n "$2" && "$2" != -* ]] \
                 || { echo "--wizard-user requires a username (e.g. --wizard-user pi)" >&2; exit 1; }
@@ -69,6 +71,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --dev            Developer install — current user, /home/USER/khptz layout"
             echo "  --atem           Install ATEM optional dependencies (requires pip3)"
             echo "  --check          Dry-run: validate Pi readiness without writing any files"
+            echo "  --no-check-next-action  With --check: caller supplies the next action"
             echo "  --wizard-user U  Desktop user that owns the setup-wizard provisioning"
             echo "                   channel (/run/khptz). Defaults to \$SUDO_USER."
             echo "  --gui-mode M     system (default) = GUI runs as the khptz service user;"
@@ -81,6 +84,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "${SHOW_CHECK_NEXT_ACTION}" == "false" && "${CHECK_MODE}" != "true" ]]; then
+    echo "--no-check-next-action requires --check" >&2
+    exit 1
+fi
 
 # The setup wizard runs in the desktop session as this user; it owns the
 # /run/khptz provisioning channel. Default to the human who invoked sudo.
@@ -292,7 +300,9 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     info "=== Summary ==="
     if [[ ${_check_fails} -eq 0 ]]; then
         info "All required checks passed. Ready to install."
-        info "Run without --check to proceed: sudo ./runtime/installer/install.sh"
+        if [[ "${SHOW_CHECK_NEXT_ACTION}" == "true" ]]; then
+            info "Run without --check to proceed: sudo ./runtime/installer/install.sh"
+        fi
     else
         info "${_check_fails} blocking check(s) failed. Resolve before installing."
     fi
