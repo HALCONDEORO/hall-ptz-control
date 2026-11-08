@@ -163,10 +163,10 @@ class TestTimeoutGuidance:
         from application.provision_handoff import HandoffResult
 
         text = HandoffResult(ok=False, timed_out=True).summary()
-        assert "No se ha recibido" in text
-        assert "puede seguir" in text
-        assert "no reintentes" in text
-        assert "tecnico" in text
+        assert "No result was received in time" in text
+        assert "may still be applying changes" in text
+        assert "do not retry or restart blindly" in text
+        assert "technician" in text
         assert "try again" not in text.lower()
 
     def test_timeout_does_not_cancel_request_or_hide_late_result(self, tmp_path):

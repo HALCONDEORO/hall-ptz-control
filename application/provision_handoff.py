@@ -58,9 +58,9 @@ class HandoffResult:
             return "Setup complete — the room is installed and the service is enabled."
         if self.timed_out:
             return (
-                "No se ha recibido el resultado a tiempo. El sistema puede seguir "
-                "aplicando cambios. Conserva el mensaje y pide al tecnico que "
-                "compruebe el resultado; no reintentes ni reinicies a ciegas."
+                "No result was received in time. The system may still be applying changes. "
+                "Keep this message and ask the technician to check the result; "
+                "do not retry or restart blindly."
             )
         if self.issues:
             joined = "; ".join(i.get("message", "") for i in self.issues)
