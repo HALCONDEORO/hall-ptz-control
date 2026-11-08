@@ -165,6 +165,11 @@ def setup_wizard_qss() -> str:
         f" stop:0 {BRAND_MID}, stop:1 {BRAND_DARK});"
         " border: none; color: white; }"
         f"QPushButton:default:pressed {{ background: {BRAND_DARK}; }}"
+        # More specific than :default and :default:pressed. Otherwise Qt
+        # paints the disabled Next button as a live green call to action.
+        "QPushButton:disabled, QPushButton:default:disabled,"
+        " QPushButton:default:disabled:pressed {"
+        " background: #F0F1EF; color: #666666; border: 1px solid #D0D4CE; }"
     )
 
 

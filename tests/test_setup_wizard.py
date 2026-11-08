@@ -528,3 +528,47 @@ class TestInstallingTimeoutGuidance:
         assert wizard.currentId() == pid
         assert fake.starts == 1
         wizard.reject()
+
+
+class TestWizardDisabledButtonAppearance:
+    @pytest.mark.parametrize("size", [(800, 480), (1280, 720)])
+    def test_default_next_has_disabled_fill_and_cannot_advance(self, wizard, _qapp, size):
+        from PyQt5.QtWidgets import QWizard
+        from application.provision_handoff import HandoffResult
+
+        class Pending:
+            poll_interval_s = 60
+
+            def begin(self, answers):
+                pass
+
+            def poll(self):
+                return None
+
+        wizard.handoff = Pending()
+        page = _page(wizard, "InstallingPage")
+        pid = next(i for i in wizard.pageIds() if wizard.page(i) is page)
+        wizard.setStartId(pid)
+        wizard.setFixedSize(*size)
+        wizard.show()
+        _qapp.processEvents()
+        button = wizard.button(QWizard.NextButton)
+        button.setDefault(True)
+        _qapp.processEvents()
+        assert button.isDefault()
+        assert not button.isEnabled()
+        # Sample away from the text and rounded corners. QSS palette values
+        # alone do not prove what Qt actually painted for a default button.
+        image = button.grab().toImage()
+        assert image.pixelColor(12, image.height() // 2).name() == "#f0f1ef"
+        button.click()
+        assert wizard.currentId() == pid
+        page._apply_result(HandoffResult(ok=True))
+        _qapp.processEvents()
+        assert button.isEnabled()
+        image = button.grab().toImage()
+        fill = image.pixelColor(12, image.height() // 2)
+        assert fill.green() > fill.red() + 10
+        assert fill.name() != "#f0f1ef"
+        page._timer.stop()
+        wizard.reject()
