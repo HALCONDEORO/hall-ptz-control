@@ -27,6 +27,7 @@
 set -euo pipefail
 
 MODE="${1:-real}"
+[[ $# -eq 0 ]] || shift
 
 HARNESS_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -P "${HARNESS_DIR}/../.." && pwd)"
@@ -88,6 +89,7 @@ fi
 # are installed, without changing the production script's interpreter choice.
 PATH="${STUB_DIR}:${PATH}" bash -c '
     function /usr/bin/python3() { command python3 "$@"; }
-    source "$1" --check
-' readiness-harness "${RUN_INSTALLER}"
+    installer="$1"; shift
+    source "$installer" --check "$@"
+' readiness-harness "${RUN_INSTALLER}" "$@"
 

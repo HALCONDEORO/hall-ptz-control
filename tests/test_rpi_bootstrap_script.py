@@ -201,12 +201,12 @@ class TestReportingContract:
         assert "rev-parse --short HEAD" in script_text
 
     def test_distinguishes_success_config_required_and_fatal(self, script_text):
-        assert "SUCCESS" in script_text
-        assert "INSTALLED" in script_text
-        assert "FAILED" in script_text
+        assert "INSTALADO:" in script_text
+        assert "PENDIENTE" in script_text
+        assert "DETENIDO" in script_text
 
     def test_prints_a_single_next_action(self, script_text):
-        assert "Next action:" in script_text
+        assert "Siguiente paso:" in script_text
 
     def test_branches_on_every_doctor_outcome_exit_code(self, script_text):
         """Must stay aligned with domain/doctor_outcome.py exit codes."""
@@ -216,7 +216,7 @@ class TestReportingContract:
         for outcome in (DoctorOutcome.PASS, DoctorOutcome.READY_WITH_ADVISORIES,
                         DoctorOutcome.CONFIG_REQUIRED):
             code = exit_code_for(outcome)
-            assert re.search(rf"^\s*{code}\)", case_block, re.MULTILINE), \
+            assert re.search(rf"^\s*(?:[0-9]+\|)*{code}(?:\|[0-9]+)*\)", case_block, re.MULTILINE), \
                 f"no branch for exit code {code} ({outcome.value})"
         # FAIL and anything unexpected share the catch-all branch.
         assert "*)" in case_block
@@ -247,7 +247,7 @@ class TestIdempotenceAndSafety:
     def test_readiness_check_uses_the_same_layout_as_the_install(self, script_text):
         """--dev selects /home/<user>/khptz instead of /opt/khptz and requires
         pip3, so the check must receive it as well."""
-        assert "_CHECK_ARGS=(--check)" in script_text
+        assert "_CHECK_ARGS=(--check --no-check-next-action)" in script_text
         assert '_CHECK_ARGS+=(--dev)' in script_text
 
     def test_never_deletes_customer_paths(self, script_text):
@@ -258,10 +258,10 @@ class TestIdempotenceAndSafety:
 @pytest.mark.skipif(shutil.which("bash") is None or sys.platform == "win32",
                     reason="requires a native POSIX bash")
 @pytest.mark.parametrize("mode_args,expected", [
-    ([], ["--check", "--gui-mode", "system"]),
-    (["--gui-mode", "user"], ["--check", "--gui-mode", "user"]),
-    (["--gui-mode=user", "--dev"], ["--check", "--gui-mode", "user", "--dev"]),
-    (["--gui-mode", "user", "--atem"], ["--check", "--gui-mode", "user", "--atem"]),
+    ([], ["--check", "--no-check-next-action", "--gui-mode", "system"]),
+    (["--gui-mode", "user"], ["--check", "--no-check-next-action", "--gui-mode", "user"]),
+    (["--gui-mode=user", "--dev"], ["--check", "--no-check-next-action", "--gui-mode", "user", "--dev"]),
+    (["--gui-mode", "user", "--atem"], ["--check", "--no-check-next-action", "--gui-mode", "user", "--atem"]),
 ])
 def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
     """Run the real wrapper in check-only mode with an inert installer.
@@ -301,4 +301,4 @@ def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert recorded.read_text(encoding="utf-8").splitlines() == expected
-    assert "Check-only run complete" in result.stdout
+    assert "Comprobacion terminada" in result.stdout

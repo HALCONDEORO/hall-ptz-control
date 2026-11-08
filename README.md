@@ -79,6 +79,12 @@ On a fresh Raspberry Pi OS Bullseye system (the Pi 5 path is untested, see [Requ
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
+bash install_khptz_rpi.sh --guide
+```
+
+Follow the guide / Sigue la guia. Manual check and install / Comprobacion e instalacion manual:
+
+```bash
 sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
@@ -204,6 +210,12 @@ En un sistema Raspberry Pi OS Bullseye recién instalado (el camino Pi 5 está s
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
+bash install_khptz_rpi.sh --guide
+```
+
+Follow the guide / Sigue la guia. Manual check and install / Comprobacion e instalacion manual:
+
+```bash
 sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
@@ -250,3 +262,5 @@ sesión en modo simulación y registra los resultados en
 
 Código original: MIT, ver [LICENSE](LICENSE). Las dependencias mantienen sus propias
 condiciones; consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Read-only installation guide / Guia de instalacion de solo lectura: [GUIDED_INSTALL](docs/GUIDED_INSTALL.md).
