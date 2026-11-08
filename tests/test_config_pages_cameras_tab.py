@@ -43,16 +43,17 @@ def offline_cameras(monkeypatch):
 @pytest.fixture
 def discovery(monkeypatch):
     """Control what a network scan finds."""
-    import application.camera_discovery as camera_discovery
+    import application.camera_discovery_verification as camera_discovery
+    from application.camera_discovery_verification import CameraCandidate
 
     state = {"found": ["172.16.1.21", "172.16.1.22"], "error": None}
 
-    def _discover():
+    def _discover(subnet):
         if state["error"] is not None:
             raise state["error"]
-        return state["found"]
+        return [CameraCandidate(ip, True) for ip in state["found"]]
 
-    monkeypatch.setattr(camera_discovery, "discover_cameras", _discover)
+    monkeypatch.setattr(camera_discovery, "discover_and_verify", _discover)
     return state
 
 
@@ -130,53 +131,53 @@ class TestLiveSessionLock:
 class TestDiscovery:
     def test_found_devices_are_listed(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
-        assert "172.16.1.21" in label_texts(layout)
-        assert "172.16.1.22" in label_texts(layout)
+        button_named(layout, "Find and check cameras").click()
+        assert has_text(layout, "172.16.1.21")
+        assert has_text(layout, "172.16.1.22")
 
     def test_the_count_is_reported(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
-        assert has_text(layout, "2 device(s) found")
+        button_named(layout, "Find and check cameras").click()
+        assert has_text(layout, "2 candidate(s)")
 
     def test_each_device_can_be_assigned_to_either_role(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assert len(assign_buttons(dialog, "Platform")) == 2
         assert len(assign_buttons(dialog, "Comments")) == 2
 
     def test_an_empty_network_says_so(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
         discovery["found"] = []
-        button_named(layout, "Scan Network").click()
-        assert has_text(layout, "No VISCA devices found")
+        button_named(layout, "Find and check cameras").click()
+        assert has_text(layout, "No accessible camera ports found")
 
     def test_a_failing_scan_is_not_reported_as_devices(self, monkeypatch, discovery):
         """A broadcast that raises (no route, permission) must degrade to "none
         found", not crash the panel."""
         dialog, mw, layout = build(monkeypatch)
         discovery["error"] = OSError("network is unreachable")
-        button_named(layout, "Scan Network").click()
-        assert has_text(layout, "No VISCA devices found")
+        button_named(layout, "Find and check cameras").click()
+        assert has_text(layout, "Camera check failed")
 
     def test_the_scan_button_always_comes_back(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
         discovery["error"] = OSError("boom")
-        btn = button_named(layout, "Scan Network")
+        btn = button_named(layout, "Find and check cameras")
         btn.click()
         assert btn.isEnabled()
-        assert btn.text() == "Scan Network"
+        assert btn.text() == "Find and check cameras"
 
     def test_a_rescan_replaces_the_previous_results(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         discovery["found"] = ["172.16.1.30"]
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assert len(assign_buttons(dialog, "Platform")) == 1
 
     def test_nothing_is_written_to_a_closed_dialog(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch, visible=False)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assert "172.16.1.21" not in label_texts(layout)
 
     def test_the_scan_runs_off_the_gui_thread(self, monkeypatch, discovery):
@@ -185,7 +186,7 @@ class TestDiscovery:
         started = []
 
         class _Thread:
-            def __init__(self, target=None, daemon=None):
+            def __init__(self, target=None, args=(), daemon=None):
                 started.append(daemon)
 
             def start(self):
@@ -194,7 +195,7 @@ class TestDiscovery:
         monkeypatch.setattr(tab, "threading", type("T", (), {"Thread": _Thread}))
         dialog, mw, layout = make_harness()
         tab.build_cameras_tab(dialog, layout, mw, False, False, panel_layout)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assert started == [True]
 
 
@@ -202,19 +203,19 @@ class TestAssignment:
     def test_the_service_owns_the_write(self, monkeypatch, discovery):
         """ADR-006 / #893: the widget never writes config.yaml itself."""
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert mw._camera_config.camera_ips == [(1, "172.16.1.21")]
 
     def test_comments_role_targets_camera_two(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Comments")[1].click()
         assert mw._camera_config.camera_ips == [(2, "172.16.1.22")]
 
     def test_a_saved_assignment_says_so(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert dialog.toasts == [("Platform camera → 172.16.1.21 assigned and saved", "ok")]
 
@@ -223,7 +224,7 @@ class TestAssignment:
         saved loses the camera on the next reboot."""
         dialog, mw, layout = build(monkeypatch)
         mw._camera_config.result = type("R", (), {"ok": True, "code": "PARTIAL"})()
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert dialog.toasts == [
             ("Platform camera → 172.16.1.21 assigned (this session only)", "warn"),
@@ -232,26 +233,26 @@ class TestAssignment:
     def test_a_failed_write_is_not_reported_as_saved(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
         mw._camera_config.result = type("R", (), {"ok": False, "code": "OK"})()
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert dialog.toasts[0][1] == "warn"
 
     def test_a_missing_service_still_reports_honestly(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
         mw._camera_config = None
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert dialog.toasts[0][1] == "warn"
 
     def test_the_card_shows_the_new_ip_without_a_restart(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert dialog._cam_ip_labels[1].text() == "172.16.1.21"
 
     def test_the_used_button_is_marked_and_spent(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         btn = assign_buttons(dialog, "Platform")[0]
         btn.click()
         assert btn.text() == "✓ Platform"
@@ -260,7 +261,7 @@ class TestAssignment:
     def test_only_one_device_can_hold_a_role(self, monkeypatch, discovery):
         """Assigning the second device to Platform must release the first."""
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         first, second = assign_buttons(dialog, "Platform")
         first.click()
         second.click()
@@ -269,7 +270,7 @@ class TestAssignment:
 
     def test_the_other_role_is_untouched(self, monkeypatch, discovery):
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert all(b.isEnabled() for b in assign_buttons(dialog, "Comments"))
 
@@ -283,7 +284,7 @@ class TestConnectivityRecheck:
             lambda ip, cam_id: seen.append(ip) or True, raising=False,
         )
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert seen == ["172.16.1.21"]
 
@@ -291,7 +292,7 @@ class TestConnectivityRecheck:
         import config
         monkeypatch.setattr(config, "check_camera", lambda ip, cam_id: True, raising=False)
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Green"
 
@@ -299,7 +300,7 @@ class TestConnectivityRecheck:
         import config
         monkeypatch.setattr(config, "check_camera", lambda ip, cam_id: False, raising=False)
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Red"
 
@@ -311,7 +312,7 @@ class TestConnectivityRecheck:
 
         monkeypatch.setattr(config, "check_camera", _boom, raising=False)
         dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan Network").click()
+        button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Red"
 
@@ -325,8 +326,9 @@ class TestConnectivityRecheck:
             lambda ip, cam_id: seen.append(ip) or True, raising=False,
         )
         dialog, mw, layout = build(monkeypatch, sim_active=True)
-        button_named(layout, "Scan Network").click()
-        assign_buttons(dialog, "Platform")[0].click()
+        button_named(layout, "Find and check cameras").click()
+        assert assign_buttons(dialog, "Platform") == []
+        assert not button_named(layout, "Find and check cameras").isEnabled()
         assert seen == []
 
 
@@ -350,3 +352,78 @@ class TestReconnect:
         btn = button_named(layout, "Reconnect Cameras")
         btn.click()
         assert btn.isEnabled()
+
+
+class TestVerifiedDiscoverySafety:
+    def test_unknown_ports_are_not_assignable(self, monkeypatch):
+        from application.camera_discovery_verification import CameraCandidate
+        import application.camera_discovery_verification as service
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: [
+            CameraCandidate('192.0.2.10', False), CameraCandidate('192.0.2.11', True)])
+        dialog, mw, layout = build(monkeypatch)
+        button_named(layout, 'Find and check cameras').click()
+        assert has_text(layout, 'TCP port accessible; camera not recognised')
+        assert not assign_buttons(dialog, 'Platform')[0].isEnabled()
+        assign_buttons(dialog, 'Platform')[0].click()
+        assert mw._camera_config.camera_ips == []
+        assign_buttons(dialog, 'Platform')[1].click()
+        # Releasing the role must never enable an unrecognised candidate.
+        assert not assign_buttons(dialog, 'Platform')[0].isEnabled()
+        assert dialog.confirmations == ['Assign camera?']
+
+    def test_cancel_does_not_assign_or_reconnect(self, monkeypatch, discovery):
+        dialog, mw, layout = build(monkeypatch)
+        dialog.confirm_answer = False
+        button_named(layout, 'Find and check cameras').click()
+        assign_buttons(dialog, 'Platform')[0].click()
+        assert mw._camera_config.camera_ips == []
+        assert mw._cameras.calls == []
+        assert dialog.toasts == []
+
+    def test_live_session_blocks_scan(self, monkeypatch, discovery):
+        dialog, mw, layout = build(monkeypatch, is_on=True)
+        btn = button_named(layout, 'Find and check cameras')
+        assert not btn.isEnabled()
+        btn.click()
+        assert assign_buttons(dialog, 'Platform') == []
+
+    def test_session_started_after_results_blocks_assignment(self, monkeypatch, discovery):
+        dialog, mw, layout = build(monkeypatch)
+        button_named(layout, 'Find and check cameras').click()
+        mw.session_active = True
+        assign_buttons(dialog, 'Platform')[0].click()
+        assert not mw._camera_config.camera_ips
+        assert not dialog.confirmations
+
+    def test_invalid_subnet_never_starts_scan(self, monkeypatch):
+        from PyQt5.QtWidgets import QLineEdit
+        import application.camera_discovery_verification as service
+        seen = []
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: seen.append(subnet))
+        dialog, mw, layout = build(monkeypatch)
+        dialog.findChild(QLineEdit, 'cameraDiscoverySubnet').setText('bad')
+        button_named(layout, 'Find and check cameras').click()
+        assert seen == []
+        assert has_text(layout, 'Enter the first three IPv4 octets')
+
+    def test_selected_subnet_reaches_service(self, monkeypatch):
+        from PyQt5.QtWidgets import QLineEdit
+        import application.camera_discovery_verification as service
+        seen = []
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: seen.append(subnet) or [])
+        dialog, mw, layout = build(monkeypatch)
+        dialog.findChild(QLineEdit, 'cameraDiscoverySubnet').setText('192.0.2')
+        button_named(layout, 'Find and check cameras').click()
+        assert seen == ['192.0.2']
+
+
+def test_failed_assignment_never_marks_candidate_as_assigned(monkeypatch, discovery):
+    dialog, mw, layout = build(monkeypatch)
+    mw._camera_config.result = type('R', (), {'ok': False, 'code': 'VALIDATION_ERROR'})()
+    button_named(layout, 'Find and check cameras').click()
+    btn = assign_buttons(dialog, 'Platform')[0]
+    btn.click()
+    assert btn.isEnabled()
+    assert btn.text() == '→ Platform'
+    assert dialog._cam_ip_labels[1].text() == '172.16.1.11'
+    assert has_text(layout, '172.16.1.21')
