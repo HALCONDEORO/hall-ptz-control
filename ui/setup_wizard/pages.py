@@ -482,9 +482,9 @@ class InstallingPage(_BasePage):
         self._status.setTextFormat(Qt.PlainText)
         lay.addWidget(self._status)
         pending_notice = QLabel(
-            "Cerrar esta ventana no cancela los cambios que ya este aplicando el sistema. "
-            "Si se cierra o se agota el tiempo, no inicies otro intento hasta que "
-            "el tecnico compruebe el resultado."
+            "Closing this window does not cancel changes the system is already applying. "
+            "If it closes or times out, do not start another attempt until "
+            "the technician has checked the result."
         )
         pending_notice.setWordWrap(True)
         pending_notice.setTextFormat(Qt.PlainText)

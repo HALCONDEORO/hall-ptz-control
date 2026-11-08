@@ -470,8 +470,8 @@ class TestInstallingPageCloseLifecycle:
         wizard = SetupWizard(handoff=_FakeHandoff())
         page = _page(wizard, "InstallingPage")
         text = "\n".join(label.text() for label in page.findChildren(QLabel))
-        assert "Cerrar esta ventana no cancela" in text
-        assert "no inicies otro intento" in text
+        assert "Closing this window does not cancel" in text
+        assert "do not start another attempt" in text
 
     def test_reentering_after_failure_resets_previous_result_and_rearms_timer(self, _qapp):
         from application.provision_handoff import HandoffResult
@@ -522,7 +522,7 @@ class TestInstallingTimeoutGuidance:
         assert not page._timer.isActive()
         assert not page.isComplete()
         assert page._result.timed_out
-        assert "no reintentes" in page._status.text()
+        assert "do not retry or restart blindly" in page._status.text()
         assert not wizard.button(QWizard.NextButton).isEnabled()
         wizard.button(QWizard.NextButton).click()
         assert wizard.currentId() == pid
@@ -572,3 +572,40 @@ class TestWizardDisabledButtonAppearance:
         assert fill.name() != "#f0f1ef"
         page._timer.stop()
         wizard.reject()
+
+
+class TestWizardEnglishConsistency:
+    @pytest.mark.parametrize("locale_name", ["es_ES", "fr_FR"])
+    def test_buttons_stay_english_under_other_desktop_locales(self, _qapp, locale_name):
+        from PyQt5.QtCore import QLocale
+        from PyQt5.QtWidgets import QWizard
+        from ui.setup_wizard import SetupWizard
+
+        previous = QLocale()
+        try:
+            QLocale.setDefault(QLocale(locale_name))
+            wizard = SetupWizard(handoff=_FakeHandoff())
+            expected = {QWizard.BackButton: "< Back", QWizard.NextButton: "Next >",
+                        QWizard.CommitButton: "Apply", QWizard.FinishButton: "Finish",
+                        QWizard.CancelButton: "Cancel", QWizard.HelpButton: "Help"}
+            for button, text in expected.items():
+                assert wizard.buttonText(button) == text
+            wizard.reject()
+        finally:
+            QLocale.setDefault(previous)
+
+    def test_pending_and_timeout_safety_messages_are_english(self, wizard):
+        from PyQt5.QtWidgets import QLabel
+        from application.provision_handoff import HandoffResult
+
+        page = _page(wizard, "InstallingPage")
+        labels = " ".join(label.text() for label in page.findChildren(QLabel))
+        assert page.title() == "Installing"
+        assert "Closing this window does not cancel changes" in labels
+        assert "do not start another attempt until" in labels
+        timeout = HandoffResult(ok=False, timed_out=True).summary()
+        assert "The system may still be applying changes" in timeout
+        assert "technician" in timeout
+        assert "do not retry or restart blindly" in timeout
+        for old_text in ("Cerrar esta ventana", "No se ha recibido", "no reintentes"):
+            assert old_text not in labels + timeout

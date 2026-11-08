@@ -48,6 +48,16 @@ class SetupWizard(QWizard):
 
         self.setWindowTitle("KHPTZ Setup")
         self.setWizardStyle(QWizard.ModernStyle)
+        # The wizard uses English throughout, independent of the desktop Qt locale.
+        for button, text in (
+            (QWizard.BackButton, "< Back"),
+            (QWizard.NextButton, "Next >"),
+            (QWizard.CommitButton, "Apply"),
+            (QWizard.FinishButton, "Finish"),
+            (QWizard.CancelButton, "Cancel"),
+            (QWizard.HelpButton, "Help"),
+        ):
+            self.setButtonText(button, text)
         self.setOption(QWizard.NoBackButtonOnStartPage, True)
         apply_stylesheet_safely(self, setup_wizard_qss())
 
