@@ -481,9 +481,20 @@ class InstallingPage(_BasePage):
         self._status.setWordWrap(True)
         self._status.setTextFormat(Qt.PlainText)
         lay.addWidget(self._status)
+        pending_notice = QLabel(
+            "Cerrar esta ventana no cancela los cambios que ya este aplicando el sistema. "
+            "Si se cierra o se agota el tiempo, no inicies otro intento hasta que "
+            "el tecnico compruebe el resultado."
+        )
+        pending_notice.setWordWrap(True)
+        pending_notice.setTextFormat(Qt.PlainText)
+        lay.addWidget(pending_notice)
         lay.addStretch()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll_once)
+        # QWizard.reject/close need not invoke cleanupPage. Stop only UI polling;
+        # the privileged operation is independent and must not be deleted/retried.
+        wizard.finished.connect(self._timer.stop)
         self._result = None
         self._done = False
 
