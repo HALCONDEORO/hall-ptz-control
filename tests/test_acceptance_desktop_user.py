@@ -17,6 +17,7 @@ is asserted, so unrelated sections cannot make the verdicts flaky.
 import stat
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -74,7 +75,7 @@ def _write_exe(path: Path, text: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _run_acceptance(tmp_path: Path, fixture: str | None, with_loginctl: bool = True,
+def _run_acceptance(tmp_path: Path, fixture: Optional[str], with_loginctl: bool = True,
                     extra_env: dict | None = None) -> str:
     stubbin = tmp_path / "bin"
     stubbin.mkdir(exist_ok=True)
