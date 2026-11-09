@@ -22,8 +22,19 @@
 #   readiness_harness.sh stripped — run --check against a copy missing the
 #                                   systemd service template (must FAIL)
 #   readiness_harness.sh wayland [--wizard-user U]
-#                                 — stub loginctl to report a Wayland desktop
-#                                   session (the GUI units need X11: must FAIL)
+#                                 — stub loginctl to report an active Wayland
+#                                   desktop session (the GUI units need X11:
+#                                   must FAIL)
+#   readiness_harness.sh x11 [..] — active X11 session: must PASS that check
+#   readiness_harness.sh mixed-x11-active [..]
+#                                 — inactive Wayland listed before the active
+#                                   X11 session: must PASS (active wins)
+#   readiness_harness.sh mixed-wayland-active [..]
+#                                 — inactive X11 listed before the active
+#                                   Wayland session: must FAIL (active wins)
+#   readiness_harness.sh loginctl-fails [..]
+#                                 — loginctl errors out: session uninspectable,
+#                                   must WARN, never FAIL
 #
 # Extra arguments after the mode are forwarded to install.sh.
 #
@@ -67,18 +78,54 @@ exit 0
 STUB
 done
 
-# mode=wayland: a loginctl stub reporting one graphical Wayland session for the
-# --wizard-user the caller passes, so the session-type branch runs the same on
-# every host. Created only in this mode: modes without it exercise the "no
-# inspectable session" branch with whatever the host provides.
-if [[ "${MODE}" == "wayland" ]]; then
+# Session-type modes: a loginctl stub whose answers come from a table file, so
+# the session-selection logic (Active first, then State=active, then
+# uninspectable) runs the same on every host. Table columns:
+# session-id, Type, Active, State. Modes without a stub exercise the
+# "uninspectable session" branch with whatever the host provides.
+case "${MODE}" in
+    wayland)               SESSION_TABLE="c1 wayland yes active" ;;
+    x11)                   SESSION_TABLE="c1 x11 yes active" ;;
+    mixed-x11-active)      SESSION_TABLE="c1 wayland no online
+c2 x11 yes active" ;;
+    mixed-wayland-active)  SESSION_TABLE="c1 x11 no online
+c2 wayland yes active" ;;
+    *)                     SESSION_TABLE="" ;;
+esac
+
+if [[ -n "${SESSION_TABLE}" ]]; then
     cat > "${STUB_DIR}/loginctl" <<'STUB'
 #!/usr/bin/env bash
-case "$1" in
-    list-sessions) echo "c1 1000 tester seat0 tty7" ;;
-    show-session)  echo "wayland" ;;
-esac
+TABLE_FILE="$(dirname "$0")/loginctl-table"
+if [[ "$1" == "list-sessions" ]]; then
+    while read -r sid _type _active _state; do
+        [[ -n "${sid}" ]] && echo "${sid} 1000 tester seat0 tty7"
+    done < "${TABLE_FILE}"
+    exit 0
+fi
+if [[ "$1" == "show-session" ]]; then
+    sid="$2"
+    prop="${3#--property=}"
+    while read -r s type active state; do
+        [[ "${s}" == "${sid}" ]] || continue
+        case "${prop}" in
+            Type)   echo "${type}" ;;
+            Active) echo "${active}" ;;
+            State)  echo "${state}" ;;
+        esac
+        exit 0
+    done < "${TABLE_FILE}"
+fi
 exit 0
+STUB
+    printf '%s\n' "${SESSION_TABLE}" > "${STUB_DIR}/loginctl-table"
+fi
+
+# mode=loginctl-fails: loginctl exists but errors out (no running systemd).
+if [[ "${MODE}" == "loginctl-fails" ]]; then
+    cat > "${STUB_DIR}/loginctl" <<'STUB'
+#!/usr/bin/env bash
+exit 1
 STUB
 fi
 
