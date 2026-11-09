@@ -699,8 +699,17 @@ if [[ "${DEV_MODE}" == "false" ]]; then
         # container), so create it before writing rather than failing the install.
         mkdir -p /etc/tmpfiles.d
         printf 'd /run/khptz 0750 %s root -\n' "${WIZARD_USER}" > /etc/tmpfiles.d/khptz.conf
-        systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf \
-            || warn "systemd-tmpfiles --create failed; /run/khptz will be created on next boot"
+        # If tmpfiles cannot create the directory now, create it directly
+        # with the same owner and mode: without it the wizard cannot drop
+        # request.json and provisioning is dead until the next boot, with
+        # only this install log to explain why.
+        if ! systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf; then
+            if install -d -m 0750 -o "${WIZARD_USER}" -g root /run/khptz; then
+                warn "systemd-tmpfiles --create failed; /run/khptz created directly with the same owner and mode."
+            else
+                warn "Could not create /run/khptz; the provisioning channel works after the next boot."
+            fi
+        fi
 
         systemctl daemon-reload
         systemctl enable khptz-provision.path 2>/dev/null || true

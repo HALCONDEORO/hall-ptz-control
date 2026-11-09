@@ -577,6 +577,16 @@ class TestProvisioningChannel:
         assert 'd /run/khptz 0750 %s root' in sh
         assert "systemd-tmpfiles --create" in sh
 
+    def test_tmpfiles_failure_creates_run_khptz_directly(self):
+        """If systemd-tmpfiles cannot create /run/khptz now, a bare warning
+        leaves the wizard unable to provision until the next boot with only
+        the install log to explain why. The fallback must create the
+        directory immediately, with the SAME owner and mode as the tmpfiles
+        line, or the wizard still cannot write request.json this boot."""
+        sh = _sh()
+        assert 'if ! systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf' in sh
+        assert 'install -d -m 0750 -o "${WIZARD_USER}" -g root /run/khptz' in sh
+
     def test_installer_enables_path_unit(self):
         assert "systemctl enable khptz-provision.path" in _sh()
 
