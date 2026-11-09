@@ -56,12 +56,14 @@ wins:
 
 ## Requirements
 
-- Raspberry Pi hardware with Raspberry Pi OS. The software and CI baseline is
-  **Raspberry Pi OS Bullseye (Debian 11), 64-bit, with Python 3.9.2**. This is a
-  software baseline: no hardware has been validated yet. Two paths:
-  - **Pi 4 / Bullseye** - the path the docs, installer and CI target.
-  - **Pi 5 / Bookworm or Trixie** - untested. Raspberry Pi 5 does not run Bullseye. Bookworm and Trixie default to Wayland, so the
-    session must be switched to X11 first, and `--atem` and `--dev` must not be used
+- Raspberry Pi hardware with Raspberry Pi OS. The installation target is
+  **Raspberry Pi OS Bookworm (Debian 12), 64-bit, with Desktop and Python 3.11**,
+  on Raspberry Pi 4 or 5. The original software and CI baseline, **Bullseye
+  (Debian 11), 64-bit, with Python 3.9.2 on Pi 4**, remains supported. No hardware
+  has been physically validated yet. Two paths:
+  - **Pi 4 / Bookworm** (or the Bullseye baseline) - the path the docs, installer and CI target.
+  - **Pi 5 / Bookworm** - same target; Raspberry Pi 5 does not run Bullseye. Trixie is unvalidated. Bookworm and Trixie default to Wayland, so the
+    session must be switched to X11 first (the readiness check enforces this), and `--atem` and `--dev` must not be used
     there. See the [Raspberry Pi 5 product page](https://www.raspberrypi.com/products/raspberry-pi-5/) for its supported OS releases.
 
   See [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md) and
@@ -69,12 +71,13 @@ wins:
 - A touchscreen (the UI is designed for touch) and network access to the cameras.
 - One or two VISCA-over-IP PTZ cameras (designed for common AV/PTZ heads; not yet
   validated on real cameras).
-- Python 3.9.2 (the system Python on Bullseye; newer versions are not validated) with PyQt5
+- The system Python of the installed OS (3.11 on Bookworm, 3.9.2 on Bullseye; other
+  versions are not validated) with PyQt5
   (installed from `apt` on Raspberry Pi OS).
 
 ## Install
 
-On a fresh Raspberry Pi OS Bullseye system (the Pi 5 path is untested, see [Requirements](#requirements)):
+On a fresh Raspberry Pi OS Bookworm 64-bit Desktop system (Bullseye on Pi 4 remains supported, see [Requirements](#requirements)):
 
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
@@ -188,24 +191,27 @@ para que STOP siempre gane:
 
 ## Requisitos
 
-- Hardware Raspberry Pi con Raspberry Pi OS. La base de software y CI es
-  **Raspberry Pi OS Bullseye (Debian 11), 64 bits, con Python 3.9.2**. Es una base de
-  software: aún no se ha validado ningún hardware. Dos caminos:
-  - **Pi 4 / Bullseye** - el camino al que apuntan la documentación, el instalador y CI.
-  - **Pi 5 / Bookworm o Trixie** - pendiente de prueba. La Pi 5 no funciona con Bullseye. Bookworm y Trixie usan Wayland por
-    defecto: hay que cambiar la sesión a X11 antes y no usar `--atem` ni `--dev` ahí.
+- Hardware Raspberry Pi con Raspberry Pi OS. El objetivo de instalación es
+  **Raspberry Pi OS Bookworm (Debian 12), 64 bits, con Escritorio y Python 3.11**,
+  en Raspberry Pi 4 o 5. La base original de software y CI, **Bullseye
+  (Debian 11), 64 bits, con Python 3.9.2 en Pi 4**, sigue soportada. Aún no se ha
+  validado ningún hardware físico. Dos caminos:
+  - **Pi 4 / Bookworm** (o la base Bullseye) - el camino al que apuntan la documentación, el instalador y CI.
+  - **Pi 5 / Bookworm** - mismo objetivo; la Pi 5 no funciona con Bullseye. Trixie sigue sin validar. Bookworm y Trixie usan Wayland por
+    defecto: hay que cambiar la sesión a X11 antes (la comprobación previa lo exige) y no usar `--atem` ni `--dev` ahí.
     Consulta la [ficha de la Raspberry Pi 5](https://www.raspberrypi.com/products/raspberry-pi-5/) para ver sus sistemas soportados.
 
   Ver [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md) y
   [docs/RPI_RUNTIME_BASELINE.md](docs/RPI_RUNTIME_BASELINE.md).
 - Pantalla táctil (la interfaz está pensada para tacto) y red hacia las cámaras.
 - Una o dos cámaras PTZ VISCA-over-IP.
-- Python 3.9.2 (el Python del sistema en Bullseye; versiones nuevas no validadas) con PyQt5
+- El Python del sistema instalado (3.11 en Bookworm, 3.9.2 en Bullseye; otras
+  versiones no validadas) con PyQt5
   (instalado desde `apt` en Raspberry Pi OS).
 
 ## Instalación
 
-En un sistema Raspberry Pi OS Bullseye recién instalado (el camino Pi 5 está sin probar, ver [Requisitos](#requisitos)):
+En un sistema Raspberry Pi OS Bookworm de 64 bits con Escritorio recién instalado (Bullseye en Pi 4 sigue soportado, ver [Requisitos](#requisitos)):
 
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz

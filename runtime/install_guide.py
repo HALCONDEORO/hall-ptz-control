@@ -24,16 +24,34 @@ def os_codename(text: str) -> str:
     return "unknown"
 
 
+def platform_supported(model: str, codename: str, architecture: str,
+                       python_version: tuple) -> bool:
+    """Approved install targets. docs/INSTALL_RPI_ES.md declares Bookworm
+    64-bit Desktop with the system Python 3.11 as the installation target on
+    Pi 4 and Pi 5; the original Pi 4 / Bullseye / Python 3.9 baseline remains
+    supported. Everything else (Trixie, 32-bit, non-standard Python, other
+    models) fails closed: the guide must never route an unvalidated platform
+    towards an install command."""
+    if architecture != "aarch64":
+        return False
+    py = python_version[:2]
+    if model.startswith("Raspberry Pi 4 Model B"):
+        return ((codename == "bullseye" and py == (3, 9))
+                or (codename == "bookworm" and py == (3, 11)))
+    if model.startswith("Raspberry Pi 5 Model B"):
+        # Bullseye does not boot on Pi 5.
+        return codename == "bookworm" and py == (3, 11)
+    return False
+
+
 def next_step(*, model: str, codename: str, architecture: str,
               python_version: tuple, session: str, installed: bool | None,
               provisioned: bool | None, installer: Path, user: str) -> tuple[str, int]:
     """Choose one step, failing closed on missing platform/install evidence."""
-    baseline = (model.startswith("Raspberry Pi 4 Model B")
-                and codename == "bullseye" and architecture == "aarch64"
-                and python_version[:2] == (3, 9))
-    if not baseline:
+    if not platform_supported(model, codename, architecture, python_version):
         return ("Detener la instalacion y solicitar validacion de esta plataforma; "
-                "Pi 5 / Bookworm / Trixie siguen sin validacion fisica.", 20)
+                "la base aprobada es Pi 4 o Pi 5 con Bookworm 64-bit (o Pi 4 con "
+                "Bullseye) y su Python de sistema. Trixie sigue sin validacion.", 20)
     if session != "x11":
         return ("Abrir una sesion de escritorio X11 y repetir la guia desde su terminal.", 20)
     if not user or user == "root" or user.startswith("-"):
@@ -79,7 +97,8 @@ def main(argv=None) -> int:
     print("KH PTZ - Guia de instalacion (solo lectura)")
     print(f"Pi: {model} | Sistema: {codename} | Arquitectura: {arch}")
     print(f"Python: {platform.python_version()} | Sesion: {session}")
-    print("Base objetivo de software: Pi 4 / Bullseye 64-bit / Python 3.9 / X11.")
+    print("Base objetivo de software: Pi 4 o Pi 5 / Bookworm 64-bit / Python 3.11 / X11 "
+          "(tambien Pi 4 / Bullseye / Python 3.9).")
     print("No instala, no inicia doctor ni el asistente, no prueba camaras ni red.")
     action, code = next_step(
         model=model, codename=codename, architecture=arch,
