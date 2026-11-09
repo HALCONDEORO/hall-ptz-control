@@ -11,6 +11,11 @@ el hecho de que CI esté en verde.
 - El objetivo de la instalación es Raspberry Pi OS Bookworm de 64 bits con
   escritorio y Python 3.11. El ensayo de instalación en contenedor Bookworm
   pasó; no equivale a validación física de Pi, X11, pantalla ni cámaras.
+- Bookworm y Trixie arrancan en Wayland (wayfire/labwc) por defecto y las
+  unidades de la GUI solo funcionan con X11 (DISPLAY=:0, xhost). Cambia la
+  sesión a X11 (`sudo raspi-config` -> Advanced Options -> Wayland -> X11) y
+  reinicia en el escritorio ANTES de instalar. La comprobación `--check`
+  falla si detecta una sesión Wayland activa; sin sesión visible, avisa.
 - El modelo de Pi y el sistema instalado se comprueban en el equipo antes de
   decidir cambios. La Pi 5 no funciona con Bullseye. Trixie sigue sin validar.
   Usa el modo GUI de sistema predeterminado; el modo GUI de usuario no está
