@@ -47,7 +47,7 @@ source "$INSTALLER_UNDER_TEST"
 def test_wrapper_passes_atem_to_readiness(tmp_path):
     source = (ROOT / 'install_khptz_rpi.sh').read_text()
     # Execute the real wrapper's check invocation, not a copy of its flags.
-    start = source.index('_CHECK_ARGS=(--check --no-check-next-action)')
+    start = source.index('_CHECK_ARGS=(--check --no-check-next-action --wizard-user')
     end = source.index('if [[ "${CHECK_ONLY}"', start)
     recorder = tmp_path / 'installer.sh'
     recorder.write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$CAPTURE"\n')
@@ -56,9 +56,10 @@ def test_wrapper_passes_atem_to_readiness(tmp_path):
     result = subprocess.run(['bash', '-c', '''
 DEV_MODE=false
 GUI_MODE=system
+WIZARD_USER=desktop
 PASSTHROUGH=(--atem)
 INSTALLER="$1"
 fatal() { exit 99; }
 ''' + source[start:end], 'test', str(recorder)], capture_output=True, text=True, env=env)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert capture.read_text().splitlines() == ['--check', '--no-check-next-action', '--gui-mode', 'system', '--atem']
+    assert capture.read_text().splitlines() == ['--check', '--no-check-next-action', '--wizard-user', 'desktop', '--gui-mode', 'system', '--atem']
