@@ -94,7 +94,8 @@ Session and optional-dependency limits:
 
 - **Bookworm/Trixie default to Wayland** (wayfire/labwc). The GUI units require
   X11 (`DISPLAY=:0`, `xhost`). Switch the session to X11
-  (`raspi-config` -> Advanced -> Wayland -> X11) before installing. A container
+  (`raspi-config` -> Advanced -> Wayland -> X11) and reboot into the desktop
+  before installing. A container
   rehearsal does not verify the physical desktop session. The readiness check
   (`--check`) inspects the active desktop session and FAILs on Wayland; when no
   session can be inspected it warns, unless the OS provably predates Bookworm.
@@ -137,6 +138,33 @@ supported hardware/OS/Python matrix, and [Raspberry Pi golden image](RPI_GOLDEN_
 for preparing a reusable provisioning image.
 
 ---
+
+## Sites without internet access (offline installs)
+
+Some halls have no usable WAN: only the camera LAN. On site, `apt`, `pip` and
+`git fetch` will all fail, so nothing below may be left "to fix on site".
+Prepare the appliance while it still has internet (this can be the same Pi
+before travelling):
+
+1. Flash Raspberry Pi OS Bookworm (Debian 12) 64-bit **Desktop**.
+2. `sudo apt update && sudo apt full-upgrade -y`.
+3. Install the system dependencies from the section above, including
+   `x11-xserver-utils` and `python3-yaml` (the installer refuses to proceed
+   without them, and the wizard's provisioning aborts if `xhost` is missing).
+4. Switch the session to X11 (`sudo raspi-config` -> Advanced Options ->
+   Wayland -> X11) and reboot into the desktop; confirm the active session
+   prints `Type=x11`:
+
+   ```bash
+   loginctl list-sessions --no-legend
+   loginctl show-session <session-id> --property=Type --value
+   ```
+
+5. Clone the repository at the approved tag (next section) and check
+   `git status --ignored` shows no local leftovers.
+
+Once on site, everything after this point works without WAN: `--check`, the
+install, the setup wizard, `khptz doctor` and the acceptance validator.
 
 ## Get the approved build
 
@@ -667,6 +695,22 @@ Symptom: `ModuleNotFoundError: No module named 'PyQt5'`
 ```bash
 sudo apt install -y python3-pyqt5 python3-pyqt5.qtsvg
 ```
+
+### The GUI never appears after login (dark screen)
+
+Most often the desktop session is Wayland: the GUI units require X11
+(`QT_QPA_PLATFORM=xcb`) and Bookworm defaults to Wayland. Check the active
+session type:
+
+```bash
+loginctl list-sessions --no-legend
+loginctl show-session <session-id> --property=Type --value
+```
+
+If it prints `wayland`, switch with `sudo raspi-config` -> Advanced Options ->
+Wayland -> X11, reboot into the desktop and check again. The readiness gate,
+the boot helper and the acceptance validator all log this same remedy; in user
+GUI mode see `journalctl --user -u khptz-gui -n 50 --no-pager`.
 
 ### Camera does not connect
 

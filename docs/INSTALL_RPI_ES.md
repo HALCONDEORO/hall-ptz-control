@@ -22,6 +22,17 @@ el hecho de que CI esté en verde.
   aprobado para autenticación local. No añadas `--atem` ni `--dev` sin su
   comprobación específica.
 - Verifica red, IP únicas y cámaras previstas. No muevas cámaras sin permiso.
+- Si la sala no tiene salida a Internet (solo la LAN de cámaras), nada puede
+  quedar "para arreglar en la sala": `apt`, `pip` y `git fetch` fallarán.
+  Prepara el equipo mientras aún tenga conexión (puede ser la misma Pi antes
+  de viajar): actualiza el sistema (`sudo apt update && sudo apt
+  full-upgrade -y`), instala las dependencias de "Preparar y comprobar"
+  (incluidas `x11-xserver-utils` y `python3-yaml`), cambia la sesión a X11 y
+  reinicia en el escritorio, confirma `Type=x11` con
+  `loginctl show-session <id> --property=Type --value` y clona la etiqueta
+  aprobada dejando `git status --ignored` limpio. Ya en la sala, todo lo
+  demás funciona sin salida a Internet: `--check`, la instalación, el
+  asistente, `khptz doctor` y el validador.
 - En una actualización, confirma una copia recuperable y el plan de rollback.
   Si falla la copia, para antes de cambiar datos.
 - Si la versión detecta credenciales antiguas que requieren migración, usa su
@@ -91,3 +102,9 @@ y un informe con fecha y puede generar logs de diagnóstico. Revisa el informe:
 no entregues el sistema con FAIL sin resolver. Guarda evidencia en
 `MVP_VALIDATION_REPORT.md`, incluyendo limitaciones aceptadas. Una guía revisada
 no sustituye esa prueba física.
+
+Si la GUI no aparece tras iniciar sesión (pantalla oscura), lo primero es
+descartar una sesión Wayland: `loginctl list-sessions --no-legend` y
+`loginctl show-session <id> --property=Type --value`. Si muestra `wayland`,
+cambia a X11 con `sudo raspi-config` -> Advanced Options -> Wayland -> X11 y
+reinicia en el escritorio.

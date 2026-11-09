@@ -135,3 +135,34 @@ def test_golden_image_uses_product_install_flow():
     assert "sudo chown -R" not in text
     assert "sudo pip3 install" not in text
     assert "unprovisioned" in text
+
+
+def test_offline_install_preparation_is_documented():
+    """A hall with no WAN cannot apt/pip/git-fetch on site. The EN guide must
+    carry a preparation section that names the deps the installer hard-requires
+    (x11-xserver-utils, python3-yaml) and the X11 verification, and the ES
+    checklist must mirror it."""
+    en = (ROOT / "docs/INSTALL_RPI.md").read_text()
+    es = (ROOT / "docs/INSTALL_RPI_ES.md").read_text()
+    assert "## Sites without internet access (offline installs)" in en
+    assert "x11-xserver-utils" in en and "python3-yaml" in en
+    assert "loginctl show-session <session-id> --property=Type --value" in en
+    assert "git status --ignored" in en
+    for needle in ("x11-xserver-utils", "python3-yaml",
+                   "loginctl show-session <id> --property=Type --value",
+                   "git status --ignored"):
+        assert needle in es
+
+
+def test_dark_screen_troubleshooting_names_the_wayland_remedy():
+    """The most common first-boot failure on Bookworm is a Wayland session.
+    Both guides must point a dark screen at the session-type check and the
+    raspi-config X11 remedy, matching the installer/acceptance messages."""
+    en = (ROOT / "docs/INSTALL_RPI.md").read_text()
+    es = (ROOT / "docs/INSTALL_RPI_ES.md").read_text()
+    start = en.find("### The GUI never appears after login (dark screen)")
+    assert start != -1
+    section = en[start:start + 900]
+    assert "loginctl" in section and "raspi-config" in section and "wayland" in section
+    assert "pantalla oscura" in es
+    assert "raspi-config" in es and "loginctl" in es
