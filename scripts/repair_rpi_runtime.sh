@@ -436,6 +436,24 @@ if [[ "${GUI_MODE}" == "user" ]]; then
     info "GUI mode 'user': no display grant needed - the session owns its own display."
     info "The GUI starts from khptz-gui.service at the next desktop login."
 else
+    # A Wayland desktop session can never authorise an X11 display for the
+    # service: there is no X server to grant against, so the helper would
+    # burn two minutes and the wizard would fail with the misleading "keep
+    # the session open" message. Detect an active Wayland session first and
+    # name the real fix. Unknown (no loginctl, no session) stays as before.
+    if command -v loginctl >/dev/null 2>&1 && [[ -n "${WIZARD_USER}" ]]; then
+        for _sid in $(loginctl list-sessions --no-legend 2>/dev/null \
+                      | awk -v u="${WIZARD_USER}" '$3 == u { print $1 }' || true); do
+            _type="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
+            [[ "${_type}" == "x11" || "${_type}" == "wayland" ]] || continue
+            [[ "$(loginctl show-session "${_sid}" --property=Active --value 2>/dev/null || true)" == "yes" ]] || continue
+            if [[ "${_type}" == "wayland" ]]; then
+                fail "The active desktop session is Wayland, but the GUI requires X11 (QT_QPA_PLATFORM=xcb). Switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11, reboot into the desktop and rerun setup."
+            fi
+            break
+        done
+    fi
+
     info "Authorising the current desktop display..."
     XAUTH_FILE="$(find_xauthority || true)"
     ENV_ARGS=(

@@ -216,3 +216,40 @@ class TestSharedReaderBehaviour:
             'KHPTZ_INSTALLED_AT="2026-07-26T00:00:00Z"',
         ]) + "\n"
         assert self._mode(tmp_path, contents) == "user"
+
+
+class TestRepairRefusesActiveWaylandBeforeAuthorising:
+    """In system GUI mode the repair authorises an X11 display for the service
+    with xhost. Under an active Wayland session there is no X server to grant
+    against: the helper burns two minutes and the wizard fails with the
+    misleading 'keep the session open' message. The repair must detect the
+    active Wayland session first and fail with the raspi-config fix."""
+
+    def test_precheck_runs_before_display_authorisation(self):
+        text = read(REPAIR)
+        precheck = text.index('_type}" == "wayland"')
+        authorise = text.index("Authorising the current desktop display")
+        guard = text.index('GUI_MODE}" == "user"')
+        assert guard < precheck < authorise, (
+            "the Wayland precheck must sit between the GUI-mode branch and the "
+            "display authorisation, or it never protects system mode"
+        )
+
+    def test_failure_names_the_raspi_config_fix(self):
+        text = read(REPAIR)
+        precheck = text.index('_type}" == "wayland"')
+        fail_line = text.index("fail ", precheck)
+        message = text[fail_line:text.index("\n", fail_line)]
+        assert "raspi-config" in message
+        assert "X11" in message
+        assert "rerun setup" in message
+
+    def test_only_the_active_session_decides(self):
+        """A leftover Wayland session next to the active X11 desktop must not
+        abort the repair (same selection rule as the readiness gate)."""
+        text = read(REPAIR)
+        precheck_start = text.index("A Wayland desktop session can never authorise")
+        precheck_end = text.index("Authorising the current desktop display")
+        block = text[precheck_start:precheck_end]
+        assert "--property=Active" in block
+        assert '== "yes" ]] || continue' in block
