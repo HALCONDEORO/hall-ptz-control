@@ -230,12 +230,16 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     # Python version
     _py_major="$("${PYTHON_BIN}" -c 'import sys; print(sys.version_info.major)')"
     _py_minor="$("${PYTHON_BIN}" -c 'import sys; print(sys.version_info.minor)')"
+    # Two supported targets: 3.9.2 (Bullseye legacy) and 3.11 (Bookworm
+    # installation target, container-rehearsed). See docs/RPI_RUNTIME_BASELINE.md.
     if [[ "${_py_major}" -eq 3 && "${_py_minor}" -eq 9 ]]; then
-        _chk_pass "Python ${PYTHON_VERSION} (3.9.x — supported target is 3.9.2)"
+        _chk_pass "Python ${PYTHON_VERSION} (3.9.x — supported legacy target: Bullseye 3.9.2)"
+    elif [[ "${_py_major}" -eq 3 && "${_py_minor}" -eq 11 ]]; then
+        _chk_pass "Python ${PYTHON_VERSION} (3.11 — supported installation target: Bookworm; physical validation pending)"
     elif [[ "${_py_major}" -eq 3 && "${_py_minor}" -gt 9 ]]; then
-        _chk_warn "Python ${PYTHON_VERSION} (3.10+ is NOT validated; supported target is 3.9.2 on Raspberry Pi OS Bullseye)"
+        _chk_warn "Python ${PYTHON_VERSION} (NOT a validated target; supported targets are 3.9.2 on Bullseye and 3.11 on Bookworm)"
     else
-        _chk_fail "Python ${PYTHON_VERSION} is too old (supported target is 3.9.2; 3.9 minimum)"
+        _chk_fail "Python ${PYTHON_VERSION} is too old (3.9 minimum; supported targets are 3.9.2 on Bullseye and 3.11 on Bookworm)"
     fi
 
     # Service template
