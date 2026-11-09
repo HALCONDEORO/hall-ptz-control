@@ -116,3 +116,22 @@ def test_uninstall_code_only_variant_warns_about_dangling_entries():
     assert "autostart" in block
     assert "[Install]" in block
     assert "/usr/local/bin/khptz" in block
+
+
+def test_golden_image_uses_product_install_flow():
+    text = (ROOT / "docs/RPI_GOLDEN_IMAGE.md").read_text()
+    assert "HALCONDEORO/kh-ptz-control.git" in text
+    assert "legacy-ptz-controller" not in text
+    assert 'install_khptz_rpi.sh --wizard-user "$USER" --check' in text
+    assert 'install_khptz_rpi.sh --wizard-user "$USER"' in text
+    assert "sudo bash runtime/installer/install.sh" not in text
+    for package in ("git", "rsync", "python3-pyqt5", "python3-pyqt5.qtsvg",
+                    "python3-yaml", "x11-xserver-utils"):
+        assert package in text
+    for path in ("/opt/khptz/", "/etc/khptz/", "/var/lib/khptz/",
+                 "/var/log/khptz/", "/var/backups/khptz/"):
+        assert path in text
+    assert "khptz setup" in text
+    assert "sudo chown -R" not in text
+    assert "sudo pip3 install" not in text
+    assert "unprovisioned" in text

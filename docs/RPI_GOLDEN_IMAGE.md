@@ -30,7 +30,8 @@ A technician must be able to follow this document on site without guessing.
   `sudo raspi-config` -> Advanced Options -> Wayland -> X11 and reboot.
   `runtime/installer/install.sh --check` FAILs while the active desktop session
   is Wayland.
-- **User**: `pi` (default) — do not rename unless you update all scripts
+- **User**: record the normal desktop account created for this Pi. Pass that
+  account as `--wizard-user`; never use root or the `khptz` service account.
 - **Hostname**: `khptz-control` (optional, helps identify on network)
 
 Do **not** bake customer-specific passwords, IPs or names into the base image.
@@ -66,126 +67,124 @@ Wayland -> X11, then reboot before continuing.
 
 ## Phase 2 — System dependencies
 
-```bash
-# Python and Qt
-sudo apt install -y \
-    python3 python3-pip python3-venv \
-    python3-pyqt5 python3-pyqt5.qtsvg \
-    libqt5multimedia5-plugins \
-    fonts-ibm-plex
-
-# Networking tools (for camera discovery diagnostics)
-sudo apt install -y net-tools nmap arp-scan
-```
-
-**ATEM support** (optional — install only if ATEM switcher is in use):
+Install these packages while internet access is available, before taking an
+offline image to site:
 
 ```bash
-sudo pip3 install PyATEMMax
+sudo apt update
+sudo apt install -y git rsync python3-pyqt5 python3-pyqt5.qtsvg python3-yaml x11-xserver-utils
 ```
 
-> On Bullseye (pip 20.3.4) there is no PEP 668 externally-managed marker, so the
-> plain command works. Do **not** add `--break-system-packages`: that flag only
-> exists in the newer pip shipped on Bookworm. On Bookworm, system pip is
-> blocked by PEP 668: install ATEM support only after the licence/dependency
-> review, in the reviewed way for that target (see
-> [Raspberry Pi runtime baseline](RPI_RUNTIME_BASELINE.md)).
+Product mode uses system packages; do not install development requirements or
+use system pip. Do not add `--atem` or `--dev` on Bookworm/Trixie. An ATEM-enabled
+installation needs a separate dependency/licence review; see
+[ATEM dependency decision](ATEM_DEPENDENCY_DECISION.md).
 
 ---
 
 ## Phase 3 — App installation
 
-```bash
-# Clone the repository (use a tagged release)
-cd /home/pi
-git clone https://github.com/HALCONDEORO/legacy-ptz-controller.git khptz
-cd khptz
-git checkout v3.x.y    # replace with the target release tag
-
-# Run the installer
-sudo bash runtime/installer/install.sh
-```
-
-The installer will:
-- Create runtime data directories.
-- Install the systemd service (`khptz-control.service`).
-- Enable the service on boot.
-
-Verify with:
+From the normal desktop account, prepare a clean clone of the approved release:
 
 ```bash
-systemctl status khptz-control
+git clone https://github.com/HALCONDEORO/kh-ptz-control.git "$HOME/khptz"
+cd "$HOME/khptz"
+git checkout <approved-tag-or-release-branch>
+git remote -v
+git status --ignored
+sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 ```
+
+The angle-bracket ref is a placeholder: replace it with the approved release.
+Do not copy individual scripts or use a source ZIP without `.git`. Keep the
+clean source checkout on the Pi: `/opt/khptz` has no Git history and rollback
+re-deploys from the original checkout. Remove no customer files to make a
+checkout look clean; stop for review if it contains site data or secrets.
+
+After readiness passes and permission for this device is confirmed:
+
+```bash
+sudo bash install_khptz_rpi.sh --wizard-user "$USER"
+```
+
+Exit 20 means configuration is pending, not completion. On exit 30 or an
+unexpected failure, keep the first error and stop for review before retrying.
+Reboot and log into the desktop so new group membership takes effect.
 
 ---
 
 ## Phase 4 — Customer configuration
 
-Apply site-specific configuration **after** the base image is complete.
-Never bake these into a shared golden image.
-
-| File | Purpose |
-|------|---------|
-| `PTZ1IP.txt` | Platform camera IP (e.g. `172.16.1.11`) |
-| `PTZ2IP.txt` | Comments camera IP (e.g. `172.16.1.12`) |
-| `config.yaml` `cameras[0].visca_id` | Platform camera VISCA ID (e.g. `81`) |
-| `config.yaml` `cameras[1].visca_id` | Comments camera VISCA ID (e.g. `82`) |
-| `ATEMIP.txt` | ATEM switcher IP (leave blank if no ATEM) |
-| `Contact.txt` | Support contact message shown in Help |
-| `password.enc` | Operator login password (set via app UI) |
-
-Write each file to `/home/pi/khptz/`:
+Keep the reusable base image **unprovisioned**. Configure the individual Pi
+through the on-device setup wizard, not by writing legacy IP/password files:
 
 ```bash
-echo "172.16.1.11" > /home/pi/khptz/PTZ1IP.txt
-echo "172.16.1.12" > /home/pi/khptz/PTZ2IP.txt
-# VISCA IDs are now set in config.yaml: cameras[0].visca_id and cameras[1].visca_id
+khptz setup
 ```
+
+Confirm room details, actual camera IPs and VISCA IDs, camera count/roles and
+optional ATEM settings. Two-camera rooms need **Add camera**. Operator and
+administrator passwords must differ; enter them only in the wizard. Do not
+commit them or copy credential files by hand.
+
+The service deliberately waits for `/etc/khptz/.provisioned`. It is normal for
+it not to run before the wizard completes. If the Pi is already provisioned,
+do not force the wizard or delete that marker to fix a startup problem.
+See [installation guide](INSTALL_RPI.md) for the authenticated repair flow.
 
 ---
 
-## Phase 5 — Directory structure
-
-After installation the following structure must exist:
+## Phase 5 — Product directory structure
 
 ```text
-/home/pi/khptz/           ← app code (git repo)
-/home/pi/khptz/logs/      ← runtime logs
-/home/pi/khptz_backups/   ← backup archives (created by rollback/backup scripts)
+/home/<desktop-user>/khptz/  clean source checkout, retained for rollback
+/opt/khptz/                 deployed app code, not a Git checkout
+/etc/khptz/                 site config and provisioning marker
+/var/lib/khptz/             persistent runtime data
+/var/log/khptz/             logs
+/var/backups/khptz/         local backup ZIPs
 /etc/systemd/system/khptz-control.service
 ```
 
-Permissions:
-
-```bash
-sudo chown -R pi:pi /home/pi/khptz /home/pi/khptz_backups
-```
+The installer manages ownership and permissions. Do not recursively `chown`
+the product tree to the desktop user or copy secrets into the source checkout.
+See [runtime path contract](RUNTIME_PATH_CONTRACT.md).
 
 ---
 
 ## Phase 6 — First boot verification
 
+After the wizard completes:
+
 ```bash
-# 1. Start the service
-sudo systemctl start khptz-control
-
-# 2. Check status
-sudo systemctl status khptz-control
-
-# 3. View logs
-journalctl -u khptz-control -n 50
-
-# 4. Run unit tests (on the Pi — hardware-free)
-cd /home/pi/khptz
-python -m pytest --tb=short -q
+khptz version
+khptz verify-install
+khptz status
+khptz doctor
+sudo systemctl status khptz-control --no-pager
+journalctl -u khptz-control -n 50 --no-pager
+sudo bash scripts/validate_rpi_deployment.sh --wizard-user "$USER"
 ```
 
-Confirm on screen:
-- [ ] Splash screen appears and shows camera status within 15 seconds.
-- [ ] No Python error on startup.
-- [ ] Login screen accepts the operator password.
-- [ ] Both camera cards visible on splash.
-- [ ] The active graphical session for the installation desktop user is X11. Run `loginctl list-sessions`, then `loginctl show-session SESSION_ID -p Name -p Active -p Type` for that user's sessions. Require `Active=yes` and `Type=x11`; do not choose the first `seat0` row, which may be inactive. If no active graphical session can be confirmed, record that check as unverified. On Bookworm, re-check after OS upgrades, which may switch back to Wayland.
+The validator writes a timestamped report. Run it after each of two clean
+reboots; keep the reports and resolve every FAIL before handover. Development
+unit tests are not a substitute for this physical check and are not a required
+product dependency.
+
+Confirm on screen, with permission to move the cameras:
+- [ ] Exactly one GUI starts after desktop login, without a restart loop.
+- [ ] The touchscreen responds and the operator password works.
+- [ ] The configured camera count/roles and actual cameras match.
+- [ ] Camera movement, presets, STOP and session start/end work physically.
+- [ ] The active desktop session is X11: use `loginctl list-sessions`, then
+  `loginctl show-session SESSION_ID -p Name -p Active -p Type` for the recorded
+  desktop user. Require `Active=yes` and `Type=x11`; do not assume the first
+  `seat0` row is active. Re-check after OS upgrades.
+- [ ] Create a backup with `khptz backup`, record its path and retain it under
+  the site's approved handling rules. Test restore only on non-customer data.
+- [ ] Record the approved version, results and accepted limitations in
+  `docs/MVP_VALIDATION_REPORT.md`. Until physical checks pass, do not claim
+  customer/pilot readiness.
 
 ---
 
@@ -203,13 +202,16 @@ Apply all customer-specific data after cloning/flashing using Phase 4.
 
 ## Cloning an existing good image
 
-To replicate a working installation to a new card:
+Prepare reusable cards only from a clean, unprovisioned base image with the
+approved dependencies and source checkout already present. Keep the original
+card intact until the replacement has been verified.
 
-1. On the source Pi: back up runtime data (`docs/UPDATE_ROLLBACK.md` — backup steps).
-2. Clone the SD card using `dd` or Raspberry Pi Imager.
-3. On the new card: **remove** customer-specific files from Phase 4.
-4. On the new Pi: apply the correct customer config from Phase 4.
-5. Run Phase 6 verification on the new Pi.
+Do not clone an already provisioned customer card for another site and assume
+that removing legacy files sanitizes it: config, runtime data, protected
+credentials, logs and backups live outside the source checkout. Cross-site
+sanitization needs a separately reviewed process. For recovery of the same
+site, follow the permission, backup and restore gates in
+[update and rollback](UPDATE_ROLLBACK.md).
 
 ---
 
