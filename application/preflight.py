@@ -16,8 +16,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 MIN_FREE_BYTES = 500 * 1024 * 1024
-# Runtimes validated in CI (compatibility matrix + installer rehearsals):
-# 3.9 = Raspberry Pi OS Bullseye system Python, 3.11 = Bookworm system Python.
+# Supported installation targets: 3.9 = Bullseye system Python (Pi 4),
+# 3.11 = Bookworm system Python (Pi 4/5; physical validation pending).
 SUPPORTED_PY: Tuple[Tuple[int, int], ...] = ((3, 9), (3, 11))
 OLDEST_SUPPORTED_PY: Tuple[int, int] = (3, 9)
 
@@ -46,8 +46,8 @@ def check_python(version: Tuple[int, int, int] = sys.version_info[:3]) -> Prefli
     if (major, minor) > OLDEST_SUPPORTED_PY:
         return PreflightCheck(
             "python", "Python version", False, True,
-            f"Python {major}.{minor} is not a validated runtime",
-            "Validated runtimes: 3.9 (Bullseye) and 3.11 (Bookworm) system Python",
+            f"Python {major}.{minor} is not a supported installation target",
+            "Supported targets: Bullseye (Python 3.9) or Bookworm (Python 3.11) system Python",
         )
     return PreflightCheck(
         "python", "Python version", False, False,

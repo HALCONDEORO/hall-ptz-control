@@ -173,12 +173,20 @@ class TestHealthyDiagnostics:
         assert check.status == Status.OK
         assert "3.11.2" in check.message
 
+    def test_python_version_check_warns_on_310(self, tmp_path, monkeypatch):
+        from application import diagnostics_service as _ds_mod
+        monkeypatch.setattr(_ds_mod.sys, "version_info", (3, 10, 4))
+        check = _make_service(tmp_path)._check_python_version()
+        assert check.status == Status.WARNING
+        assert "not a supported installation target" in check.message
+        assert check.suggested_action
+
     def test_python_version_check_warns_on_unvalidated(self, tmp_path, monkeypatch):
         from application import diagnostics_service as _ds_mod
         monkeypatch.setattr(_ds_mod.sys, "version_info", (3, 12, 1))
         check = _make_service(tmp_path)._check_python_version()
         assert check.status == Status.WARNING
-        assert "not a validated runtime" in check.message
+        assert "not a supported installation target" in check.message
         assert check.suggested_action
 
     def test_python_version_check_fails_below_39(self, tmp_path, monkeypatch):

@@ -488,39 +488,48 @@ class DiagnosticsService:
             return CheckResult("version", Status.FAIL, f"Cannot read VERSION: {exc}")
 
     def _check_python_version(self) -> CheckResult:
-        """Report the running Python against the validated runtimes.
+        """Report the running Python against the supported installation targets.
 
-        Validated runtimes are the CI rehearsal targets: Python 3.9 (Raspberry
-        Pi OS Bullseye system Python) and Python 3.11 (Bookworm system Python).
-        Other versions are not validated; below 3.9 the app cannot run.
+        Supported installation targets: Pi 4 with Bullseye (system Python 3.9)
+        and Pi 4/5 with Bookworm 64-bit (system Python 3.11); physical
+        validation of the Bookworm target is still pending. Other versions are
+        not supported targets; below 3.9 the app cannot run.
         """
         major, minor, micro = sys.version_info[:3]
         version_str = f"{major}.{minor}.{micro}"
         evidence = {"python_version": version_str}
-        if (major, minor) in ((3, 9), (3, 11)):
+        if (major, minor) == (3, 9):
             return CheckResult(
                 "python_version",
                 Status.OK,
-                f"Python {version_str} (validated: 3.9 Bullseye / 3.11 Bookworm)",
+                f"Python {version_str} (supported installation target: Pi 4 Bullseye)",
+                evidence=evidence,
+            )
+        if (major, minor) == (3, 11):
+            return CheckResult(
+                "python_version",
+                Status.OK,
+                f"Python {version_str} (supported installation target: Pi 4/5 "
+                "Bookworm; physical validation pending)",
                 evidence=evidence,
             )
         if major == 3 and minor > 9:
             return CheckResult(
                 "python_version",
                 Status.WARNING,
-                f"Python {version_str} is not a validated runtime; validated "
-                "targets are 3.9 on Bullseye and 3.11 on Bookworm",
+                f"Python {version_str} is not a supported installation target; "
+                "supported targets are 3.9 on Bullseye and 3.11 on Bookworm",
                 evidence=evidence,
                 suggested_action=(
                     "Provision Raspberry Pi OS Bullseye (Python 3.9) or Bookworm "
-                    "(Python 3.11) 64-bit for validated installs."
+                    "(Python 3.11) 64-bit for supported installs."
                 ),
             )
         return CheckResult(
             "python_version",
             Status.FAIL,
             f"Python {version_str} is too old; 3.9 is the minimum "
-            "(validated targets: 3.9 Bullseye, 3.11 Bookworm)",
+            "(supported targets: 3.9 Bullseye, 3.11 Bookworm)",
             evidence=evidence,
             suggested_action="Install a supported system Python (Raspberry Pi OS Bullseye or Bookworm).",
         )

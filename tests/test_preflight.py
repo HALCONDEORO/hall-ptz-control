@@ -25,6 +25,10 @@ class TestPython:
         c = check_python((3, 11, 2))
         assert c.ok and not c.blocking
 
+    def test_python_310_warns_not_blocks(self):
+        c = check_python((3, 10, 4))
+        assert not c.ok and c.warn_only and not c.blocking
+
     def test_unvalidated_version_warns_not_blocks(self):
         c = check_python((3, 14, 0))
         assert not c.ok and c.warn_only and not c.blocking
