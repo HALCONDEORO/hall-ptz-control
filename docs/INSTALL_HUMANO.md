@@ -19,10 +19,14 @@ Lee la ultima linea, **Siguiente paso**. La guia no instala ni busca camaras.
 Puede acabar con codigo 20: significa que queda un paso, no que haya instalado
 mal. Codigo 30 indica un problema que debe revisar el tecnico.
 
-- Pi 5, Bookworm, Trixie, Python distinto o datos desconocidos: parar y pedir
-  validacion. Un ensayo en contenedor no prueba esta Pi.
-- Sesion distinta de X11: el tecnico debe comprobar el escritorio y la pantalla;
-  no cambies el sistema operativo ni los permisos por tu cuenta.
+- Plataforma aprobada: Pi 4 o Pi 5 con Bookworm 64 bits y su Python 3.11 de
+  sistema (tambien Pi 4 con Bullseye y Python 3.9). Trixie, otro Python,
+  32 bits o datos desconocidos: parar y pedir validacion. Un ensayo en
+  contenedor no prueba esta Pi.
+- Sesion distinta de X11 (Bookworm arranca en Wayland por defecto): cambia la
+  sesion con `sudo raspi-config` -> Advanced Options -> Wayland -> X11, reinicia
+  en el escritorio y repite la guia. El tecnico debe comprobar el escritorio y
+  la pantalla; no cambies el sistema operativo ni los permisos por tu cuenta.
 - Usuario root: vuelve al escritorio de tu usuario habitual.
 - Estado no legible: no lo confundas con una instalacion vacia.
 
