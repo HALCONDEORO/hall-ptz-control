@@ -324,7 +324,14 @@ step "Comprobando requisitos, sin instalar"
 # (/home/<user>/khptz instead of /opt/khptz) and requires pip3. Checking the
 # product layout and then installing the developer one validates the wrong
 # thing, and lets a check pass that the install then fails.
-_CHECK_ARGS=(--check --no-check-next-action)
+#
+# --wizard-user must reach the check as well: the readiness gate inspects the
+# desktop session of THAT user, and without it the installer falls back to
+# SUDO_USER alone. When the wrapper resolved the user from the graphical seat
+# (no usable SUDO_USER), an unforwarded check inspects nobody - the Wayland
+# gate goes blind (WARN instead of FAIL) on exactly the machine whose first
+# boot would stay dark.
+_CHECK_ARGS=(--check --no-check-next-action --wizard-user "${WIZARD_USER}")
 # Readiness must validate the selected display owner, not the system default.
 _CHECK_ARGS+=(--gui-mode "${GUI_MODE}")
 [[ "${DEV_MODE}" == "true" ]] && _CHECK_ARGS+=(--dev)
