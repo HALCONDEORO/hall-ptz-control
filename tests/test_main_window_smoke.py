@@ -59,8 +59,18 @@ def _qapp(_real_qt):
 
 
 @pytest.fixture
-def sim_mode_active():
-    """Run the body in simulation mode, then restore the previous state."""
+def sim_mode_active(tmp_path, monkeypatch):
+    """Run the body in simulation mode, then restore the previous state.
+
+    sim_mode's app dir defaults to the REPOSITORY ROOT: activate() writes
+    sim_ip_backup.json plus simulator PTZ1IP/PTZ2IP.txt there, and deactivate()
+    then rewrites PTZ1IP/PTZ2IP/ATEMIP.txt from the backup - every run of this
+    file dirtied the checkout (empty ATEMIP.txt showed as untracked), and on a
+    real appliance checkout a crashed run would leave simulator IPs in the
+    camera config. Redirect all of sim_mode's storage into a tmp dir.
+    """
+    monkeypatch.setattr(sim_mode, "_APP_DIR", tmp_path)
+    monkeypatch.setattr(sim_mode, "BACKUP", tmp_path / "sim_ip_backup.json")
     was_active = sim_mode.is_active()
     if not was_active:
         sim_mode.activate()
