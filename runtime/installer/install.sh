@@ -143,6 +143,11 @@ _restart_stopped_service_on_abort() {
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
 
+# Remedy for any missing repo file: the checkout on the install media is
+# incomplete (partial copy to the pendrive/SD clone). Named once so every
+# template-missing message gives the same concrete next step on site.
+INCOMPLETE_CHECKOUT_REMEDY="the repository checkout is incomplete — re-clone it (or restore the missing file from a clean clone) and re-run"
+
 require_command() {
     local cmd="$1"
     local apt_hint="${2:-}"
@@ -243,7 +248,7 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     if [[ -f "${SERVICE_TEMPLATE}" ]]; then
         _chk_pass "Systemd service template: ${SERVICE_TEMPLATE}"
     else
-        _chk_fail "Systemd service template missing: ${SERVICE_TEMPLATE}"
+        _chk_fail "Systemd service template missing: ${SERVICE_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
     fi
 
     # Config template
@@ -616,7 +621,7 @@ info "khptz CLI installed at ${KHPTZ_LAUNCHER}"
 
 info "Installing systemd service..."
 SERVICE_TEMPLATE="${REPO_ROOT}/runtime/systemd/khptz-control.service"
-[[ -f "${SERVICE_TEMPLATE}" ]] || error "Service template not found: ${SERVICE_TEMPLATE}"
+[[ -f "${SERVICE_TEMPLATE}" ]] || error "Service template not found: ${SERVICE_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
 
 if [[ "${DEV_MODE}" == "false" ]]; then
     # Product mode: service template already uses fixed product paths
@@ -672,8 +677,8 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     info "Installing setup-wizard provisioning channel..."
     PROVISION_SERVICE_TEMPLATE="${REPO_ROOT}/runtime/systemd/khptz-provision.service"
     PROVISION_PATH_TEMPLATE="${REPO_ROOT}/runtime/systemd/khptz-provision.path"
-    [[ -f "${PROVISION_SERVICE_TEMPLATE}" ]] || error "Provision service template not found: ${PROVISION_SERVICE_TEMPLATE}"
-    [[ -f "${PROVISION_PATH_TEMPLATE}" ]]    || error "Provision path template not found: ${PROVISION_PATH_TEMPLATE}"
+    [[ -f "${PROVISION_SERVICE_TEMPLATE}" ]] || error "Provision service template not found: ${PROVISION_SERVICE_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
+    [[ -f "${PROVISION_PATH_TEMPLATE}" ]]    || error "Provision path template not found: ${PROVISION_PATH_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
 
     cp "${PROVISION_SERVICE_TEMPLATE}" /etc/systemd/system/khptz-provision.service
     cp "${PROVISION_PATH_TEMPLATE}"    /etc/systemd/system/khptz-provision.path
@@ -764,7 +769,7 @@ if [[ "${DEV_MODE}" == "false" ]]; then
             warn "Re-run with: sudo ./runtime/installer/install.sh --wizard-user <desktop-user>"
         fi
     else
-        warn "Setup launcher template missing: ${DESKTOP_TEMPLATE} or ${MENU_DESKTOP_TEMPLATE}"
+        warn "Setup launcher template missing: ${DESKTOP_TEMPLATE} or ${MENU_DESKTOP_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
     fi
 fi
 
@@ -790,7 +795,7 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     if [[ "${GUI_MODE}" == "user" ]]; then
         info "Installing the session-owned GUI (--gui-mode user)..."
         for _tpl in "${GUI_UNIT_TEMPLATE}" "${GUI_HELPER_TEMPLATE}" "${GUI_DESKTOP_TEMPLATE}"; do
-            [[ -f "${_tpl}" ]] || error "GUI template not found: ${_tpl}"
+            [[ -f "${_tpl}" ]] || error "GUI template not found: ${_tpl} — ${INCOMPLETE_CHECKOUT_REMEDY}"
         done
 
         install -d -m 755 /etc/systemd/user
