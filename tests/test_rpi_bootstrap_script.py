@@ -247,8 +247,21 @@ class TestIdempotenceAndSafety:
     def test_readiness_check_uses_the_same_layout_as_the_install(self, script_text):
         """--dev selects /home/<user>/khptz instead of /opt/khptz and requires
         pip3, so the check must receive it as well."""
-        assert "_CHECK_ARGS=(--check --no-check-next-action)" in script_text
+        assert "_CHECK_ARGS=(--check --no-check-next-action --wizard-user" in script_text
         assert '_CHECK_ARGS+=(--dev)' in script_text
+
+    def test_readiness_check_receives_the_resolved_wizard_user(self, script_text):
+        """The readiness gate inspects the desktop session of the wizard user.
+        The wrapper resolves that user itself (flag > SUDO_USER > graphical
+        seat); if the check did not receive it, the installer would fall back
+        to SUDO_USER alone and inspect nobody when the seat fallback was what
+        worked - the Wayland gate would WARN instead of FAIL on exactly the
+        machine whose first boot would stay dark."""
+        wizard_resolution = script_text.index('step "Buscando el usuario del escritorio"')
+        check_args = script_text.index('_CHECK_ARGS=(--check')
+        assert wizard_resolution < check_args, (
+            "--wizard-user must be resolved before _CHECK_ARGS is built")
+        assert '--wizard-user "${WIZARD_USER}"' in script_text
 
     def test_never_deletes_customer_paths(self, script_text):
         assert "rm -rf /etc/khptz" not in script_text
@@ -258,10 +271,10 @@ class TestIdempotenceAndSafety:
 @pytest.mark.skipif(shutil.which("bash") is None or sys.platform == "win32",
                     reason="requires a native POSIX bash")
 @pytest.mark.parametrize("mode_args,expected", [
-    ([], ["--check", "--no-check-next-action", "--gui-mode", "system"]),
-    (["--gui-mode", "user"], ["--check", "--no-check-next-action", "--gui-mode", "user"]),
-    (["--gui-mode=user", "--dev"], ["--check", "--no-check-next-action", "--gui-mode", "user", "--dev"]),
-    (["--gui-mode", "user", "--atem"], ["--check", "--no-check-next-action", "--gui-mode", "user", "--atem"]),
+    ([], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "system"]),
+    (["--gui-mode", "user"], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "user"]),
+    (["--gui-mode=user", "--dev"], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "user", "--dev"]),
+    (["--gui-mode", "user", "--atem"], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "user", "--atem"]),
 ])
 def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
     """Run the real wrapper in check-only mode with an inert installer.
