@@ -166,9 +166,16 @@ class TestHealthyDiagnostics:
         assert check.status == Status.OK
         assert "3.9.2" in check.message
 
-    def test_python_version_check_warns_on_310_plus(self, tmp_path, monkeypatch):
+    def test_python_version_check_ok_on_bookworm(self, tmp_path, monkeypatch):
         from application import diagnostics_service as _ds_mod
         monkeypatch.setattr(_ds_mod.sys, "version_info", (3, 11, 2))
+        check = _make_service(tmp_path)._check_python_version()
+        assert check.status == Status.OK
+        assert "3.11.2" in check.message
+
+    def test_python_version_check_warns_on_unvalidated(self, tmp_path, monkeypatch):
+        from application import diagnostics_service as _ds_mod
+        monkeypatch.setattr(_ds_mod.sys, "version_info", (3, 12, 1))
         check = _make_service(tmp_path)._check_python_version()
         assert check.status == Status.WARNING
         assert "not a validated runtime" in check.message

@@ -16,7 +16,10 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 MIN_FREE_BYTES = 500 * 1024 * 1024
-SUPPORTED_PY: Tuple[int, int] = (3, 9)
+# Runtimes validated in CI (compatibility matrix + installer rehearsals):
+# 3.9 = Raspberry Pi OS Bullseye system Python, 3.11 = Bookworm system Python.
+SUPPORTED_PY: Tuple[Tuple[int, int], ...] = ((3, 9), (3, 11))
+OLDEST_SUPPORTED_PY: Tuple[int, int] = (3, 9)
 
 
 @dataclass(frozen=True)
@@ -35,21 +38,21 @@ class PreflightCheck:
 
 def check_python(version: Tuple[int, int, int] = sys.version_info[:3]) -> PreflightCheck:
     major, minor = version[0], version[1]
-    if (major, minor) == SUPPORTED_PY:
+    if (major, minor) in SUPPORTED_PY:
         return PreflightCheck(
-            "python", "Python 3.9.2", True, False,
+            "python", "Python 3.9/3.11", True, False,
             f"Python {major}.{minor} — supported",
         )
-    if (major, minor) > SUPPORTED_PY:
+    if (major, minor) > OLDEST_SUPPORTED_PY:
         return PreflightCheck(
             "python", "Python version", False, True,
-            f"Python {major}.{minor} is newer than the validated 3.9.2",
-            "Use Raspberry Pi OS Bullseye (Python 3.9.2) for production",
+            f"Python {major}.{minor} is not a validated runtime",
+            "Validated runtimes: 3.9 (Bullseye) and 3.11 (Bookworm) system Python",
         )
     return PreflightCheck(
         "python", "Python version", False, False,
         f"Python {major}.{minor} is too old (need 3.9)",
-        "Install Python 3.9.2 (Raspberry Pi OS Bullseye)",
+        "Use Raspberry Pi OS Bullseye or Bookworm 64-bit system Python",
     )
 
 

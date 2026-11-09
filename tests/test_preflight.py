@@ -21,7 +21,11 @@ class TestPython:
         c = check_python((3, 9, 2))
         assert c.ok and not c.blocking
 
-    def test_newer_version_warns_not_blocks(self):
+    def test_bookworm_python_passes(self):
+        c = check_python((3, 11, 2))
+        assert c.ok and not c.blocking
+
+    def test_unvalidated_version_warns_not_blocks(self):
         c = check_python((3, 14, 0))
         assert not c.ok and c.warn_only and not c.blocking
 
