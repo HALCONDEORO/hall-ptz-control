@@ -31,6 +31,16 @@ if [[ -z "${DISPLAY:-}" ]]; then
     exit 0
 fi
 
+# The GUI forces QT_QPA_PLATFORM=xcb: on a Wayland session (the Bookworm
+# default) Qt cannot start and the unit would burn its restart budget with a
+# dark screen and a confusing journal. Refuse early, with the concrete fix,
+# instead. XDG_SESSION_TYPE unset means we cannot know — proceed as before.
+if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+    log "This desktop session is Wayland, but the GUI requires X11 (QT_QPA_PLATFORM=xcb)."
+    log "Fix: 'sudo raspi-config' -> Advanced Options -> Wayland -> X11, then reboot into the desktop."
+    exit 0
+fi
+
 if ! command -v systemctl >/dev/null 2>&1; then
     log "systemctl not found — cannot start ${UNIT}."
     exit 1

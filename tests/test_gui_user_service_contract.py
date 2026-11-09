@@ -212,3 +212,58 @@ class TestBootstrapIsModeAware:
             if "systemctl --user" in line and not line.lstrip().startswith("#")
         ]
         assert not active, f"bootstrap invokes a user manager it cannot reach: {active}"
+
+
+class TestSessionHelperRefusesWayland:
+    """The unit forces QT_QPA_PLATFORM=xcb. Started under a Wayland session
+    (the Bookworm default) Qt cannot come up and the unit burns its restart
+    budget on a dark screen. The autostart helper must refuse early, exit 0
+    (autostart must never break the login) and print the raspi-config fix.
+    A stub systemctl records every call so we can prove the unit was never
+    started."""
+
+    def _run_helper(self, tmp_path, session_type: str | None):
+        import os
+        import subprocess
+
+        stub = tmp_path / "systemctl"
+        calls = tmp_path / "systemctl.calls"
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            f"echo \"$@\" >> \"{calls}\"\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+        env = dict(os.environ)
+        env["PATH"] = f"{tmp_path}:{env['PATH']}"
+        env["DISPLAY"] = ":0"
+        if session_type is None:
+            env.pop("XDG_SESSION_TYPE", None)
+        else:
+            env["XDG_SESSION_TYPE"] = session_type
+        return subprocess.run(
+            ["bash", str(HELPER)], env=env, capture_output=True, text=True,
+        ), calls
+
+    def test_wayland_session_is_refused_with_the_fix(self, tmp_path):
+        result, calls = self._run_helper(tmp_path, "wayland")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+        assert "X11" in result.stdout
+        assert not calls.exists(), f"systemctl was called under Wayland: {calls.read_text()}"
+
+    def test_x11_session_starts_the_unit(self, tmp_path):
+        result, calls = self._run_helper(tmp_path, "x11")
+        assert result.returncode == 0, result.stdout + result.stderr
+        made = calls.read_text()
+        assert "import-environment" in made
+        assert "start --no-block khptz-gui.service" in made
+
+    def test_unknown_session_type_proceeds_as_before(self, tmp_path):
+        """No XDG_SESSION_TYPE: nothing was knowable before this guard, so the
+        helper must keep its previous behaviour (no new refusal)."""
+        result, calls = self._run_helper(tmp_path, None)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "start --no-block khptz-gui.service" in calls.read_text()
