@@ -212,3 +212,72 @@ class TestBootstrapIsModeAware:
             if "systemctl --user" in line and not line.lstrip().startswith("#")
         ]
         assert not active, f"bootstrap invokes a user manager it cannot reach: {active}"
+
+
+class TestSessionHelperRefusesWayland:
+    """The unit forces QT_QPA_PLATFORM=xcb, an X11-only backend, so a Wayland
+    session (the Bookworm default) is unsupported for it. The autostart
+    helper must refuse early, exit 0 (autostart must never break the login)
+    and print the raspi-config fix. A stub systemctl records every call so
+    we can prove the unit was never started."""
+
+    def _run_helper(self, tmp_path, session_type: str | None, failing_logger: bool = False):
+        import os
+        import subprocess
+
+        stub = tmp_path / "systemctl"
+        calls = tmp_path / "systemctl.calls"
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            f"echo \"$@\" >> \"{calls}\"\n"
+            "exit 0\n",
+            encoding="utf-8",
+        )
+        stub.chmod(0o755)
+        if failing_logger:
+            logger_stub = tmp_path / "logger"
+            logger_stub.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+            logger_stub.chmod(0o755)
+        env = dict(os.environ)
+        env["PATH"] = f"{tmp_path}:{env['PATH']}"
+        env["DISPLAY"] = ":0"
+        if session_type is None:
+            env.pop("XDG_SESSION_TYPE", None)
+        else:
+            env["XDG_SESSION_TYPE"] = session_type
+        return subprocess.run(
+            ["bash", str(HELPER)], env=env, capture_output=True, text=True,
+        ), calls
+
+    def test_wayland_session_is_refused_with_the_fix(self, tmp_path):
+        result, calls = self._run_helper(tmp_path, "wayland")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+        assert "X11" in result.stdout
+        assert not calls.exists(), f"systemctl was called under Wayland: {calls.read_text()}"
+
+    def test_x11_session_starts_the_unit(self, tmp_path):
+        result, calls = self._run_helper(tmp_path, "x11")
+        assert result.returncode == 0, result.stdout + result.stderr
+        made = calls.read_text()
+        assert "import-environment" in made
+        assert "start --no-block khptz-gui.service" in made
+
+    def test_unknown_session_type_proceeds_as_before(self, tmp_path):
+        """No XDG_SESSION_TYPE: nothing was knowable before this guard, so the
+        helper must keep its previous behaviour (no new refusal)."""
+        result, calls = self._run_helper(tmp_path, None)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "start --no-block khptz-gui.service" in calls.read_text()
+
+    def test_failing_logger_never_aborts_the_refusal(self, tmp_path):
+        """logger present but exiting 1 must not trip set -e inside log():
+        the refusal still exits 0, prints BOTH messages, and never starts
+        the unit (Mejora review of #120)."""
+        result, calls = self._run_helper(tmp_path, "wayland", failing_logger=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.count("[khptz-gui-session]") == 2
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+        assert not calls.exists(), f"systemctl was called: {calls.read_text()}"
