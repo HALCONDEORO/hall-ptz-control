@@ -199,6 +199,37 @@ else
     fi
 fi
 
+# ── Desktop session type ──────────────────────────────────────────────────────
+
+head2 "Desktop session"
+
+# The GUI units force QT_QPA_PLATFORM=xcb: only an X11 desktop can host the
+# GUI, and Bookworm defaults to Wayland. Inspect the ACTIVE graphical session
+# of the desktop user (a leftover session of the other type must not decide);
+# anything uninspectable is a skip, never a guess.
+_accept_user="${SUDO_USER:-}"
+if ! command -v loginctl >/dev/null 2>&1 || [[ -z "${_accept_user}" ]]; then
+    skip "no loginctl or no desktop user known - session type not inspectable"
+else
+    _sess_type=""
+    for _sid in $(loginctl list-sessions --no-legend 2>/dev/null \
+                  | awk -v u="${_accept_user}" '$3 == u { print $1 }' || true); do
+        _t="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
+        [[ "${_t}" == "x11" || "${_t}" == "wayland" ]] || continue
+        [[ "$(loginctl show-session "${_sid}" --property=Active --value 2>/dev/null || true)" == "yes" ]] || continue
+        _sess_type="${_t}"
+        break
+    done
+    case "${_sess_type}" in
+        x11)
+            pass "active desktop session is X11" ;;
+        wayland)
+            fail "active desktop session is Wayland - the GUI requires X11; switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11 and reboot" ;;
+        *)
+            skip "no active graphical session to inspect - run acceptance from the Pi desktop" ;;
+    esac
+fi
+
 # ── Runtime path permissions ─────────────────────────────────────────────────
 #
 # The mode of these directories is the difference between a GUI that can save

@@ -149,3 +149,24 @@ class TestRuntimePathPermissions:
                 and "say " not in line
             ]
             assert not active, f"permission section would run '{mutating}': {active}"
+
+
+class TestDesktopSessionTypeIsAccepted:
+    """Acceptance is the final on-site gate. The GUI units force
+    QT_QPA_PLATFORM=xcb, and Bookworm defaults to Wayland, so a hall can
+    pass every other check on a desktop that can never show the GUI. The
+    harness must inspect the ACTIVE session and fail on Wayland with the
+    raspi-config remedy."""
+
+    def test_active_session_type_is_inspected(self, text):
+        assert "--property=Type" in text
+        assert "--property=Active" in text
+
+    def test_wayland_is_a_failure_with_the_fix(self, text):
+        wayland_branch = text.index("active desktop session is Wayland")
+        assert "raspi-config" in text[wayland_branch:wayland_branch + 200]
+
+    def test_x11_is_a_pass_and_unknown_is_a_skip(self, text):
+        assert 'x11)' in text
+        assert 'pass "active desktop session is X11"' in text
+        assert 'skip "no active graphical session to inspect' in text
