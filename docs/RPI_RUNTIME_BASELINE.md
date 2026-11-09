@@ -148,7 +148,7 @@ hardware validation.
 | GitHub Actions CI (ubuntu-latest, Python 3.9) | Bullseye Python runtime (3.9.2 legacy target) | No Pi CPU, no real touchscreen, no real camera/ATEM |
 | Debian 12 container rehearsal (installer CI) | Bookworm packaging and install flow (3.11 target) | No Pi CPU, no graphical desktop session, no real hardware |
 | macOS / Windows dev workstation | PyQt5 via pip; use Python 3.9 to match target | Not a deployment target; ATEM and camera hardware not present |
-| Real Raspberry Pi 4/5 (Bullseye or Bookworm, 64-bit) | Production target | Required for #381 MVP validation |
+| Real Raspberry Pi 4 (Bullseye 64-bit) or Pi 4/5 (Bookworm 64-bit) | Legacy or installation software target | Physical validation through #381 still required |
 
 CI passing does **not** imply pilot readiness. Real Raspberry Pi validation through
 `#381` is required before claiming pilot/customer readiness.
@@ -157,11 +157,11 @@ CI passing does **not** imply pilot readiness. Real Raspberry Pi validation thro
 
 ## Runtime version checks (`khptz doctor`)
 
-`khptz doctor` should report incompatible runtime versions. Current checks:
+`khptz doctor` should report incompatible runtime versions. Intended checks for the two software targets (the matching doctor/readiness changes must also be installed):
 
 | Check | Pass condition | Failure action |
 |---|---|---|
-| Python version | exactly 3.9.x | OK on 3.9.x; WARNING on 3.10+ (not validated); FAIL below 3.9 |
+| Python version | 3.9.x on Bullseye (legacy) or 3.11.x on Bookworm (installation target) | PASS for the matching software target only; WARNING on 3.10 or 3.12+ and other unvalidated combinations; FAIL below 3.9. This does not validate physical hardware. |
 | PyQt5 import | Available | FAIL — application cannot start |
 | PyQt5 SVG import | Available | WARNING |
 | PyATEMMax import | Available when `atem_enabled: true` | WARNING (application still runs) |

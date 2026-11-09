@@ -185,7 +185,7 @@ Confirm on screen:
 - [ ] No Python error on startup.
 - [ ] Login screen accepts the operator password.
 - [ ] Both camera cards visible on splash.
-- [ ] The desktop session is X11: `loginctl show-session $(loginctl | awk '/seat0/ {print $1; exit}') -p Type` prints `Type=x11` (Bookworm: re-check after any OS upgrade, which can flip the session back to Wayland).
+- [ ] The active graphical session for the installation desktop user is X11. Run `loginctl list-sessions`, then `loginctl show-session SESSION_ID -p Name -p Active -p Type` for that user's sessions. Require `Active=yes` and `Type=x11`; do not choose the first `seat0` row, which may be inactive. If no active graphical session can be confirmed, record that check as unverified. On Bookworm, re-check after OS upgrades, which may switch back to Wayland.
 
 ---
 
