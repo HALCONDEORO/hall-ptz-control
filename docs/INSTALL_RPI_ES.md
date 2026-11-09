@@ -26,15 +26,22 @@ el hecho de que CI esté en verde.
   quedar "para arreglar en la sala": `apt`, `pip` y `git fetch` fallarán.
   Prepara el equipo mientras aún tenga conexión (puede ser la misma Pi antes
   de viajar): actualiza el sistema (`sudo apt update && sudo apt
-  full-upgrade -y`), instala las dependencias de "Preparar y comprobar"
-  (incluidas `x11-xserver-utils` y `python3-yaml`), cambia la sesión a X11 y
-  reinicia en el escritorio, confirma `Type=x11` con
-  `loginctl show-session <id> --property=Type --value` y clona la etiqueta
-  aprobada dejando `git status --ignored` limpio. Ya en la sala, todo lo
-  demás funciona sin salida a Internet: `--check`, la instalación, el
-  asistente, `khptz doctor` y el validador. La única excepción es ATEM
-  opcional: su `pip` necesita Internet, así que una sala con ATEM debe
-  instalarlo en esta fase de preparación, no en la sala.
+  full-upgrade -y`), instala las dependencias de "Preparar y comprobar" - dos
+  fáciles de pasar por alto: `python3-yaml` (el `--check` FALLA sin ella) y
+  `x11-xserver-utils` (el check solo avisa, pero el asistente la instala con
+  apt en la sala; sin WAN ese apt falla y revierte la configuración y las
+  contraseñas recién introducidas - preinstalarla es obligatorio para una
+  sala sin salida). Cambia la sesión a X11 y reinicia en el escritorio,
+  confirma `Active=yes` y `Type=x11` de tu usuario con
+  `loginctl show-session <id> -p Name -p Active -p Type` y clona la etiqueta
+  aprobada dejando `git status --ignored` limpio. Ya en la sala, el flujo de
+  producto estándar funciona sin salida a Internet: `--check`, la
+  instalación, el asistente, `khptz doctor` y el validador, siempre que el
+  apt se haya preparado y el clon de la etiqueta sea local. El producto
+  estándar no instala dependencias pip (ver requirements-rpi.txt). Esto
+  excluye `--dev` (necesita pip3) y ATEM opcional (su `pip` necesita
+  Internet): una sala que use cualquiera debe instalarlo en esta fase de
+  preparación, no en la sala.
 - En una actualización, confirma una copia recuperable y el plan de rollback.
   Si falla la copia, para antes de cambiar datos.
 - Si la versión detecta credenciales antiguas que requieren migración, usa su
@@ -105,8 +112,12 @@ no entregues el sistema con FAIL sin resolver. Guarda evidencia en
 `MVP_VALIDATION_REPORT.md`, incluyendo limitaciones aceptadas. Una guía revisada
 no sustituye esa prueba física.
 
-Si la GUI no aparece tras iniciar sesión (pantalla oscura), lo primero es
-descartar una sesión Wayland: `loginctl list-sessions --no-legend` y
-`loginctl show-session <id> --property=Type --value`. Si muestra `wayland`,
-cambia a X11 con `sudo raspi-config` -> Advanced Options -> Wayland -> X11 y
-reinicia en el escritorio.
+Si la GUI no aparece tras iniciar sesión (pantalla oscura), una causa
+posible a comprobar primero es el tipo de sesión:
+`loginctl list-sessions --no-legend` y
+`loginctl show-session <id> -p Name -p Active -p Type`. Si la sesión activa
+de tu usuario muestra `Type=wayland`, cambia a X11 con `sudo raspi-config` ->
+Advanced Options -> Wayland -> X11 y reinicia en el escritorio. Si ya es
+`Type=x11` con `Active=yes`, la causa es otra: recoge el journal
+(`journalctl --user -u khptz-gui -n 50 --no-pager` en modo GUI de usuario) y
+la salida de instalación antes de reintentar nada.
