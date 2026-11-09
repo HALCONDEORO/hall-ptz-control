@@ -427,6 +427,7 @@ step "Comprobando el arranque automatico de la pantalla"
 
 if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemctl not found — cannot confirm the GUI will start"
+    warn "This appliance needs Raspberry Pi OS with systemd; verify the image you flashed."
 elif [[ "${DEV_MODE}" == "true" ]]; then
     # A developer install deliberately ships no session-GUI assets and no
     # provisioning channel (install.sh gates both on product mode). Asserting
@@ -448,6 +449,7 @@ elif [[ "${GUI_MODE}" == "user" ]]; then
             info "present: ${_asset}"
         else
             warn "missing: ${_asset} — the session GUI will not start automatically."
+            warn "Re-run the installer; if it stays missing, the checkout is incomplete — re-clone the repository."
             [[ "${DOCTOR_RC}" -lt 20 ]] && DOCTOR_RC=20
         fi
     done
