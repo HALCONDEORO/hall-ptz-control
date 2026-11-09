@@ -86,11 +86,13 @@ class TestReadinessGate:
 
     def test_python_version_is_classified_not_ignored(self):
         """Whatever interpreter runs, the check must place it in one of the
-        three known buckets (supported / not-validated / too-old)."""
+        known buckets (supported legacy / supported installation target /
+        not-a-target / too-old)."""
         result = _run("real")
         assert "Python" in result.stdout
         assert any(
-            marker in result.stdout for marker in ("3.9.x", "is NOT validated", "too old")
+            marker in result.stdout
+            for marker in ("3.9.x", "3.11", "NOT a validated target", "too old")
         )
 
     def _run_mode(self, mode: str) -> subprocess.CompletedProcess:
