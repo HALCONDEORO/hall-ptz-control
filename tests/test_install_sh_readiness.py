@@ -92,3 +92,49 @@ class TestReadinessGate:
         assert any(
             marker in result.stdout for marker in ("3.9.x", "is NOT validated", "too old")
         )
+
+    def _run_mode(self, mode: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", HARNESS, mode, "--wizard-user", "tester"],
+            capture_output=True, text=True,
+        )
+
+    def test_wayland_session_is_a_blocking_fail(self):
+        """Both GUI launchers force QT_QPA_PLATFORM=xcb: an active Wayland
+        desktop session (the Bookworm/Trixie default) must FAIL the gate with
+        the raspi-config remedy, not pass and leave the screen dark on site."""
+        result = self._run_mode("wayland")
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "[FAIL]" in result.stdout
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+        assert "blocking check(s) failed" in result.stdout
+
+    def test_active_x11_beats_inactive_wayland(self):
+        """A leftover Wayland session listed FIRST must not fail a machine
+        whose active desktop is X11 (review #109: first-session selection)."""
+        result = self._run_mode("mixed-x11-active")
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "[PASS] Desktop session: X11" in result.stdout
+        assert "[FAIL] Desktop session" not in result.stdout
+
+    def test_active_wayland_beats_inactive_x11(self):
+        """A leftover X11 session listed FIRST must not pass a machine whose
+        active desktop is Wayland (review #109: the false-PASS direction)."""
+        result = self._run_mode("mixed-wayland-active")
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "[FAIL] Desktop session: Wayland" in result.stdout
+
+    def test_uninspectable_session_warns_but_never_blocks(self):
+        """No readable session (fresh boot, SSH, loginctl error): WARN with the
+        raspi-config step, never a FAIL — and never a silent PASS on a machine
+        that may default to Wayland (review #109)."""
+        for mode in ("real", "loginctl-fails"):
+            result = self._run_mode(mode)
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert "[FAIL] Desktop session" not in result.stdout
+
+    def test_loginctl_failure_warns_with_remedy(self):
+        result = self._run_mode("loginctl-fails")
+        assert "[WARN] No active desktop session to inspect" in result.stdout
+        assert "raspi-config" in result.stdout

@@ -275,6 +275,58 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
         _chk_warn "DISPLAY not set — Qt app needs a display session at runtime"
     fi
 
+    # Desktop session type (product installs only). Both GUI launchers force
+    # QT_QPA_PLATFORM=xcb on DISPLAY=:0, so they need an X11 session. Bookworm
+    # and Trixie boot to Wayland (wayfire/labwc) by default; there the screen
+    # stays dark even when every other check passes. docs/INSTALL_RPI.md
+    # requires switching to X11 before installing — enforce it at the gate
+    # rather than discovering it at the first boot on site.
+    if [[ "${DEV_MODE}" != "true" ]]; then
+        # Select the desktop user's ACTIVE graphical session, never just the
+        # first one listed: a background session of the other type (leftover
+        # Wayland next to the X11 desktop, or vice versa) must not mask the
+        # session that actually drives the touchscreen. Active=yes wins;
+        # otherwise fall back to a graphical session in State=active (covers a
+        # locked screen); anything else is uninspectable here.
+        _session_type=""
+        _state_type=""
+        if command -v loginctl >/dev/null 2>&1 && [[ -n "${WIZARD_USER}" ]]; then
+            for _sid in $(loginctl list-sessions --no-legend 2>/dev/null \
+                          | awk -v u="${WIZARD_USER}" '$3 == u { print $1 }' || true); do
+                _type="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
+                [[ "${_type}" == "x11" || "${_type}" == "wayland" ]] || continue
+                if [[ "$(loginctl show-session "${_sid}" --property=Active --value 2>/dev/null || true)" == "yes" ]]; then
+                    _session_type="${_type}"
+                    break
+                fi
+                if [[ -z "${_state_type}" ]] \
+                   && [[ "$(loginctl show-session "${_sid}" --property=State --value 2>/dev/null || true)" == "active" ]]; then
+                    _state_type="${_type}"
+                fi
+            done
+            [[ -n "${_session_type}" ]] || _session_type="${_state_type}"
+        fi
+        case "${_session_type}" in
+            x11)
+                _chk_pass "Desktop session: X11 (required by the GUI units)" ;;
+            wayland)
+                _chk_fail "Desktop session: Wayland — the GUI units require X11 (QT_QPA_PLATFORM=xcb). Switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11, reboot into the desktop and re-run --check." ;;
+            *)
+                # Uninspectable (fresh boot, SSH, no graphical session yet).
+                # Warn by default: only an OS that provably predates Bookworm
+                # defaults to X11. A WARN never blocks the gate, but it puts
+                # the raspi-config step in front of the installer on exactly
+                # the machines where the first boot would stay dark.
+                _os_major="${VERSION_ID:-}"
+                _os_major="${_os_major%%.*}"
+                if [[ "${_os_major}" =~ ^[0-9]+$ ]] && [[ "${_os_major}" -lt 12 ]]; then
+                    _chk_pass "No active desktop session to inspect (this OS defaults to X11)"
+                else
+                    _chk_warn "No active desktop session to inspect; Bookworm/Trixie boot to Wayland by default and the GUI units require X11. Confirm 'sudo raspi-config' -> Advanced Options -> Wayland -> X11 before installing."
+                fi ;;
+        esac
+    fi
+
     # Scoped display authorisation (system GUI mode only).
     #
     # In system mode the GUI runs as 'khptz' and reaches the desktop user's X
