@@ -32,7 +32,9 @@ el hecho de que CI esté en verde.
   `loginctl show-session <id> --property=Type --value` y clona la etiqueta
   aprobada dejando `git status --ignored` limpio. Ya en la sala, todo lo
   demás funciona sin salida a Internet: `--check`, la instalación, el
-  asistente, `khptz doctor` y el validador.
+  asistente, `khptz doctor` y el validador. La única excepción es ATEM
+  opcional: su `pip` necesita Internet, así que una sala con ATEM debe
+  instalarlo en esta fase de preparación, no en la sala.
 - En una actualización, confirma una copia recuperable y el plan de rollback.
   Si falla la copia, para antes de cambiar datos.
 - Si la versión detecta credenciales antiguas que requieren migración, usa su

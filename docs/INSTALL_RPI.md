@@ -164,7 +164,10 @@ before travelling):
    `git status --ignored` shows no local leftovers.
 
 Once on site, everything after this point works without WAN: `--check`, the
-install, the setup wizard, `khptz doctor` and the acceptance validator.
+install, the setup wizard, `khptz doctor` and the acceptance validator. The
+one exception is the optional ATEM add-on: its `pip` install needs internet,
+so a hall that uses ATEM must install it during this preparation phase, not
+on site.
 
 ## Get the approved build
 
