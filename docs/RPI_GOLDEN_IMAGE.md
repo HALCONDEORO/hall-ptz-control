@@ -18,10 +18,18 @@ A technician must be able to follow this document on site without guessing.
 
 ## OS and base image
 
-- **OS**: Raspberry Pi OS (Bullseye, Debian 11, 64-bit, Lite or Desktop)
-- **Version**: Bullseye image shipping the supported **Python 3.9.2** target
-  (see [Raspberry Pi runtime baseline](RPI_RUNTIME_BASELINE.md)). Bookworm/3.11
-  is **not** validated — do not provision it for a pilot without re-validation.
+- **OS for new installations**: Raspberry Pi OS Bookworm (Debian 12, 64-bit,
+  **Desktop**) with system **Python 3.11** — the installation target, rehearsed
+  in a container. Physical validation is still pending; record the first on-site
+  run in `docs/MVP_VALIDATION_REPORT.md`.
+- **OS, legacy baseline**: Raspberry Pi OS Bullseye (Debian 11, 64-bit) with
+  **Python 3.9.2** — still supported for existing installs. Do not mix targets
+  on one image. See [Raspberry Pi runtime baseline](RPI_RUNTIME_BASELINE.md).
+- **Desktop session must be X11**: Bookworm boots to Wayland by default and the
+  GUI units require X11 (`QT_QPA_PLATFORM=xcb`). After the first boot, select
+  `sudo raspi-config` -> Advanced Options -> Wayland -> X11 and reboot.
+  `runtime/installer/install.sh --check` FAILs while the active desktop session
+  is Wayland.
 - **User**: `pi` (default) — do not rename unless you update all scripts
 - **Hostname**: `khptz-control` (optional, helps identify on network)
 
@@ -50,6 +58,10 @@ sudo systemctl start ssh
 sudo raspi-config nonint do_blanking 1
 ```
 
+On Bookworm, also switch the desktop session to X11 (it defaults to Wayland,
+which the GUI units cannot use): `sudo raspi-config` -> Advanced Options ->
+Wayland -> X11, then reboot before continuing.
+
 ---
 
 ## Phase 2 — System dependencies
@@ -74,7 +86,10 @@ sudo pip3 install PyATEMMax
 
 > On Bullseye (pip 20.3.4) there is no PEP 668 externally-managed marker, so the
 > plain command works. Do **not** add `--break-system-packages`: that flag only
-> exists in the newer pip shipped on Bookworm and aborts on Bullseye.
+> exists in the newer pip shipped on Bookworm. On Bookworm, system pip is
+> blocked by PEP 668: install ATEM support only after the licence/dependency
+> review, in the reviewed way for that target (see
+> [Raspberry Pi runtime baseline](RPI_RUNTIME_BASELINE.md)).
 
 ---
 
@@ -170,6 +185,7 @@ Confirm on screen:
 - [ ] No Python error on startup.
 - [ ] Login screen accepts the operator password.
 - [ ] Both camera cards visible on splash.
+- [ ] The active graphical session for the installation desktop user is X11. Run `loginctl list-sessions`, then `loginctl show-session SESSION_ID -p Name -p Active -p Type` for that user's sessions. Require `Active=yes` and `Type=x11`; do not choose the first `seat0` row, which may be inactive. If no active graphical session can be confirmed, record that check as unverified. On Bookworm, re-check after OS upgrades, which may switch back to Wayland.
 
 ---
 

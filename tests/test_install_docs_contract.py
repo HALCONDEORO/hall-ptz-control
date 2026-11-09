@@ -15,7 +15,7 @@ def test_install_guides_use_desktop_user_and_readiness_wrapper():
 def test_guides_do_not_claim_pi5_bullseye_or_silent_validator():
     baseline = (ROOT / "docs/RPI_RUNTIME_BASELINE.md").read_text()
     guide = (ROOT / "docs/INSTALL_RPI.md").read_text()
-    assert "Requires Bookworm/Trixie, not Bullseye" in baseline
+    assert "Requires Bookworm 64-bit (not Bullseye)" in baseline
     assert "Tested target for MVP" not in baseline
     assert "creates a report directory" in guide
     assert "it changes\nnothing on the appliance" not in guide
