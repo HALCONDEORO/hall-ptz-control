@@ -67,7 +67,8 @@ source "${FUNC_SH}"
 _ensure_run_khptz "${TARGET}" "${WIZARD_USER}"
 RUN
 
-export FUNC_SH="${WORK}/func.sh" TARGET WIZARD_USER="$(id -un)"
+WIZARD_USER="$(id -un)"
+export FUNC_SH="${WORK}/func.sh" TARGET WIZARD_USER
 export INSTALL_CALLS="${WORK}/install.calls"
 export PATH="${WORK}/bin:${PATH}"
 export STAT_FAKE_OWNER="${STAT_FAKE_OWNER:-}" STAT_FAKE_GROUP="${STAT_FAKE_GROUP:-}"
