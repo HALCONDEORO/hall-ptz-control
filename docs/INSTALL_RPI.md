@@ -95,7 +95,10 @@ Session and optional-dependency limits:
 - **Bookworm/Trixie default to Wayland** (wayfire/labwc). The GUI units require
   X11 (`DISPLAY=:0`, `xhost`). Switch the session to X11
   (`raspi-config` -> Advanced -> Wayland -> X11) before installing. A container
-  rehearsal does not verify the physical desktop session.
+  rehearsal does not verify the physical desktop session. The readiness gate
+  (`install_khptz_rpi.sh --check`) blocks with a FAIL when it detects a Wayland
+  session, and only warns when no graphical session is readable yet (for
+  example over SSH before the first desktop login).
 - Keep the default **system GUI mode**. User GUI mode is not approved for
   local password authentication; do not weaken secret permissions to use it.
 - **Do not use `--atem` or `--dev` on Bookworm/Trixie** without their separate

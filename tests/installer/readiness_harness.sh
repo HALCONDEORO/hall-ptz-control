@@ -62,6 +62,26 @@ exit 0
 STUB
 done
 
+# Optional display-server stub. When SESSION_TYPE is set (e.g. wayland, x11),
+# loginctl reports one graphical session for a non-root user of that type, so
+# the Wayland/X11 readiness classification can be exercised without a real
+# desktop. Unset: no stub, the host's loginctl (or its absence) decides.
+if [[ -n "${SESSION_TYPE:-}" ]]; then
+    cat > "${STUB_DIR}/loginctl" <<STUB
+#!/usr/bin/env bash
+case "\$1" in
+    list-sessions)
+        echo "1 1000 khptz seat0 tty7"
+        ;;
+    show-session)
+        echo "${SESSION_TYPE}"
+        ;;
+esac
+exit 0
+STUB
+    chmod +x "${STUB_DIR}/loginctl"
+fi
+
 chmod +x "${STUB_DIR}"/*
 
 # ── Target selection ──────────────────────────────────────────────────────────

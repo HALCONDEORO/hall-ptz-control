@@ -27,10 +27,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 HARNESS = (REPO_ROOT / "tests" / "installer" / "readiness_harness.sh").as_posix()
 
 
-def _run(mode: str) -> subprocess.CompletedProcess:
+def _run(mode: str, env_extra: dict | None = None) -> subprocess.CompletedProcess:
+    env = None
+    if env_extra:
+        import os
+
+        env = {**os.environ, **env_extra}
     return subprocess.run(
         ["bash", HARNESS, mode],
-        capture_output=True, text=True,
+        capture_output=True, text=True, env=env,
     )
 
 
@@ -92,3 +97,26 @@ class TestReadinessGate:
         assert any(
             marker in result.stdout for marker in ("3.9.x", "is NOT validated", "too old")
         )
+
+    def test_wayland_session_is_a_blocking_fail(self):
+        """Bookworm/Trixie default to Wayland, where the X11-only GUI never
+        reaches the screen. The gate must FAIL and name the raspi-config
+        switch, instead of letting the install proceed to a dead display."""
+        result = _run("real", {"SESSION_TYPE": "wayland"})
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "[FAIL]" in result.stdout
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+
+    def test_x11_session_passes_the_display_check(self):
+        """An X11 session is the supported path: the gate reports PASS and the
+        overall check still succeeds."""
+        result = _run("real", {"SESSION_TYPE": "x11"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "Display server: X11" in result.stdout
+
+    def test_unknown_session_type_warns_but_does_not_block(self):
+        """With no readable graphical session (e.g. installing over SSH before
+        the first desktop login) the gate can only warn, never block."""
+        result = _run("real", {"SESSION_TYPE": ""})
+        assert result.returncode == 0, result.stdout + result.stderr

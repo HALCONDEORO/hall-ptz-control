@@ -275,6 +275,31 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
         _chk_warn "DISPLAY not set — Qt app needs a display session at runtime"
     fi
 
+    # Display server (Wayland vs X11). Both GUI modes require an X11 desktop
+    # session (DISPLAY=:0, the scoped xhost grant): Bookworm/Trixie default to
+    # Wayland (wayfire/labwc), where the GUI never reaches the screen. Catch it
+    # at readiness time so the raspi-config switch and reboot happen BEFORE
+    # anything installs, not as a silent dead screen after the first boot.
+    _session_type=""
+    if command -v loginctl >/dev/null 2>&1; then
+        _sid="$(loginctl list-sessions --no-legend 2>/dev/null \
+            | awk -v u="${WIZARD_USER:-}" '$3 != "root" && $3 != "" && (u == "" || $3 == u) { print $1; exit }' || true)"
+        if [[ -n "${_sid}" ]]; then
+            _session_type="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
+        fi
+    fi
+    case "${_session_type}" in
+        wayland)
+            _chk_fail "Wayland session detected — the GUI requires an X11 desktop session. Switch with: sudo raspi-config (Advanced Options -> Wayland -> X11), reboot into the desktop, then re-run --check."
+            ;;
+        x11)
+            _chk_pass "Display server: X11 session"
+            ;;
+        *)
+            _chk_warn "Display server type unknown (no graphical session readable) — the GUI requires X11; on Bookworm/Trixie switch with raspi-config (Advanced Options -> Wayland -> X11) before installing."
+            ;;
+    esac
+
     # Scoped display authorisation (system GUI mode only).
     #
     # In system mode the GUI runs as 'khptz' and reaches the desktop user's X
