@@ -18,6 +18,16 @@
 #
 # Usage:
 #   bash scripts/validate_rpi_acceptance.sh [--with-backup] [--report FILE]
+#                                         [--wizard-user USER]
+#
+# --wizard-user names the desktop user the GUI session belongs to. When it
+# is not given, the user is resolved in this order (first candidate that is
+# a real account wins):
+#   1. KHPTZ_WIZARD_USER recorded by install.sh in install-state.env
+#   2. SUDO_USER, when the validator runs under sudo
+#   3. the invoking user, when it is not root
+# Without a resolved user the desktop-session check SKIPs instead of
+# guessing.
 #
 # Exit codes:
 #   0  no automated check failed (manual items may remain)
@@ -27,14 +37,17 @@ set -uo pipefail
 
 REPORT=""
 WITH_BACKUP=false
+WIZARD_USER_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --with-backup) WITH_BACKUP=true; shift ;;
         --report) REPORT="${2:-}"; shift 2 ;;
         --report=*) REPORT="${1#*=}"; shift ;;
+        --wizard-user) WIZARD_USER_ARG="${2:-}"; shift 2 ;;
+        --wizard-user=*) WIZARD_USER_ARG="${1#*=}"; shift ;;
         -h|--help)
-            sed -n '5,27p' "$0"; exit 0 ;;
+            sed -n '5,37p' "$0"; exit 0 ;;
         *)
             echo "Unknown option: $1 (try --help)" >&2; exit 2 ;;
     esac
@@ -58,6 +71,36 @@ skip()   { SKIP_N=$((SKIP_N+1));     say "[SKIP]   $*"; }
 say "======================================================================"
 say " KHPTZ Raspberry Pi acceptance report (#890)"
 say "======================================================================"
+
+# ── Desktop user resolution ──────────────────────────────────────────────────
+#
+# Most checks are user-agnostic; the session-type check below is not. The
+# installer already records its wizard user in install-state.env, so a bare
+# `bash scripts/validate_rpi_acceptance.sh` on the Pi works without flags
+# and without relying on how the shell happened to be entered. Order:
+# flag > install state > SUDO_USER > invoking (non-root) user.
+
+STATE_FILE="${KHPTZ_STATE_FILE:-/etc/khptz/install-state.env}"
+
+DESKTOP_USER=""
+DESKTOP_USER_FROM=""
+
+_accept_desktop_user() {
+    local u="$1" via="$2"
+    [[ -n "${u}" && -z "${DESKTOP_USER}" ]] || return 1
+    id -u "${u}" >/dev/null 2>&1 || return 1
+    DESKTOP_USER="${u}"
+    DESKTOP_USER_FROM="${via}"
+}
+
+_accept_desktop_user "${WIZARD_USER_ARG}" "--wizard-user flag"
+_state_wizard_user="$(sed -n 's/^KHPTZ_WIZARD_USER=//p' "${STATE_FILE}" 2>/dev/null | tr -d '"' | tail -n1 || true)"
+_accept_desktop_user "${_state_wizard_user}" "install state (${STATE_FILE})"
+_accept_desktop_user "${SUDO_USER:-}" "SUDO_USER"
+if [[ "$(id -u)" != "0" ]]; then
+    _accept_desktop_user "$(id -un)" "invoking user"
+fi
+unset _state_wizard_user
 
 # ── Environment block #890 requires recorded before anything changes ─────────
 
@@ -180,7 +223,7 @@ elif [[ "${GUI_MODE}" == "user" ]]; then
     else
         pass "khptz-control is disabled - the desktop session owns the GUI"
     fi
-    manual "As ${SUDO_USER:-khptz}, after login run: systemctl --user status khptz-gui"
+    manual "As ${DESKTOP_USER:-khptz}, after login run: systemctl --user status khptz-gui"
 else
     if systemctl is-enabled --quiet khptz-control 2>/dev/null; then
         pass "khptz-control is enabled"
@@ -207,13 +250,14 @@ head2 "Desktop session"
 # GUI, and Bookworm defaults to Wayland. Inspect the ACTIVE graphical session
 # of the desktop user (a leftover session of the other type must not decide);
 # anything uninspectable is a skip, never a guess.
-_accept_user="${SUDO_USER:-}"
-if ! command -v loginctl >/dev/null 2>&1 || [[ -z "${_accept_user}" ]]; then
-    skip "no loginctl or no desktop user known - session type not inspectable"
+if [[ -z "${DESKTOP_USER}" ]]; then
+    skip "no desktop user resolved - rerun with --wizard-user, or check manually: loginctl list-sessions"
+elif ! command -v loginctl >/dev/null 2>&1; then
+    skip "loginctl not available - session type not inspectable"
 else
     _sess_type=""
     for _sid in $(loginctl list-sessions --no-legend 2>/dev/null \
-                  | awk -v u="${_accept_user}" '$3 == u { print $1 }' || true); do
+                  | awk -v u="${DESKTOP_USER}" '$3 == u { print $1 }' || true); do
         _t="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
         [[ "${_t}" == "x11" || "${_t}" == "wayland" ]] || continue
         [[ "$(loginctl show-session "${_sid}" --property=Active --value 2>/dev/null || true)" == "yes" ]] || continue
@@ -222,9 +266,9 @@ else
     done
     case "${_sess_type}" in
         x11)
-            pass "active desktop session is X11" ;;
+            pass "active desktop session is X11 (user ${DESKTOP_USER} from ${DESKTOP_USER_FROM})" ;;
         wayland)
-            fail "active desktop session is Wayland - the GUI requires X11; switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11 and reboot" ;;
+            fail "active desktop session for ${DESKTOP_USER} is Wayland (user from ${DESKTOP_USER_FROM}) - the GUI requires X11; switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11 and reboot" ;;
         *)
             skip "no active graphical session to inspect - run acceptance from the Pi desktop" ;;
     esac

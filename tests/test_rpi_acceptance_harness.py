@@ -163,10 +163,22 @@ class TestDesktopSessionTypeIsAccepted:
         assert "--property=Active" in text
 
     def test_wayland_is_a_failure_with_the_fix(self, text):
-        wayland_branch = text.index("active desktop session is Wayland")
+        wayland_branch = text.index("is Wayland")
         assert "raspi-config" in text[wayland_branch:wayland_branch + 200]
 
     def test_x11_is_a_pass_and_unknown_is_a_skip(self, text):
         assert 'x11)' in text
-        assert 'pass "active desktop session is X11"' in text
+        assert 'pass "active desktop session is X11' in text
         assert 'skip "no active graphical session to inspect' in text
+
+    def test_desktop_user_resolution_order(self, text):
+        """Without SUDO_USER (a plain terminal run) the session check used to
+        skip outright. The resolver must prefer explicit state over ambient
+        environment: --wizard-user flag, then KHPTZ_WIZARD_USER from the
+        install-state file, then SUDO_USER, then the invoking non-root
+        user."""
+        flag = text.index('_accept_desktop_user "${WIZARD_USER_ARG}"')
+        state = text.index('_state_wizard_user=')
+        sudo = text.index('_accept_desktop_user "${SUDO_USER:-}"')
+        invoking = text.index('_accept_desktop_user "$(id -un)"')
+        assert flag < state < sudo < invoking
