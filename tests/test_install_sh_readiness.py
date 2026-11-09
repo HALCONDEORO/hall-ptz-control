@@ -92,3 +92,24 @@ class TestReadinessGate:
         assert any(
             marker in result.stdout for marker in ("3.9.x", "is NOT validated", "too old")
         )
+
+    def test_wayland_session_is_a_blocking_fail(self):
+        """Both GUI launchers force QT_QPA_PLATFORM=xcb: an active Wayland
+        desktop session (the Bookworm/Trixie default) must FAIL the gate with
+        the raspi-config remedy, not pass and leave the screen dark on site."""
+        result = subprocess.run(
+            ["bash", HARNESS, "wayland", "--wizard-user", "tester"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        assert "[FAIL]" in result.stdout
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+        assert "blocking check(s) failed" in result.stdout
+
+    def test_real_repo_session_branch_is_not_blocking(self):
+        """On a host with no graphical session for the wizard user (CI, SSH),
+        the session-type check must not block the gate by itself."""
+        result = _run("real")
+        assert "Desktop session" in result.stdout
+        assert "[FAIL] Desktop session: Wayland" not in result.stdout

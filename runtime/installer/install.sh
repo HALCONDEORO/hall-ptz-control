@@ -275,6 +275,42 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
         _chk_warn "DISPLAY not set — Qt app needs a display session at runtime"
     fi
 
+    # Desktop session type (product installs only). Both GUI launchers force
+    # QT_QPA_PLATFORM=xcb on DISPLAY=:0, so they need an X11 session. Bookworm
+    # and Trixie boot to Wayland (wayfire/labwc) by default; there the screen
+    # stays dark even when every other check passes. docs/INSTALL_RPI.md
+    # requires switching to X11 before installing — enforce it at the gate
+    # rather than discovering it at the first boot on site.
+    if [[ "${DEV_MODE}" != "true" ]]; then
+        _session_type=""
+        if command -v loginctl >/dev/null 2>&1 && [[ -n "${WIZARD_USER}" ]]; then
+            for _sid in $(loginctl list-sessions --no-legend 2>/dev/null \
+                          | awk -v u="${WIZARD_USER}" '$3 == u { print $1 }' || true); do
+                _type="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
+                if [[ "${_type}" == "x11" || "${_type}" == "wayland" ]]; then
+                    _session_type="${_type}"
+                    break
+                fi
+            done
+        fi
+        case "${_session_type}" in
+            x11)
+                _chk_pass "Desktop session: X11 (required by the GUI units)" ;;
+            wayland)
+                _chk_fail "Desktop session: Wayland — the GUI units require X11 (QT_QPA_PLATFORM=xcb). Switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11, reboot into the desktop and re-run --check." ;;
+            *)
+                _os_id="${ID:-}"
+                _os_major="${VERSION_ID:-}"
+                _os_major="${_os_major%%.*}"
+                if [[ "${_os_id}" == "debian" || "${_os_id}" == "raspbian" ]] \
+                   && [[ "${_os_major}" =~ ^[0-9]+$ ]] && [[ "${_os_major}" -ge 12 ]]; then
+                    _chk_warn "No active desktop session to inspect; ${PRETTY_NAME:-Debian 12+} boots to Wayland by default and the GUI units require X11. Confirm 'sudo raspi-config' -> Advanced Options -> Wayland -> X11 before installing."
+                else
+                    _chk_pass "Desktop session type not inspectable here (no active graphical session)"
+                fi ;;
+        esac
+    fi
+
     # Scoped display authorisation (system GUI mode only).
     #
     # In system mode the GUI runs as 'khptz' and reaches the desktop user's X

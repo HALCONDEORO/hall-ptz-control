@@ -21,6 +21,11 @@
 #   readiness_harness.sh real     — run --check against the real repository
 #   readiness_harness.sh stripped — run --check against a copy missing the
 #                                   systemd service template (must FAIL)
+#   readiness_harness.sh wayland [--wizard-user U]
+#                                 — stub loginctl to report a Wayland desktop
+#                                   session (the GUI units need X11: must FAIL)
+#
+# Extra arguments after the mode are forwarded to install.sh.
 #
 # Exit code and stdout are those of install.sh --check itself.
 
@@ -61,6 +66,21 @@ for _cmd in git rsync systemctl; do
 exit 0
 STUB
 done
+
+# mode=wayland: a loginctl stub reporting one graphical Wayland session for the
+# --wizard-user the caller passes, so the session-type branch runs the same on
+# every host. Created only in this mode: modes without it exercise the "no
+# inspectable session" branch with whatever the host provides.
+if [[ "${MODE}" == "wayland" ]]; then
+    cat > "${STUB_DIR}/loginctl" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+    list-sessions) echo "c1 1000 tester seat0 tty7" ;;
+    show-session)  echo "wayland" ;;
+esac
+exit 0
+STUB
+fi
 
 chmod +x "${STUB_DIR}"/*
 
