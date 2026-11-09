@@ -15,8 +15,8 @@ installable MVP candidate, not a hardware-certified appliance release.
 | Item | Current software target or required check |
 |---|---|
 | Pi | Pi 4, 2 GB minimum, 4 GB preferred; physical validation remains required. |
-| OS | Raspberry Pi OS Bullseye 64-bit Desktop, Python 3.9.2, X11. |
-| Pi 5 | Cannot use Bullseye. Bookworm/Trixie remain unvalidated here; do not assume the same install path. |
+| OS | Raspberry Pi OS Bookworm 64-bit Desktop, Python 3.11, X11 (the Bullseye 64-bit / Python 3.9.2 baseline remains supported on Pi 4). Bookworm defaults to Wayland: switch the session to X11 before installing. |
+| Pi 5 | Bookworm 64-bit only — it cannot boot Bullseye. Trixie remains unvalidated. |
 | Display | Target 1920x1080 touchscreen; test touch mapping and readability on the actual display. |
 | Cameras | One or two compatible VISCA-over-IP cameras; verify model, transport and configured port rather than assuming every VISCA camera works. |
 | Network | Prefer wired LAN, unique reserved/static addresses and no public exposure of camera controls. |
