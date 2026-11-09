@@ -14,7 +14,6 @@ The real validate_rpi_acceptance.sh runs end to end here with a stubbed
 is asserted, so unrelated sections cannot make the verdicts flaky.
 """
 
-import os
 import stat
 import subprocess
 from pathlib import Path
