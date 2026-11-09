@@ -76,7 +76,7 @@ def _write_exe(path: Path, text: str) -> None:
 
 
 def _run_acceptance(tmp_path: Path, fixture: Optional[str], with_loginctl: bool = True,
-                    extra_env: dict | None = None) -> str:
+                    extra_env: Optional[dict] = None) -> str:
     stubbin = tmp_path / "bin"
     stubbin.mkdir(exist_ok=True)
     _write_exe(stubbin / "id", ID_STUB)
