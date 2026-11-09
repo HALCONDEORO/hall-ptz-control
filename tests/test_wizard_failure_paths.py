@@ -11,9 +11,10 @@
 #
 #   1. InstallingPage.initializePage calls handoff.begin(), which writes into
 #      /run/khptz. The desktop user cannot create that directory, and install.sh
-#      deliberately tolerates `systemd-tmpfiles --create` failing with a warning
-#      ("/run/khptz will be created on next boot") — so an operator who runs
-#      setup before rebooting hit an OSError and lost the wizard.
+#      deliberately tolerates `systemd-tmpfiles --create` failing (it then tries
+#      to create /run/khptz directly, and only warns if that fails too) — so an
+#      operator who ran setup before rebooting could hit an OSError and lose the
+#      wizard.
 #
 #   2. DeviceCheckPage.initializePage calls run_preflight(), which measured disk
 #      usage of the current working directory and collected Raspberry Pi

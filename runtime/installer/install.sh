@@ -699,8 +699,57 @@ if [[ "${DEV_MODE}" == "false" ]]; then
         # container), so create it before writing rather than failing the install.
         mkdir -p /etc/tmpfiles.d
         printf 'd /run/khptz 0750 %s root -\n' "${WIZARD_USER}" > /etc/tmpfiles.d/khptz.conf
-        systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf \
-            || warn "systemd-tmpfiles --create failed; /run/khptz will be created on next boot"
+
+        # Fallback for a failed systemd-tmpfiles --create of the provisioning
+        # channel directory. Never repairs by inference: an existing path is
+        # used only when it is a REAL directory (not a symlink) owned by
+        # <owner>:root with mode exactly 0750; anything else only gets a WARN.
+        # A missing directory is created restrictively and then verified.
+        # Exit 0 = usable now; exit 1 = channel unavailable this boot (the
+        # install continues either way). Without the directory the wizard
+        # cannot drop request.json and provisioning is dead for the whole
+        # first session, with only this install log to explain why.
+        _ensure_run_khptz() {
+            local dir="$1" owner="$2"
+            local mode o g
+
+            if [[ -L "${dir}" ]]; then
+                warn "${dir} is a symlink — refusing to use or modify it. Provisioning channel unavailable now; verify after reboot."
+                return 1
+            fi
+
+            if [[ -d "${dir}" ]]; then
+                mode="$(stat -c '%a' "${dir}" 2>/dev/null || true)"
+                o="$(stat -c '%U' "${dir}" 2>/dev/null || true)"
+                g="$(stat -c '%G' "${dir}" 2>/dev/null || true)"
+                if [[ "${mode}" == "750" && "${o}" == "${owner}" && "${g}" == "root" ]]; then
+                    info "${dir} already exists with the expected owner and mode — using it."
+                    return 0
+                fi
+                warn "${dir} exists with unexpected owner/group/mode (${o}:${g} ${mode}, expected ${owner}:root 750) — not changing it by inference. Provisioning channel unavailable now; verify after reboot."
+                return 1
+            fi
+
+            if ! install -d -m 0750 -o "${owner}" -g root "${dir}"; then
+                warn "Could not create ${dir}. Provisioning channel unavailable now; verify after reboot."
+                return 1
+            fi
+            # Verify what was just created: a partially-privileged or racing
+            # system must not leave a looser directory in place unnoticed.
+            mode="$(stat -c '%a' "${dir}" 2>/dev/null || true)"
+            o="$(stat -c '%U' "${dir}" 2>/dev/null || true)"
+            g="$(stat -c '%G' "${dir}" 2>/dev/null || true)"
+            if [[ "${mode}" == "750" && "${o}" == "${owner}" && "${g}" == "root" ]]; then
+                warn "systemd-tmpfiles --create failed; ${dir} created directly with the same owner and mode."
+                return 0
+            fi
+            warn "${dir} was created but does not match ${owner}:root 0750 (got ${o}:${g} ${mode}) — not trusting it. Provisioning channel unavailable now; verify after reboot."
+            return 1
+        }
+
+        if ! systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf; then
+            _ensure_run_khptz /run/khptz "${WIZARD_USER}" || true
+        fi
 
         systemctl daemon-reload
         systemctl enable khptz-provision.path 2>/dev/null || true

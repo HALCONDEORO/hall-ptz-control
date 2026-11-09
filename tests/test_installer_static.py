@@ -577,6 +577,22 @@ class TestProvisioningChannel:
         assert 'd /run/khptz 0750 %s root' in sh
         assert "systemd-tmpfiles --create" in sh
 
+    def test_tmpfiles_failure_falls_back_without_inferring_repairs(self):
+        """If systemd-tmpfiles cannot create /run/khptz now, a bare warning
+        leaves the wizard unable to provision this boot. The fallback must
+        create the directory with the SAME owner and mode as the tmpfiles
+        line — and, per the #122 review, never repair an existing path by
+        inference: only a real directory (not a symlink) with exactly
+        owner:root 0750 may be used."""
+        sh = _sh()
+        assert 'if ! systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf' in sh
+        assert '_ensure_run_khptz /run/khptz "${WIZARD_USER}"' in sh
+        assert 'install -d -m 0750 -o "${owner}" -g root "${dir}"' in sh
+        # Existing paths are validated, never re-moded or re-owned.
+        assert '[[ -L "${dir}" ]]' in sh
+        assert "stat -c '%a'" in sh
+        assert 'not changing it by inference' in sh
+
     def test_installer_enables_path_unit(self):
         assert "systemctl enable khptz-provision.path" in _sh()
 
