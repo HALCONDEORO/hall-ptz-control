@@ -169,3 +169,34 @@ class TestDesktopUserResolution:
         section = _desktop_section(report)
         assert "[PASS]" in section
         assert "user wizard from install state" in section
+
+
+class TestMissingOptionValues:
+    """A value-taking flag without its value used to hang forever: `shift 2`
+    on a single remaining argument fails silently (no set -e), the loop never
+    advances, and CI/timeout is the only way out. The validator must exit 2
+    with a usage message instead - for both the new --wizard-user and the
+    pre-existing --report, which shared the shape."""
+
+    @pytest.mark.parametrize("flag", ["--report", "--wizard-user"])
+    def test_missing_value_exits_2_not_hang(self, flag, tmp_path):
+        result = subprocess.run(
+            ["timeout", "10", "bash", str(SCRIPT), flag],
+            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 2, (
+            f"expected exit 2, got {result.returncode} "
+            f"(124 would mean the parser hung): {result.stderr}"
+        )
+        assert "needs a value" in result.stderr
+
+    @pytest.mark.parametrize("flag", ["--report", "--wizard-user"])
+    def test_option_looking_value_is_rejected(self, flag, tmp_path):
+        result = subprocess.run(
+            ["timeout", "10", "bash", str(SCRIPT), flag, "--check"],
+            env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+            capture_output=True, text=True, timeout=30,
+        )
+        assert result.returncode == 2
+        assert "needs a value" in result.stderr

@@ -39,12 +39,22 @@ REPORT=""
 WITH_BACKUP=false
 WIZARD_USER_ARG=""
 
+# A value-taking flag must consume a real value. `shift 2` with only one
+# argument left fails silently (no set -e here), the loop never advances and
+# the validator hangs forever; an option-looking value is just as wrong.
+_need_value() {
+    if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+        echo "$1 needs a value (try --help)" >&2
+        exit 2
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --with-backup) WITH_BACKUP=true; shift ;;
-        --report) REPORT="${2:-}"; shift 2 ;;
+        --report) _need_value "$1" "${2:-}"; REPORT="$2"; shift 2 ;;
         --report=*) REPORT="${1#*=}"; shift ;;
-        --wizard-user) WIZARD_USER_ARG="${2:-}"; shift 2 ;;
+        --wizard-user) _need_value "$1" "${2:-}"; WIZARD_USER_ARG="$2"; shift 2 ;;
         --wizard-user=*) WIZARD_USER_ARG="${1#*=}"; shift ;;
         -h|--help)
             sed -n '5,37p' "$0"; exit 0 ;;
