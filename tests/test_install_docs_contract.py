@@ -135,3 +135,54 @@ def test_golden_image_uses_product_install_flow():
     assert "sudo chown -R" not in text
     assert "sudo pip3 install" not in text
     assert "unprovisioned" in text
+
+
+def test_offline_install_preparation_is_documented():
+    """A hall with no WAN cannot apt/pip/git-fetch on site. The EN guide must
+    carry a preparation section, and it must not overstate the installer:
+    python3-yaml is a hard readiness FAIL while x11-xserver-utils only WARNs
+    (the wizard apt-installs it later, which breaks offline). The session
+    check must inspect Name/Active/Type like the golden-image checklist, and
+    the offline guarantee must be scoped to the stock product."""
+    en = (ROOT / "docs/INSTALL_RPI.md").read_text()
+    es = (ROOT / "docs/INSTALL_RPI_ES.md").read_text()
+    assert "## Sites without internet access (offline installs)" in en
+    start = en.index("## Sites without internet access")
+    end = en.index("## Get the approved build")
+    section = en[start:end]
+    assert "x11-xserver-utils" in section and "python3-yaml" in section
+    # Severity must be accurate: only WARN for xhost, FAIL for python3-yaml.
+    assert "the readiness check FAILs without it" in section
+    assert "the readiness check only WARNs" in section
+    assert "everything after this point works without WAN" not in section
+    assert "stock product flow works without WAN" in section
+    assert "--dev" in section and "ATEM" in section
+    assert "requirements-rpi.txt" in section
+    # Session verification matches the golden-image checklist (RPI_GOLDEN_IMAGE).
+    assert "loginctl show-session <session-id> -p Name -p Active -p Type" in section
+    assert "Active=yes" in section and "Type=x11" in section
+    assert "git status --ignored" in section
+    for needle in ("x11-xserver-utils", "python3-yaml",
+                   "loginctl show-session <id> -p Name -p Active -p Type",
+                   "git status --ignored"):
+        assert needle in es
+
+
+def test_dark_screen_troubleshooting_names_the_wayland_remedy():
+    """A dark screen after login can be a Wayland session - a possibility to
+    check first, not a proven frequency claim. Both guides must point at the
+    session-type check (Name/Active/Type) and the raspi-config X11 remedy,
+    without claiming unmerged tooling already logs it."""
+    en = (ROOT / "docs/INSTALL_RPI.md").read_text()
+    es = (ROOT / "docs/INSTALL_RPI_ES.md").read_text()
+    start = en.find("### The GUI never appears after login (dark screen)")
+    assert start != -1
+    section = en[start:start + 1100]
+    assert "Most often" not in section
+    assert "possible cause" in section
+    assert "-p Name -p Active -p Type" in section
+    assert "raspi-config" in section and "Type=wayland" in section
+    # Only the merged readiness check may be cited as logging the remedy.
+    assert "acceptance validator all log" not in section
+    assert "pantalla oscura" in es
+    assert "raspi-config" in es and "loginctl" in es
