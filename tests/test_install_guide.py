@@ -22,15 +22,35 @@ def evidence(**changes):
 
 
 @pytest.mark.parametrize("change", [
-    {"model": "Raspberry Pi 5 Model B Rev 1.0"}, {"model": "unknown"},
-    {"codename": "bookworm"}, {"codename": "trixie"}, {"codename": "unknown"},
-    {"architecture": "armv7l"}, {"python_version": (3, 11, 2)},
+    {"model": "Raspberry Pi 5 Model B Rev 1.0"},  # Pi 5 cannot boot Bullseye
+    {"model": "unknown"},
+    {"codename": "trixie"}, {"codename": "unknown"},
+    {"codename": "bookworm"},  # Bookworm with a non-system Python 3.9
+    {"architecture": "armv7l"},
+    {"python_version": (3, 11, 2)},  # Bullseye with a non-system Python 3.11
+    {"python_version": (3, 12, 0)},
 ])
 def test_unvalidated_platform_stops_before_any_install_command(change):
     action, code = guide.next_step(**evidence(**change))
     assert code == 20
     assert action.startswith("Detener")
     assert "sudo bash" not in action
+
+
+@pytest.mark.parametrize("change", [
+    {},  # Pi 4 / Bullseye / Python 3.9: original baseline
+    {"codename": "bookworm", "python_version": (3, 11, 2)},  # Pi 4 target
+    {"model": "Raspberry Pi 5 Model B Rev 1.0",
+     "codename": "bookworm", "python_version": (3, 11, 2)},  # Pi 5 target
+])
+def test_approved_platforms_route_to_readiness_check(change):
+    """docs/INSTALL_RPI_ES.md declares Bookworm 64-bit / Python 3.11 the
+    installation target on Pi 4 and Pi 5: the guide must route those machines
+    to --check, not stop them."""
+    action, code = guide.next_step(**evidence(**change))
+    assert code == 20
+    assert not action.startswith("Detener")
+    assert action.endswith("--wizard-user desktop --check")
 
 
 @pytest.mark.parametrize("session", ["wayland", "unknown", ""])

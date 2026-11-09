@@ -39,11 +39,12 @@ de red y camaras**: ejecutarlo solo con permiso para el equipo correspondiente.
 Una configuracion pendiente pide revisar el primer problema pendiente;
 no manda reabrir el asistente con `--force` ni sobrescribir datos a ciegas.
 
-La base objetivo de software es Bullseye 64-bit/Python 3.9 en Pi 4 con X11. Detectarla
-no prueba esta unidad concreta, pantalla, reinicio ni camaras. Pi 5, Bookworm,
-Trixie, Wayland y Python nuevos no se declaran compatibles: el ensayo Bookworm
-en contenedor no es validacion fisica. Ninguna ruta de la guia habilita un
-merge, despliegue o uso en una reunion.
+La base objetivo de software es Bookworm 64-bit/Python 3.11 en Pi 4 o Pi 5 con X11;
+tambien se admite la base original Bullseye 64-bit/Python 3.9 en Pi 4. Detectarla
+no prueba esta unidad concreta, pantalla, reinicio ni camaras. Trixie, Wayland,
+32 bits y versiones de Python que no sean la del sistema no se declaran
+compatibles: el ensayo Bookworm en contenedor no es validacion fisica. Ninguna
+ruta de la guia habilita un merge, despliegue o uso en una reunion.
 
 ## Captura reproducible, sin dispositivos
 
