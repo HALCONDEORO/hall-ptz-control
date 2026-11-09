@@ -8,6 +8,17 @@ for MVP installations and Raspberry Pi release-candidate validation.
 **Related**: `docs/INSTALL_RPI.md` (step-by-step install), `docs/DEPENDENCY_PINNING_POLICY.md`.  
 **Validation gate**: `docs/MVP_VALIDATION_REPORT.md`.
 
+**Two software targets, both with physical validation pending**:
+
+- **Legacy baseline**: Raspberry Pi OS Bullseye (Debian 11) 64-bit, Python 3.9.2,
+  Raspberry Pi 4 — the original MVP target.
+- **Installation target**: Raspberry Pi OS Bookworm (Debian 12) 64-bit, Python 3.11,
+  Raspberry Pi 4 or 5 — rehearsed in a container, not yet on hardware. This is the
+  target for new installations.
+
+Neither target has completed physical Raspberry Pi validation. Anything marked
+"software target" describes rehearsed compatibility, not a validation result.
+
 ---
 
 ## Hardware targets, not physical validation results
@@ -16,7 +27,7 @@ for MVP installations and Raspberry Pi release-candidate validation.
 |---|---|---|
 | Raspberry Pi 4 Model B (2 GB RAM) | Software target, physical validation pending | Minimum target for MVP. |
 | Raspberry Pi 4 Model B (4 GB / 8 GB RAM) | Software target, physical validation pending | Preferred validation target. |
-| Raspberry Pi 5 | Not validated | Requires Bookworm/Trixie, not Bullseye. X11 and packaging checks required. |
+| Raspberry Pi 5 | Software target, physical validation pending | Requires Bookworm 64-bit (not Bullseye). Needs an X11 session; Bookworm defaults to Wayland. |
 | Raspberry Pi 3 Model B+ | Not supported | Insufficient RAM for PyQt5 UI reliably. |
 | Raspberry Pi Zero / CM | Not supported | Insufficient performance. |
 
@@ -29,29 +40,31 @@ for MVP installations and Raspberry Pi release-candidate validation.
 
 | OS | Status | Notes |
 |---|---|---|
-| Raspberry Pi OS Bullseye (Debian 11) 64-bit | Software target | Ships **Python 3.9.2** (the supported target); PyQt5 available via `apt`. |
-| Raspberry Pi OS Bookworm (Debian 12) 64-bit | Not validated | Ships Python 3.11; PyQt5 available via `apt`. May work, but 3.9.2 is the software target. |
+| Raspberry Pi OS Bullseye (Debian 11) 64-bit | Software target — legacy baseline | Ships **Python 3.9.2**; PyQt5 available via `apt`. Still supported for existing installs. |
+| Raspberry Pi OS Bookworm (Debian 12) 64-bit | Software target — installation target | Ships **Python 3.11**; PyQt5 available via `apt`. Rehearsed in a container; physical validation pending. Defaults to a Wayland session: the GUI units require X11. |
 | Raspberry Pi OS Bookworm 32-bit | Not validated | May work; not a test target. |
 | Ubuntu 22.04 (Pi edition) | Not validated | May work for development; not a support target. |
 | Generic Debian 12 (non-Pi) | CI approximation only | Used in GitHub Actions CI; not a customer deployment target. |
 
-**Recommended image**: Raspberry Pi OS Bullseye (Debian 11), 64-bit, **Desktop with an X11 session** for this GUI workflow. Lite needs a separately reviewed display/session setup. Bullseye ships the supported Python 3.9.2 target.
+**Recommended image for new installations**: Raspberry Pi OS Bookworm (Debian 12), 64-bit, **Desktop with an X11 session** for this GUI workflow. Bookworm boots to Wayland by default; the GUI units require X11, so select X11 via `sudo raspi-config` -> Advanced Options -> Wayland -> X11 and reboot before installing. Bullseye (Debian 11) 64-bit Desktop remains the supported legacy baseline. Lite needs a separately reviewed display/session setup.
 Use the [Raspberry Pi Imager](https://www.raspberrypi.com/software/) to write the image.
 
 ---
 
 ## Python version
 
-**The single supported target is Python 3.9.2** — the system Python that ships
-with Raspberry Pi OS Bullseye (Debian 11) 64-bit. The whole system must run on
-3.9.2. The codebase uses `from __future__ import annotations` and avoids 3.10+
-runtime syntax (no `match`/`case`, no runtime `X | Y` unions) to stay compatible.
+**Two supported Python targets**: **3.9.2** (system Python of the Bullseye
+legacy baseline) and **3.11** (system Python of the Bookworm installation
+target). The codebase stays 3.9-compatible: it uses
+`from __future__ import annotations` and avoids 3.10+ runtime syntax
+(no `match`/`case`, no runtime `X | Y` unions), so one codebase serves both.
 
 | Python version | Status | Notes |
 |---|---|---|
-| **3.9.2** | **Supported** — target | Ships with Raspberry Pi OS Bullseye; used in CI. The software compatibility target, not a physical validation result. |
+| **3.9.2** | **Supported** — legacy baseline | Ships with Raspberry Pi OS Bullseye; used in CI. Software compatibility target, not a physical validation result. |
 | 3.9.x (> 3.9.2) | Supported | Same minor line; expected to behave identically. |
-| 3.10 / 3.11 / 3.12 | Not validated | May work (code is 3.9-compatible), but not the validated target. Do not assume pilot readiness without re-validating. |
+| **3.11** | **Supported** — installation target | Ships with Raspberry Pi OS Bookworm; install rehearsal runs in a container. Physical validation pending. |
+| 3.10 / 3.12 | Not validated | May work (code is 3.9-compatible), but not a target. Do not assume pilot readiness without re-validating. |
 | 3.8 and below | Not supported | Uses `from __future__ import annotations` and other 3.9+ syntax. |
 
 **Install via system package manager.** Do not use `pyenv`, `conda` or `asdf` on production
@@ -68,11 +81,11 @@ sudo apt update
 sudo apt install -y git rsync python3-pyqt5 python3-pyqt5.qtsvg python3-yaml x11-xserver-utils
 ```
 
-| Package | Version (Bullseye) | Purpose |
+| Package | Version | Purpose |
 |---|---|---|
-| `python3-pyqt5` | 5.15.x | PyQt5 GUI framework |
+| `python3-pyqt5` | 5.15.x (both targets) | PyQt5 GUI framework |
 | `python3-pyqt5.qtsvg` | 5.15.x | SVG icon rendering |
-| `git` | 2.39.x | Repository clone and update |
+| `git` | 2.30+ | Repository clone and update |
 | `rsync` | 3.2.x | Application file installation |
 
 Optional for ATEM installs, only after licence/dependency review and on the
@@ -132,9 +145,10 @@ hardware validation.
 
 | Environment | Approximates | Limitations |
 |---|---|---|
-| GitHub Actions CI (ubuntu-latest, Python 3.9) | Bullseye Python runtime (3.9.2 target) | No Pi CPU, no real touchscreen, no real camera/ATEM |
+| GitHub Actions CI (ubuntu-latest, Python 3.9) | Bullseye Python runtime (3.9.2 legacy target) | No Pi CPU, no real touchscreen, no real camera/ATEM |
+| Debian 12 container rehearsal (installer CI) | Bookworm packaging and install flow (3.11 target) | No Pi CPU, no graphical desktop session, no real hardware |
 | macOS / Windows dev workstation | PyQt5 via pip; use Python 3.9 to match target | Not a deployment target; ATEM and camera hardware not present |
-| Real Raspberry Pi 4 (Bullseye, 64-bit, Python 3.9.2) | Production target | Required for #381 MVP validation |
+| Real Raspberry Pi 4/5 (Bullseye or Bookworm, 64-bit) | Production target | Required for #381 MVP validation |
 
 CI passing does **not** imply pilot readiness. Real Raspberry Pi validation through
 `#381` is required before claiming pilot/customer readiness.
@@ -170,19 +184,30 @@ CI passing does **not** imply pilot readiness. Real Raspberry Pi validation thro
 
 ## First-pilot validation target
 
-The #381 Raspberry Pi MVP validation run must use:
+Physical validation is pending on **both** software targets. A validation run
+uses one of:
 
 ```text
-Hardware:   Raspberry Pi 4 Model B, 2 GB or 4 GB RAM
-OS:         Raspberry Pi OS Bullseye (Debian 11) 64-bit
-Python:     3.9.2 (system apt)
-PyQt5:      apt package (5.15.x)
-Release:    approved release tag or release-candidate branch
-Profile:    Starter (1 camera) AND Standard (2 cameras) separately
+Target A (legacy baseline):
+  Hardware:   Raspberry Pi 4 Model B, 2 GB or 4 GB RAM
+  OS:         Raspberry Pi OS Bullseye (Debian 11) 64-bit
+  Python:     3.9.2 (system apt)
+
+Target B (installation target):
+  Hardware:   Raspberry Pi 4 Model B or 5, 4 GB RAM or more
+  OS:         Raspberry Pi OS Bookworm (Debian 12) 64-bit, X11 session
+  Python:     3.11 (system apt)
+
+Either target:
+  PyQt5:      apt package (5.15.x)
+  Release:    approved release tag or release-candidate branch
+  Profile:    Starter (1 camera) AND Standard (2 cameras) separately
 ```
 
-Any deviation from this baseline during validation must be recorded in
-`docs/MVP_VALIDATION_REPORT.md` as a known limitation or risk.
+The #381 Raspberry Pi MVP validation run and every pilot installation must
+record which target was used. Any deviation from this baseline during
+validation must be recorded in `docs/MVP_VALIDATION_REPORT.md` as a known
+limitation or risk.
 
 ---
 
