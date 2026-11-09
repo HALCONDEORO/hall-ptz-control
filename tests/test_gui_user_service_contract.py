@@ -215,14 +215,13 @@ class TestBootstrapIsModeAware:
 
 
 class TestSessionHelperRefusesWayland:
-    """The unit forces QT_QPA_PLATFORM=xcb. Started under a Wayland session
-    (the Bookworm default) Qt cannot come up and the unit burns its restart
-    budget on a dark screen. The autostart helper must refuse early, exit 0
-    (autostart must never break the login) and print the raspi-config fix.
-    A stub systemctl records every call so we can prove the unit was never
-    started."""
+    """The unit forces QT_QPA_PLATFORM=xcb, an X11-only backend, so a Wayland
+    session (the Bookworm default) is unsupported for it. The autostart
+    helper must refuse early, exit 0 (autostart must never break the login)
+    and print the raspi-config fix. A stub systemctl records every call so
+    we can prove the unit was never started."""
 
-    def _run_helper(self, tmp_path, session_type: str | None):
+    def _run_helper(self, tmp_path, session_type: str | None, failing_logger: bool = False):
         import os
         import subprocess
 
@@ -235,6 +234,10 @@ class TestSessionHelperRefusesWayland:
             encoding="utf-8",
         )
         stub.chmod(0o755)
+        if failing_logger:
+            logger_stub = tmp_path / "logger"
+            logger_stub.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+            logger_stub.chmod(0o755)
         env = dict(os.environ)
         env["PATH"] = f"{tmp_path}:{env['PATH']}"
         env["DISPLAY"] = ":0"
@@ -267,3 +270,14 @@ class TestSessionHelperRefusesWayland:
         result, calls = self._run_helper(tmp_path, None)
         assert result.returncode == 0, result.stdout + result.stderr
         assert "start --no-block khptz-gui.service" in calls.read_text()
+
+    def test_failing_logger_never_aborts_the_refusal(self, tmp_path):
+        """logger present but exiting 1 must not trip set -e inside log():
+        the refusal still exits 0, prints BOTH messages, and never starts
+        the unit (Mejora review of #120)."""
+        result, calls = self._run_helper(tmp_path, "wayland", failing_logger=True)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.stdout.count("[khptz-gui-session]") == 2
+        assert "Wayland" in result.stdout
+        assert "raspi-config" in result.stdout
+        assert not calls.exists(), f"systemctl was called: {calls.read_text()}"

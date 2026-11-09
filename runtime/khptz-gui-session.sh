@@ -22,7 +22,9 @@ set -euo pipefail
 readonly UNIT="khptz-gui.service"
 
 log() {
-    command -v logger >/dev/null 2>&1 && logger -t khptz-gui-session "$*"
+    # Best-effort: a present-but-failing logger must never abort the script
+    # (set -e) before the message reaches stdout.
+    command -v logger >/dev/null 2>&1 && logger -t khptz-gui-session "$*" || true
     echo "[khptz-gui-session] $*"
 }
 
@@ -31,10 +33,15 @@ if [[ -z "${DISPLAY:-}" ]]; then
     exit 0
 fi
 
-# The GUI forces QT_QPA_PLATFORM=xcb: on a Wayland session (the Bookworm
-# default) Qt cannot start and the unit would burn its restart budget with a
-# dark screen and a confusing journal. Refuse early, with the concrete fix,
-# instead. XDG_SESSION_TYPE unset means we cannot know — proceed as before.
+# This helper only covers --gui-mode user: the system GUI mode has its own
+# display handoff and never runs this script.
+#
+# The GUI unit forces QT_QPA_PLATFORM=xcb, an X11-only backend, so a Wayland
+# session (the Bookworm default) is not a supported desktop for it. Starting
+# the unit there is untested on hardware and risks a GUI that never appears
+# while the unit burns its restart budget on a confusing journal. Refuse
+# early, with the concrete fix, instead. XDG_SESSION_TYPE unset means we
+# cannot know — proceed as before.
 if [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
     log "This desktop session is Wayland, but the GUI requires X11 (QT_QPA_PLATFORM=xcb)."
     log "Fix: 'sudo raspi-config' -> Advanced Options -> Wayland -> X11, then reboot into the desktop."
