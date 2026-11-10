@@ -10,3 +10,15 @@ def hydrate_camera_roles(cameras, platform, comments):
         saved = by_role.get(role)
         current.ip = saved.ip if saved is not None else ''
         current.cam_id = saved.visca_id if saved is not None else ''
+
+
+def hydrate_atem(atem_settings, atem_config):
+    """Point the shared ATEM config object at the persisted IP.
+
+    Without this the ATEM global kept its empty default on every boot — the
+    only writer was the Settings dialog — so the monitor started with no IP
+    and reported NOT_CONFIGURED until the operator re-entered the address,
+    even though config.yaml already held it.
+    """
+    saved_ip = getattr(atem_settings, 'ip', '') if atem_settings is not None else ''
+    atem_config.ip = (saved_ip or '').strip()
