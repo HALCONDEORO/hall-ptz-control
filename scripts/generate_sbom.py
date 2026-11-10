@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -47,20 +48,65 @@ def _app_version() -> str:
         return "unknown"
 
 
+_REQ_NAME_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+def _declared_runtime_requirements() -> list[str]:
+    """Return the requirement names declared in requirements.txt.
+
+    The SBOM describes the project's runtime dependencies, so it must be built
+    from the declared requirements — not from whatever happens to be installed
+    in the environment where the script runs. Reading the ambient environment
+    both makes the artifact inaccurate (dev tools and unrelated packages leak
+    into a release artifact) and makes tests over it non-deterministic.
+    """
+    req_file = Path(__file__).resolve().parent.parent / "requirements.txt"
+    names = []
+    for raw_line in req_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line or line.startswith("-"):
+            continue
+        match = _REQ_NAME_RE.match(line)
+        if match:
+            names.append(match.group(1))
+    return names
+
+
+def _normalize(name: str) -> str:
+    """PEP 503 normalisation for distribution name lookups."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
 def _collect_packages() -> list[dict]:
-    """Return sorted list of installed packages with name, version and description."""
+    """Return sorted list of the declared runtime dependencies.
+
+    Versions and descriptions come from the installed distributions when
+    available (run this in the release environment for accurate versions);
+    a declared dependency that is not installed is listed with version
+    "unknown".
+    """
+    installed = {
+        _normalize(dist.metadata["Name"] or "unknown"): dist
+        for dist in importlib.metadata.distributions()
+    }
     packages = []
-    for dist in importlib.metadata.distributions():
-        meta = dist.metadata
-        name = meta["Name"] or "unknown"
-        version = meta["Version"] or "unknown"
-        description = (meta["Summary"] or "").strip()
+    for req_name in _declared_runtime_requirements():
+        dist = installed.get(_normalize(req_name))
+        if dist is not None:
+            meta = dist.metadata
+            name = meta["Name"] or req_name
+            version = meta["Version"] or "unknown"
+            description = (meta["Summary"] or "").strip()
+        else:
+            name = req_name
+            version = "unknown"
+            description = ""
         packages.append({
             "type": "library",
             "name": name,
             "version": version,
             "description": description,
-            "purl": f"pkg:pypi/{name.lower()}@{version}",
+            "purl": f"pkg:pypi/{_normalize(name)}@{version}",
         })
     return sorted(packages, key=lambda p: p["name"].lower())
 

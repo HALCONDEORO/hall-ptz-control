@@ -58,6 +58,26 @@ def test_sbom_has_no_secrets(tmp_path):
         assert pattern not in text, f"SBOM unexpectedly contains '{pattern}'"
 
 
+def test_sbom_lists_declared_runtime_dependencies(tmp_path):
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    import importlib
+    try:
+        gen = importlib.import_module("generate_sbom")
+    finally:
+        sys.path.pop(0)
+    declared = {gen._normalize(n) for n in gen._declared_runtime_requirements()}
+    out = tmp_path / "sbom.json"
+    _run_sbom(str(out))
+    sbom = json.loads(out.read_text())
+    names = {gen._normalize(comp["name"]) for comp in sbom["components"]}
+    # The SBOM must describe exactly the declared runtime dependencies —
+    # ambient environment packages (e.g. pytest, always installed here) must
+    # not leak into a release artifact.
+    assert names == declared
+    assert "pytest" not in names
+
+
 def test_sbom_components_have_purl(tmp_path):
     out = tmp_path / "sbom.json"
     _run_sbom(str(out))
