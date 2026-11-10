@@ -30,17 +30,6 @@ def queue_runtime_restart(dialog, window, target_mode):
                 )
                 return
         else:
-            try:
-                if not sim_mode.is_active():
-                    sim_mode.activate()
-            except RuntimeError as exc:
-                QMessageBox.warning(
-                    dialog,
-                    title,
-                    str(exc) or "Could not enable simulation mode.",
-                )
-                return
-
             if target_mode == "demo":
                 try:
                     from application.demo_reset_service import DemoResetService
@@ -61,6 +50,17 @@ def queue_runtime_restart(dialog, window, target_mode):
                         result.error or "Could not reset demo data.",
                     )
                     return
+
+            try:
+                if not sim_mode.is_active():
+                    sim_mode.activate()
+            except RuntimeError as exc:
+                QMessageBox.warning(
+                    dialog,
+                    title,
+                    str(exc) or "Could not enable simulation mode.",
+                )
+                return
 
         env = os.environ.copy()
         env["KHPTZ_PROFILE"] = target_mode

@@ -60,3 +60,52 @@ def _run(script):
                             env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
                             capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_failed_demo_reset_preserves_existing_simulation_state():
+    script = r'''
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+from PyQt5.QtWidgets import QApplication, QDialog, QMessageBox
+from ui.runtime_restart import queue_runtime_restart, prepare_runtime_restart
+app = QApplication([])
+for initially_active in (False, True):
+    for outcome in (SimpleNamespace(success=False, error='reset failed'), RuntimeError('reset raised')):
+        state = {'active': initially_active}
+        def activate():
+            state['active'] = True
+        window = SimpleNamespace()
+        window.close = lambda: prepare_runtime_restart(window)
+        reset_kwargs = ({'side_effect': outcome} if isinstance(outcome, Exception) else {'return_value': outcome})
+        with patch('adapters.sim_mode.is_active', side_effect=lambda: state['active']), patch('adapters.sim_mode.activate', side_effect=activate) as activation, patch('adapters.sim_mode.deactivate') as deactivation, patch('application.demo_reset_service.DemoResetService.reset', **reset_kwargs), patch.object(QMessageBox, 'warning'), patch('subprocess.Popen') as spawn:
+            queue_runtime_restart(QDialog(), window, 'demo')
+        assert state['active'] == initially_active, 'Failed reset changed production camera profile'
+        activation.assert_not_called()
+        deactivation.assert_not_called()
+        spawn.assert_not_called()
+        assert window._pending_admin_restart is None
+        assert window._pending_runtime_prepare is None
+        assert window._pending_admin_restart_env is None
+'''
+    _run(script)
+
+
+def test_successful_demo_reset_precedes_activation():
+    script = r'''
+from types import SimpleNamespace
+from unittest.mock import patch
+from PyQt5.QtWidgets import QApplication, QDialog
+from ui.runtime_restart import queue_runtime_restart, prepare_runtime_restart
+app = QApplication([])
+order = []
+window = SimpleNamespace()
+window.close = lambda: prepare_runtime_restart(window)
+def reset():
+    order.append('reset')
+    return SimpleNamespace(success=True)
+with patch('adapters.sim_mode.is_active', return_value=False), patch('adapters.sim_mode.activate', side_effect=lambda: order.append('activate')), patch('application.demo_reset_service.DemoResetService.reset', side_effect=reset):
+    queue_runtime_restart(QDialog(), window, 'demo')
+assert order == ['reset', 'activate']
+assert window._pending_admin_restart_env['KHPTZ_PROFILE'] == 'demo'
+'''
+    _run(script)
