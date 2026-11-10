@@ -8,10 +8,16 @@ from __future__ import annotations
 import sys
 from unittest.mock import patch
 
-from PyQt5.QtCore import QCoreApplication, Qt
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication
 
-if not QCoreApplication.instance():
-    _app = QCoreApplication(sys.argv)
+# QApplication, never a bare QCoreApplication: a QCoreApplication-only
+# process makes QApplication.instance() non-None, so the guards that
+# build a QApplication on demand are fooled and the first QWidget
+# constructed afterwards aborts the whole process (SIGABRT) in any
+# single-process run that collects this module before real-widget tests.
+if not QApplication.instance():
+    _app = QApplication(sys.argv)
 
 from adapters.atem_dispatcher import ATEMDispatcher, _PIP_KEY_OFF, _PIP_KEY_ON
 from domain.atem_state import ATEMPiPState

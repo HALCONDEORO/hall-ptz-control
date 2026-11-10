@@ -8,13 +8,13 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
-from PyQt5.QtCore import QCoreApplication
-
-# Asegura que existe una app para QThread.
-if not QCoreApplication.instance():
-    _app = QCoreApplication(sys.argv)
-
 from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QApplication
+
+# Asegura que existe una app para QThread. QApplication, nunca un
+# QCoreApplication pelado (ver test_atem_pip.py).
+if not QApplication.instance():
+    _app = QApplication(sys.argv)
 from application.runtime_state_store import RuntimeStateStore
 from domain.atem_state import ATEMState
 
