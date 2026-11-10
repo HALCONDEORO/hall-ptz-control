@@ -426,3 +426,39 @@ class TestFingerprintCLI:
         lines = [line for line in captured.out.splitlines() if line.strip()]
         assert len(lines) >= 5
 
+
+
+def test_json_hash_invalid_utf8_is_invalid_not_exception(tmp_path):
+    layout = tmp_path / "room_layout.json"
+    layout.write_bytes(b"\xff\xfe")
+
+    assert _safe_json_hash(layout) == "invalid"
+
+
+def test_config_hash_invalid_utf8_is_invalid_not_exception(tmp_path):
+    paths = MagicMock()
+    paths.config_dir = tmp_path
+    (tmp_path / "config.yaml").write_bytes(b"\xff\xfe")
+
+    assert FingerprintService(paths=paths)._hash_config() == "invalid"
+
+
+def test_generate_retains_identity_with_invalid_utf8_files(tmp_path):
+    paths = MagicMock()
+    paths.config_dir = tmp_path
+    paths.data_dir = tmp_path
+    paths.room_layout_file = tmp_path / "room_layout.json"
+    paths.known_good_state_file = tmp_path / "known_good.json"
+    paths.to_dict.return_value = {"data_dir": str(tmp_path)}
+    (tmp_path / "config.yaml").write_bytes(b"\xff\xfe")
+    paths.room_layout_file.write_bytes(b"\xff\xfe")
+    with patch("application.fingerprint_service.build_info") as mock_bi:
+        mock_bi.return_value = MagicMock(
+            installation_id="synthetic-install", app_version="1.2.0",
+            git_commit="synthetic", runtime_profile="demo")
+        fp = FingerprintService(paths=paths).generate()
+
+    assert fp.installation_id == "synthetic-install"
+    assert fp.config_hash == "invalid"
+    assert fp.layout_hash == "invalid"
+    assert len(fp.fingerprint_hash()) == 64
