@@ -722,6 +722,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             cam_key = self._cameras.cam_key(ip)
         except ValueError:
             return
+        ok = self._cameras.is_connected(ip)  # delivery-time transport snapshot
         (self.Cam1 if cam_key == 1 else self.Cam2).set_connected(ok)
         self._update_controls_visibility()
 

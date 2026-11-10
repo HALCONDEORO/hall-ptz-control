@@ -23,7 +23,7 @@ def wire_connecting_led(main_window, worker) -> None:
         except ValueError:
             return
         (main_window.Cam1 if cam_key == 1 else main_window.Cam2).set_connecting(
-            state is CameraConnectionState.CONNECTING)
+            worker._connection_state is CameraConnectionState.CONNECTING)
 
     worker.signals.connection_state_changed.connect(_on_state_changed)
 
@@ -36,6 +36,8 @@ def wire_camera_worker(main_window, worker) -> None:
 
     def connected(ok):
         if main_window._cameras.worker_is_current(worker):
+            # Queued bool may predate a reconnect by this same worker.
+            ok = main_window._cameras.is_connected(worker.ip)
             main_window._on_cam_connected(ok, worker.ip)
             main_window._on_cam_connection_changed(ok, worker.ip)
 

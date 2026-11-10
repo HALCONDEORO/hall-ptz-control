@@ -2,6 +2,8 @@
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
 
 class Signal:
     def __init__(self):
@@ -17,7 +19,7 @@ def test_retired_worker_same_ip_does_not_publish_false_disconnect_to_ui():
     from conftest import ensure_real_qt
     ensure_real_qt()
     from ui.main_window import MainWindow
-    old = SimpleNamespace(ip='192.0.2.11', signals=SimpleNamespace(
+    old = SimpleNamespace(ip='192.0.2.11', is_connected=True, signals=SimpleNamespace(
         visca_error=Signal(), connection_changed=Signal(), connection_state_changed=Signal()))
     replacement = object()
     from ptz.visca.manager import CameraManager
@@ -43,7 +45,8 @@ def test_retired_worker_same_ip_does_not_publish_false_disconnect_to_ui():
     window._on_visca_speed_error.assert_not_called()
 
 
-def test_real_qt_queued_disconnect_is_checked_at_delivery():
+@pytest.mark.parametrize('replaced', [True, False])
+def test_real_qt_queued_disconnect_is_checked_at_delivery(replaced):
     import threading
     from conftest import ensure_real_qt
     ensure_real_qt()
@@ -56,7 +59,7 @@ def test_real_qt_queued_disconnect_is_checked_at_delivery():
         connection_changed = pyqtSignal(bool)
         connection_state_changed = pyqtSignal(object)
         visca_error = pyqtSignal(str, str)
-    old = SimpleNamespace(ip='192.0.2.11', signals=Signals())
+    old = SimpleNamespace(ip='192.0.2.11', signals=Signals(), is_connected=True)
     manager = CameraManager(SimpleNamespace(ip=old.ip, cam_id='81'),
                             SimpleNamespace(ip='192.0.2.12', cam_id='82'))
     manager._workers[old.ip] = old
@@ -71,8 +74,30 @@ def test_real_qt_queued_disconnect_is_checked_at_delivery():
     thread.start()
     thread.join(2)
     assert not thread.is_alive()
-    manager._workers[old.ip] = object()
+    old._connection_state = CameraConnectionState.CONNECTED
+    if replaced:
+        manager._workers[old.ip] = object()
     app.processEvents()
-    window._on_cam_connected.assert_not_called()
-    window._on_cam_connection_changed.assert_not_called()
-    window.Cam1.set_connecting.assert_not_called()
+    if replaced:
+        window._on_cam_connected.assert_not_called()
+        window._on_cam_connection_changed.assert_not_called()
+        window.Cam1.set_connecting.assert_not_called()
+    else:
+        window._on_cam_connected.assert_called_once_with(True, old.ip)
+        window._on_cam_connection_changed.assert_called_once_with(True, old.ip)
+        window.Cam1.set_connecting.assert_called_once_with(False)
+
+
+def test_same_worker_delayed_false_rechecks_current_connection():
+    from conftest import ensure_real_qt
+    ensure_real_qt()
+    from ui.main_window import MainWindow
+    cam = SimpleNamespace(_connected=True, isChecked=lambda: True)
+    cam.set_connected = lambda ok: setattr(cam, '_connected', ok)
+    manager = SimpleNamespace(cam_key=lambda ip: 1, is_connected=lambda ip: True)
+    window = SimpleNamespace(Cam1=cam, Cam2=Mock(), _cameras=manager,
+                             session_active=True, _right_panel=Mock())
+    window._update_controls_visibility = lambda: MainWindow._update_controls_visibility(window)
+    MainWindow._on_cam_connection_changed(window, False, '192.0.2.11')
+    assert cam._connected
+    window._right_panel.show_camera_controls.assert_called_with(True)
