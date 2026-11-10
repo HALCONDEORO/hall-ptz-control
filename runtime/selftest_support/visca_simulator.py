@@ -4,6 +4,8 @@ Each Step consumes one FF-terminated command across sequential connections.
 No implicit ACK or Completion is invented. Empty replies keep the socket open
 and silent. All reply delays are relative to the preceding reply/command.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
 import socket
 import threading
