@@ -5,9 +5,10 @@ from unittest.mock import Mock
 import pytest
 
 
+@pytest.mark.parametrize('cam_key', [1, 2])
 @pytest.mark.parametrize('method,ok', [('brightness_up', True), ('brightness_down', True),
                                       ('brightness_up', False)])
-def test_exposure_click_reads_back_only_after_confirmation(monkeypatch, method, ok):
+def test_exposure_click_reads_back_only_after_confirmation(monkeypatch, method, ok, cam_key):
     from conftest import ensure_real_qt
     ensure_real_qt()
     from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout
@@ -17,7 +18,7 @@ def test_exposure_click_reads_back_only_after_confirmation(monkeypatch, method, 
     window = QWidget()
     window.Cam1 = QPushButton(window)
     window.Cam1.setCheckable(True)
-    window.Cam1.setChecked(True)
+    window.Cam1.setChecked(cam_key == 1)
     port = Mock()
     port.display_generation.return_value = 7
     getattr(port, method).return_value = SimpleNamespace(ok=ok)
@@ -36,13 +37,13 @@ def test_exposure_click_reads_back_only_after_confirmation(monkeypatch, method, 
     delivery = Mock()
     monkeypatch.setattr('ui.camera_display_mixin._queue_display_update', delivery)
     (panel.btn_brighter if method == 'brightness_up' else panel.btn_darker).click()
-    getattr(port, method).assert_called_once_with('cam1')
+    getattr(port, method).assert_called_once_with(f'cam{cam_key}')
     if ok:
         port.async_refresh_ae_mode.assert_called_once()
         key, callback = port.async_refresh_ae_mode.call_args.args
-        assert key == 1
+        assert key == cam_key
         callback()
-        assert delivery.call_args.args[1:] == ('_apply_exposure_update', 1, 7)
+        assert delivery.call_args.args[1:] == ('_apply_exposure_update', cam_key, 7)
     else:
         port.async_refresh_ae_mode.assert_not_called()
     window.close()
