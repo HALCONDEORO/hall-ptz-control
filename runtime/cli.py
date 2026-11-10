@@ -213,7 +213,7 @@ def cmd_cameras(args) -> int:
 
     try:
         from runtime.path_resolver import RuntimePathResolver
-        from config.loader import load_config
+        from config.effective import load_effective_config as load_config
         config_path = RuntimePathResolver().config_dir / "config.yaml"
         if not config_path.exists():
             print("  [WARN]  Config not found — cannot list cameras")
@@ -590,7 +590,7 @@ def cmd_verify_install(args) -> int:
     config_path = resolver.config_dir / "config.yaml"
     if config_path.exists():
         try:
-            from config.loader import load_config
+            from config.effective import load_effective_config as load_config
             load_config(config_path)
             _add("config", _PASS, f"Config readable: {config_path}")
         except Exception as exc:

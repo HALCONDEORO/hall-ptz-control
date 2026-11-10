@@ -14,7 +14,7 @@
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QWidget, QLineEdit,
+    QPushButton, QLabel, QWidget, QLineEdit, QMessageBox,
 )
 
 from config import CAM1, CAM2, is_valid_ip, is_valid_cam_id
@@ -68,7 +68,7 @@ class _CamEditDialog(QDialog):
 
         self.setWindowTitle(f'Edit {cam_name} {field}')
         self.setWindowModality(Qt.WindowModal)
-        self.setFixedSize(380, 200)
+        self.setFixedSize(380, 240)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
 
         self.setStyleSheet(
@@ -121,6 +121,7 @@ class _CamEditDialog(QDialog):
         body_v.addWidget(self._input)
 
         self._err = QLabel('')
+        self._err.setWordWrap(True)
         self._err.setStyleSheet(error_label_qss())
         body_v.addWidget(self._err)
 
@@ -159,9 +160,23 @@ class _CamEditDialog(QDialog):
         svc = getattr(self._mw, '_camera_config', None)
         if svc is not None:
             if self._config_type == 'ip':
-                svc.set_camera_ip(self._cam_num, text)
+                result = svc.set_camera_ip(self._cam_num, text)
             else:
-                svc.set_camera_visca_id(self._cam_num, text)
+                result = svc.set_camera_visca_id(self._cam_num, text)
+            if result.code == "PARTIAL_OK":
+                QMessageBox.warning(self, 'Change not saved',
+                    'Applied for this session only. Saving failed; changes will be lost after restart.')
+                self.accept()
+                return
+            if result.code != "OK":
+                self._err.setText(
+                    'Applied for this session only. Saving failed; changes will be lost after restart.'
+                    if result.code == 'PARTIAL_OK' else (result.message or 'Not saved.')
+                )
+                return
+        else:
+            self._err.setText('Configuration service unavailable. Nothing saved.')
+            return
 
         self.accept()
 
@@ -176,7 +191,7 @@ class _ATEMEditDialog(QDialog):
 
         self.setWindowTitle('Edit ATEM IP')
         self.setWindowModality(Qt.WindowModal)
-        self.setFixedSize(380, 200)
+        self.setFixedSize(380, 240)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
 
         self.setStyleSheet(
@@ -229,6 +244,7 @@ class _ATEMEditDialog(QDialog):
         body_v.addWidget(self._input)
 
         self._err = QLabel('')
+        self._err.setWordWrap(True)
         self._err.setStyleSheet(error_label_qss())
         body_v.addWidget(self._err)
 
@@ -264,6 +280,20 @@ class _ATEMEditDialog(QDialog):
         # ATEM IP write goes through CameraConfigService (ADR-006).
         svc = getattr(self._mw, '_camera_config', None)
         if svc is not None:
-            svc.set_atem_ip(text)
+            result = svc.set_atem_ip(text)
+            if result.code == "PARTIAL_OK":
+                QMessageBox.warning(self, 'Change not saved',
+                    'Applied for this session only. Saving failed; changes will be lost after restart.')
+                self.accept()
+                return
+            if result.code != "OK":
+                self._err.setText(
+                    'Applied for this session only. Saving failed; changes will be lost after restart.'
+                    if result.code == 'PARTIAL_OK' else (result.message or 'Not saved.')
+                )
+                return
+        else:
+            self._err.setText('Configuration service unavailable. Nothing saved.')
+            return
 
         self.accept()

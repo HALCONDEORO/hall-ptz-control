@@ -26,7 +26,7 @@ def settings():
 def test_hydrates_shared_objects_before_ui_consumes_them(camera_ui):
     mw = camera_ui
     mw.CAM1.ip = mw.CAM2.ip = ''
-    with patch('config.loader.load_config', return_value=settings()), patch('adapters.sim_mode.is_active', return_value=False):
+    with patch('config.effective.load_effective_config', return_value=settings()), patch('adapters.sim_mode.is_active', return_value=False):
         first, second = mw._load_cam_configs_from_yaml()
     assert first is mw.CAM1
     assert second is mw.CAM2
@@ -37,7 +37,7 @@ def test_hydrates_shared_objects_before_ui_consumes_them(camera_ui):
 def test_simulation_never_loads_production_camera_settings(camera_ui):
     mw = camera_ui
     mw.CAM1.ip, mw.CAM2.ip = '127.0.0.1', '127.0.0.2'
-    with patch('config.loader.load_config') as load, patch('adapters.sim_mode.is_active', return_value=True):
+    with patch('config.effective.load_effective_config') as load, patch('adapters.sim_mode.is_active', return_value=True):
         assert mw._load_cam_configs_from_yaml() == (mw.CAM1, mw.CAM2)
     load.assert_not_called()
     assert mw.CAM1.ip == '127.0.0.1'
@@ -45,7 +45,7 @@ def test_simulation_never_loads_production_camera_settings(camera_ui):
 
 def test_unreadable_config_preserves_existing_objects(camera_ui):
     mw = camera_ui
-    with patch('config.loader.load_config', side_effect=OSError('unreadable')), patch('adapters.sim_mode.is_active', return_value=False):
+    with patch('config.effective.load_effective_config', side_effect=OSError('unreadable')), patch('adapters.sim_mode.is_active', return_value=False):
         assert mw._load_cam_configs_from_yaml() == (mw.CAM1, mw.CAM2)
 
 
@@ -53,7 +53,7 @@ def test_reload_updates_previously_imported_references(camera_ui):
     mw = camera_ui
     first_ref, second_ref = mw.CAM1, mw.CAM2
     saved = settings()
-    with patch('config.loader.load_config', return_value=saved), patch('adapters.sim_mode.is_active', return_value=False):
+    with patch('config.effective.load_effective_config', return_value=saved), patch('adapters.sim_mode.is_active', return_value=False):
         mw._load_cam_configs_from_yaml()
         saved.cameras[1].ip = '192.0.2.22'
         saved.cameras[1].visca_id = '83'
