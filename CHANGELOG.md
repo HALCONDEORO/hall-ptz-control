@@ -25,6 +25,8 @@ This project uses a simple versioning approach while it is still in early produc
   cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
   before startup logging and crash handling can be installed.
+- Returning to the wizard installation page resumes the active provisioning
+  request instead of starting a second one; completed attempts remain retryable.
 - Restore rejects malformed manifest structures with a controlled error before
   creating a safety backup or restoring data, including in dry-run mode.
 - test_config_validators prefers real PyQt5 modules over leaving stubs in
