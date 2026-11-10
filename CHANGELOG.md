@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- test_seat_builder no longer leaves fake SpecialDragButton/QtSvg stubs in
+  sys.modules, which poisoned later real-widget tests in the same process.
 - Restore rejects a backup whose manifest declares a hash for a member
   missing from the archive, before any write, in both normal and dry-run mode.
 - Support bundle: collector errors and content are redacted before the ZIP is
