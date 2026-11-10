@@ -68,7 +68,9 @@ from domain.retry_policy import RetryPolicy, CAMERA_RETRY_POLICY, CAMERA_COMMAND
 # STOP y comandos confirmados no gastan el presupuesto largo de reconexión
 # (backoffs 5/15/30 s): tres intentos inmediatos sin esperas entre ellos.
 _PRIORITY_RETRY_POLICY = RetryPolicy(backoffs=(0, 0))
-from .parser import contains_completion, contains_final_response, validate_visca_response
+from .parser import (
+    contains_completion, contains_final_response, is_response_header, validate_visca_response,
+)
 
 
 @dataclass
@@ -636,8 +638,13 @@ class CameraWorker:
         self, frame: bytes, ack_identity: "tuple[int, int] | None"
     ) -> "tuple[bool, tuple[int, int] | None]":
         """Filter terminal frames for a different acknowledged command socket."""
-        if len(frame) < 2 or (frame[0] & 0xF0) != 0x90:
-            return True, ack_identity
+        if len(frame) < 2 or not is_response_header(frame[0]):
+            return False, ack_identity
+        # Direct-IP cameras can reply as 90; addressed VISCA uses (address+8)0.
+        # Never let a third camera's unsolicited response confirm this command.
+        allowed = getattr(self, "_response_headers", None)
+        if allowed is not None and frame[0] not in allowed:
+            return False, ack_identity
         kind = frame[1] & 0xF0
         identity = (frame[0], frame[1] & 0x0F)
         if kind == 0x40 and ack_identity is None:
@@ -845,6 +852,9 @@ class CameraWorker:
                 try:
                     send_started_at = time.monotonic()
                     logger.debug("%s cam=%s sent", cmd.cmd_id, self.ip)
+                    self._response_headers = {0x90}
+                    if cmd.payload and 0x81 <= cmd.payload[0] <= 0x87:
+                        self._response_headers.add((cmd.payload[0] - 0x80 + 8) << 4)
                     sock_ref.sendall(cmd.payload)
                     response = self._read_visca_response(sock_ref)
 
