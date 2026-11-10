@@ -68,7 +68,6 @@ from ui.seat_builder import build_special_seat_button
 
 from ui.chairman_button import ChairmanButton
 from ui.camera_indicator import CameraIndicator
-from ui.message_box_layout import fit_message_box_buttons
 from ui.auditorium_overlay import AuditoriumOverlay
 from ui.mode_border_overlay import ModeBorderOverlay
 
@@ -85,11 +84,13 @@ from adapters.gpio_monitor import GpioMonitor
 
 
 def _load_cam_configs_from_yaml():
-    """Load camera CameraConfig objects from config.yaml.
+    """Load camera and ATEM config objects from config.yaml.
 
     Returns (cam1, cam2) with real IPs from config.yaml when available.
     Falls back to the CAM1/CAM2 globals (empty-string defaults, or sim-patched)
-    when config.yaml is absent or unreadable.
+    when config.yaml is absent or unreadable. Also hydrates the ATEM global
+    from the same effective settings: it is the monitor's only boot-time
+    source for the switcher IP.
     """
     import adapters.sim_mode as sim_mode
     if sim_mode.is_active():
@@ -98,8 +99,9 @@ def _load_cam_configs_from_yaml():
         from config.effective import load_effective_config as load_config
         from runtime.path_resolver import RuntimePathResolver
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
-        from ui.camera_config_hydration import hydrate_camera_roles
+        from ui.camera_config_hydration import hydrate_atem, hydrate_camera_roles
         hydrate_camera_roles(settings.cameras, CAM1, CAM2)
+        hydrate_atem(getattr(settings, 'atem', None), ATEM)
         return CAM1, CAM2
     except Exception:
         return CAM1, CAM2
@@ -1539,35 +1541,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
     def _ask_shutdown_intent(self) -> "ShutdownIntent":
         """Show a shutdown dialog and return the operator's explicit choice.
 
-        Returns ShutdownIntent so the caller decides whether to send standby.
-        Extracted to a method so tests can patch it without showing a dialog.
-
-        If the app is still in login/splash (work not yet started), skips the
-        camera-power-off option entirely and returns EXIT_KEEP_CAMERAS_ON
-        directly without showing a dialog.
+        Thin delegate to ui.shutdown_intent_dialog. Kept as a method so tests
+        can patch it without showing a dialog.
         """
-        from domain.shutdown_intent import ShutdownIntent
-        if not self._normal_work_active:
-            return ShutdownIntent.EXIT_KEEP_CAMERAS_ON
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Close application")
-        msg.setText("How do you want to close the application?")
-        btn_keep = msg.addButton("Keep cameras on",  QMessageBox.YesRole)
-        btn_off  = msg.addButton("Power off cameras", QMessageBox.NoRole)
-        btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
-        # Safe default/escape: a stray Enter or tap cancels, never powers off.
-        msg.setDefaultButton(btn_cancel)
-        msg.setEscapeButton(btn_cancel)
-        from ui.message_box_layout import destructive_message_button_qss
-        btn_off.setStyleSheet(destructive_message_button_qss())
-        fit_message_box_buttons(msg)
-        msg.exec_()
-        clicked = msg.clickedButton()
-        if clicked is btn_keep:
-            return ShutdownIntent.EXIT_KEEP_CAMERAS_ON
-        if clicked is btn_off:
-            return ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS
-        return ShutdownIntent.CANCEL
+        from ui.shutdown_intent_dialog import ask_shutdown_intent
+        return ask_shutdown_intent(self)
 
     def closeEvent(self, event):
         from domain.shutdown_intent import ShutdownIntent

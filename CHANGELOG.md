@@ -19,6 +19,14 @@ This project uses a simple versioning approach while it is still in early produc
 
 - VISCA watchdog logic is extracted from the main window with regression
   tests, reducing its size limit without changing the intended behavior.
+- The shutdown intent dialog is extracted from the main window with
+  focused regression tests, keeping its existing choices and behavior.
+- Startup loads the saved ATEM address from effective settings before the
+  monitor starts, instead of requiring it to be entered again in Settings.
+- ATEM polling detects a dropped link instead of continuing to report
+  cached program input as a live connection.
+- An unavailable data directory no longer aborts data_paths at import time,
+  before startup logging and crash handling can be installed.
 - Restore rejects malformed manifest structures with a controlled error before
   creating a safety backup or restoring data, including in dry-run mode.
 - test_config_validators prefers real PyQt5 modules over leaving stubs in
