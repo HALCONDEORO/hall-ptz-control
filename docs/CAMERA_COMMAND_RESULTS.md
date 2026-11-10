@@ -23,6 +23,14 @@ that allow only one TCP controller session. It does not prove single-session
 ownership against other applications, external CLI probes or simultaneous
 configuration changes made elsewhere during a scan.
 
+The post-assignment camera check sends a bounded, read-only power inquiry via
+that endpoint's existing worker queue/session. It does not open a second TCP
+connection. Both power ON and STANDBY identify a responding VISCA camera, not
+motion readiness. Error, ACK-only, missing/unknown power data and stale results
+from a replaced endpoint do not turn the new endpoint's badge green. The check
+runs off the GUI thread and results are also endpoint-checked on GUI delivery.
+Standalone discovery and external CLI/diagnostic probes remain separate paths.
+
 Opening Settings reads the existing CameraManager connection snapshot instead
 of opening extra TCP probe sessions. The displayed online/offline state is
 transport state, not proof of VISCA command success or physical camera health.

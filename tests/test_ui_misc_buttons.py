@@ -372,6 +372,8 @@ def _cam_stub(text: str, valid: bool, config_type: str = "ip", cam_num: int = 1)
     stub._config_type = config_type
     stub._cam_num = cam_num
     stub._mw = MagicMock()
+    stub._mw._camera_config.set_camera_ip.return_value.code = "OK"
+    stub._mw._camera_config.set_camera_visca_id.return_value.code = "OK"
     return stub
 
 
@@ -428,14 +430,15 @@ class TestCamEditDialogApply:
         _cd._CamEditDialog._apply(stub)
         stub._mw._camera_config.set_camera_visca_id.assert_called_once_with(2, "2")
 
-    def test_no_cameras_manager_still_accepts(self):
+    def test_missing_configuration_service_does_not_claim_acceptance(self):
         stub = _cam_stub(text="192.168.1.50", valid=True, config_type="ip", cam_num=1)
         stub._mw = None
         with patch("ui.config_edit_dialogs._config_yaml_path", return_value=None), \
              patch("config.CAM1") as mc:
             mc.ip = "192.168.1.1"
             _cd._CamEditDialog._apply(stub)
-        stub.accept.assert_called_once()
+        stub.accept.assert_not_called()
+        assert "unavailable" in stub._err.setText.call_args[0][0]
 
 
 class TestAtemEditDialogApply:
@@ -444,6 +447,7 @@ class TestAtemEditDialogApply:
     def _atem_stub(self, text: str) -> MagicMock:
         stub = MagicMock()
         stub._input.text.return_value = text
+        stub._mw._camera_config.set_atem_ip.return_value.code = "OK"
         return stub
 
     def test_empty_text_shows_error_and_does_not_accept(self):

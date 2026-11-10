@@ -285,8 +285,8 @@ class ProvisioningService:
         if not config_path.exists():
             return None
         try:
-            from config.loader import load_config
-            settings = load_config(config_path)
+            from config.effective import load_effective_config
+            settings = load_effective_config(config_path, r.data_dir / "camera_overrides.json")
         except Exception:
             return None
         return self.answers_from_settings(settings)
@@ -441,8 +441,9 @@ class ProvisioningService:
         config_path = r.config_dir / "config.yaml"
         if config_path.exists():
             try:
-                from config.loader import load_config
-                settings = self._merge_onto_existing(settings, load_config(config_path))
+                from config.effective import load_effective_config
+                settings = self._merge_onto_existing(settings, load_effective_config(
+                    config_path, r.data_dir / "camera_overrides.json"))
             except Exception:
                 # Corrupt/unreadable existing config — can't merge the full
                 # tree, but the identity fields (installation_id especially)
@@ -465,6 +466,8 @@ class ProvisioningService:
                     )
         write_full_config(settings, config_path, mode=config_mode)
         written.append(str(config_path))
+        # Fresh wizard answers supersede old runtime endpoint overrides.
+        (r.data_dir / "camera_overrides.json").unlink(missing_ok=True)
 
         secret_manager.encrypt_secret(secret_manager.SECRET_ENTRY, answers.entry_password)
         written.append(str(secret_manager._secret_file(secret_manager.SECRET_ENTRY)))

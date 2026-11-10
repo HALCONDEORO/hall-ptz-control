@@ -110,7 +110,7 @@ def _create_camera_target_resolver(layout_svc):
     if layout_svc is None:
         return None
     try:
-        from config.loader import load_config
+        from config.effective import load_effective_config as load_config
         from config.registry import CameraRegistry
         from application.camera_target_resolver import CameraTargetResolver
         from runtime.path_resolver import RuntimePathResolver
@@ -130,7 +130,7 @@ def _load_cam_configs() -> 'dict[int, tuple[str, str]] | None':
     or None on any error so the caller can fall back to legacy .txt files.
     """
     try:
-        from config.loader import load_config
+        from config.effective import load_effective_config as load_config
         from runtime.path_resolver import RuntimePathResolver
         resolver = RuntimePathResolver()
         settings = load_config(resolver.config_dir / "config.yaml")

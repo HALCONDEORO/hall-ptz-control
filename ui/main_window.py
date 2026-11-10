@@ -101,7 +101,7 @@ def _load_cam_configs_from_yaml():
     if sim_mode.is_active():
         return CAM1, CAM2
     try:
-        from config.loader import load_config
+        from config.effective import load_effective_config as load_config
         from runtime.path_resolver import RuntimePathResolver
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
         # Mutate the shared objects, never rebind: Splash/Admin/services already
@@ -993,7 +993,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
     def _save_nudge_to_config(self, pan_speed: int, direction: str, duration_ms: int) -> None:
         """Persiste la configuración de nudge en config.yaml."""
         try:
-            from config.writer import patch_config_yaml
+            from config.effective import patch_runtime_config as patch_config_yaml
             from runtime.path_resolver import RuntimePathResolver
             resolver = RuntimePathResolver()
             patch_config_yaml(
@@ -1482,7 +1482,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         nudge_cfg = PiPNudgeSettings()   # defaults: pan_speed=0, duration_ms=0
         camera_id = "cam1"
         try:
-            from config.loader import load_config
+            from config.effective import load_effective_config as load_config
             from config.registry import CameraRegistry
             from runtime.path_resolver import RuntimePathResolver
 

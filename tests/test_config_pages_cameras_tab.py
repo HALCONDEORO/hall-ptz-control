@@ -276,60 +276,57 @@ class TestAssignment:
 
 
 class TestConnectivityRecheck:
-    def test_a_real_assignment_rechecks_the_link(self, monkeypatch, discovery):
+    def test_assignment_uses_existing_worker_and_never_direct_probe(self, monkeypatch, discovery):
         import config
-        seen = []
-        monkeypatch.setattr(
-            config, "check_camera",
-            lambda ip, cam_id: seen.append(ip) or True, raising=False,
-        )
+        from unittest.mock import Mock
+        forbidden = Mock(side_effect=AssertionError("no parallel TCP probe"))
+        monkeypatch.setattr(config, "check_camera", forbidden)
         dialog, mw, layout = build(monkeypatch)
+        mw._cameras.check_power_response = Mock(return_value=True)
         button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
-        assert seen == ["172.16.1.21"]
-
-    def test_the_recheck_result_is_recorded_on_the_camera(self, monkeypatch, discovery):
-        import config
-        monkeypatch.setattr(config, "check_camera", lambda ip, cam_id: True, raising=False)
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Find and check cameras").click()
-        assign_buttons(dialog, "Platform")[0].click()
+        mw._cameras.check_power_response.assert_called_once_with(1)
+        forbidden.assert_not_called()
         assert config.CAM1.check == "Green"
 
-    def test_an_unreachable_camera_is_recorded_as_red(self, monkeypatch, discovery):
+    @pytest.mark.parametrize("reachable", [True, False])
+    def test_recheck_result_is_recorded(self, monkeypatch, discovery, reachable):
         import config
-        monkeypatch.setattr(config, "check_camera", lambda ip, cam_id: False, raising=False)
+        from unittest.mock import Mock
         dialog, mw, layout = build(monkeypatch)
+        mw._cameras.check_power_response = Mock(return_value=reachable)
+        button_named(layout, "Find and check cameras").click()
+        assign_buttons(dialog, "Platform")[0].click()
+        assert config.CAM1.check == ("Green" if reachable else "Red")
+
+    def test_raising_worker_check_counts_as_offline(self, monkeypatch, discovery):
+        import config
+        from unittest.mock import Mock
+        dialog, mw, layout = build(monkeypatch)
+        mw._cameras.check_power_response = Mock(side_effect=OSError("unavailable"))
         button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Red"
 
-    def test_a_raising_probe_counts_as_offline(self, monkeypatch, discovery):
+    def test_reconfigured_camera_discards_stale_result(self, monkeypatch, discovery):
         import config
-
-        def _boom(ip, cam_id):
-            raise OSError("no route to host")
-
-        monkeypatch.setattr(config, "check_camera", _boom, raising=False)
         dialog, mw, layout = build(monkeypatch)
+        def check(key):
+            config.CAM1.ip = "192.0.2.77"
+            config.CAM1.check = "Red"
+            return True
+        mw._cameras.check_power_response = check
         button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Red"
 
-    def test_simulation_never_touches_the_network(self, monkeypatch, discovery):
-        """In simulation the link is up by definition; probing a fake IP would
-        just add a timeout to every assignment."""
-        import config
-        seen = []
-        monkeypatch.setattr(
-            config, "check_camera",
-            lambda ip, cam_id: seen.append(ip) or True, raising=False,
-        )
+    def test_simulation_never_probes_worker(self, monkeypatch, discovery):
+        from unittest.mock import Mock
         dialog, mw, layout = build(monkeypatch, sim_active=True)
+        mw._cameras.check_power_response = Mock()
         button_named(layout, "Find and check cameras").click()
         assert assign_buttons(dialog, "Platform") == []
-        assert not button_named(layout, "Find and check cameras").isEnabled()
-        assert seen == []
+        mw._cameras.check_power_response.assert_not_called()
 
 
 class TestReconnect:
@@ -469,3 +466,44 @@ def test_finishing_scan_does_not_unlock_editors_in_new_live_session(monkeypatch)
     edits = [label.parentWidget().findChild(QPushButton)
              for label in dialog._cam_ip_labels.values()]
     assert all(not edit.isEnabled() for edit in edits)
+
+def test_assignment_result_is_written_only_on_gui_delivery(monkeypatch, discovery):
+    import config
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtWidgets import QApplication
+    from unittest.mock import Mock
+    dialog, mw, layout = build(monkeypatch)
+    mw._cameras.check_power_response = Mock(return_value=True)
+    # Force queued delivery even with the test's inline worker, so a result
+    # can be pending while the GUI changes to a new endpoint.
+    signal = dialog._cam_check_sig.done
+    signal.disconnect()
+    # Recover the production slot from the build function's signal wiring.
+    import ast
+    from pathlib import Path
+    source = Path('ui/config_pages/cameras_tab.py').read_text()
+    tree = ast.parse(source)
+    builder = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_cameras_tab')
+    slot = next(n for n in builder.body if isinstance(n, ast.FunctionDef) and n.name == '_apply_cam_check')
+    ns = {'CAM1': config.CAM1, 'CAM2': config.CAM2, 'dialog': dialog}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[slot], type_ignores=[])), '<production-slot>', 'exec'), ns)
+    signal.connect(ns['_apply_cam_check'], Qt.QueuedConnection)
+    config.CAM1.check = 'Red'
+    button_named(layout, 'Find and check cameras').click()
+    assign_buttons(dialog, 'Platform')[0].click()
+    assert config.CAM1.check == 'Red', 'worker thread wrote GUI-visible state before delivery'
+    config.CAM1.ip = '192.0.2.77'
+    QApplication.processEvents()
+    assert config.CAM1.check == 'Red', 'stale queued result recolored the replacement endpoint'
+
+
+def test_unsent_probe_does_not_paint_busy_connected_camera_offline(monkeypatch, discovery):
+    import config
+    from unittest.mock import Mock
+    dialog, mw, layout = build(monkeypatch)
+    mw._cameras.check_power_response = Mock(return_value=None)
+    dialog._set_online_badge = Mock()
+    button_named(layout, "Find and check cameras").click()
+    assign_buttons(dialog, "Platform")[0].click()
+    assert config.CAM1.check is None
+    dialog._set_online_badge.assert_called_with(dialog._cam_online_badges[1], None)
