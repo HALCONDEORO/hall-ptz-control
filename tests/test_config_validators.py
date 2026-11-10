@@ -91,6 +91,8 @@ class _FakeCamEditDialog:
 
         self._err = MagicMock()
         self._mw = MagicMock()
+        self._mw._camera_config.set_camera_ip.return_value.code = "OK"
+        self._mw._camera_config.set_camera_visca_id.return_value.code = "OK"
         self.accept = MagicMock()
 
     # Bring in the real _apply logic without any Qt widget construction:

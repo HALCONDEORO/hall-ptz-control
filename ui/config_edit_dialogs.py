@@ -14,7 +14,7 @@
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QWidget, QLineEdit,
+    QPushButton, QLabel, QWidget, QLineEdit, QMessageBox,
 )
 
 from config import CAM1, CAM2, is_valid_ip, is_valid_cam_id
@@ -163,6 +163,11 @@ class _CamEditDialog(QDialog):
                 result = svc.set_camera_ip(self._cam_num, text)
             else:
                 result = svc.set_camera_visca_id(self._cam_num, text)
+            if result.code == "PARTIAL_OK":
+                QMessageBox.warning(self, 'Change not saved',
+                    'Applied for this session only. Saving failed; changes will be lost after restart.')
+                self.accept()
+                return
             if result.code != "OK":
                 self._err.setText(
                     'Applied for this session only. Saving failed; changes will be lost after restart.'
@@ -276,6 +281,11 @@ class _ATEMEditDialog(QDialog):
         svc = getattr(self._mw, '_camera_config', None)
         if svc is not None:
             result = svc.set_atem_ip(text)
+            if result.code == "PARTIAL_OK":
+                QMessageBox.warning(self, 'Change not saved',
+                    'Applied for this session only. Saving failed; changes will be lost after restart.')
+                self.accept()
+                return
             if result.code != "OK":
                 self._err.setText(
                     'Applied for this session only. Saving failed; changes will be lost after restart.'

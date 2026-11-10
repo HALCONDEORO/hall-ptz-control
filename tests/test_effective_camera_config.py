@@ -308,3 +308,23 @@ def test_partial_old_restore_does_not_mix_restored_yaml_with_stale_overlay(paths
     assert 'config.yaml' in result.restored
     assert not overlay.exists()
     assert load_effective_config(config, overlay).cameras[0].ip == '192.0.2.11'
+
+
+def test_saving_after_base_camera_id_rename_discards_orphaned_entries(paths):
+    import json
+    config, overlay = paths
+    patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
+    patch_runtime_config(config, overlay_path=overlay,
+                         atem_pip_nudge={'pan_speed': 2, 'duration_ms': 100})
+    raw = yaml.safe_load(config.read_text())
+    raw['cameras'][0]['id'] = 'platform-renamed'
+    config.chmod(0o640)
+    config.write_text(yaml.safe_dump(raw))
+    patch_runtime_config(config, overlay_path=overlay, cam_index=1, cam_ip='192.0.2.22')
+    saved = json.loads(overlay.read_text())
+    assert 'platform' not in saved['cameras']
+    assert saved['cameras']['comments']['ip'] == '192.0.2.22'
+    settings = load_effective_config(config, overlay)
+    assert settings.cameras[0].ip == '192.0.2.11'
+    assert settings.cameras[1].ip == '192.0.2.22'
+    assert settings.atem.pip_nudge.pan_speed == 2
