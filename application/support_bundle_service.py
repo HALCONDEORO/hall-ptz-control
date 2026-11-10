@@ -33,7 +33,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 from domain.blackbox_event import redact_event_dict
-from domain.redaction import SupportBundleManifest
+from domain.redaction import RedactionGuard, SupportBundleManifest
 from domain.time_utils import utc_now_compact as _utc_stamp, utc_now_iso as _utc_now_iso
 
 _MAX_EVENTS     = 500
@@ -228,12 +228,29 @@ class SupportBundleService:
             bundle_purpose="support",
         )
 
+        # Collectors can include exception text and diagnostics outside the
+        # blackbox path. Redact every export boundary, preserving JSON syntax.
+        guard = RedactionGuard()
+        safe_manifest = redact_event_dict(manifest.to_dict())
+        safe_entries = []
+        for arc, data in entries:
+            if arc.endswith(".json"):
+                safe_data = json.dumps(redact_event_dict(json.loads(data)), ensure_ascii=True) + "\n"
+            elif arc.endswith(".jsonl"):
+                safe_data = "\n".join(
+                    json.dumps(redact_event_dict(json.loads(line)), ensure_ascii=True)
+                    for line in data.splitlines() if line.strip()
+                ) + "\n"
+            else:
+                safe_data = guard.redact_text(data)
+            safe_entries.append((arc, safe_data))
+
         tmp_path = out_path.with_suffix(".zip.tmp")
         try:
             with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("manifest.json",
-                            json.dumps(manifest.to_dict(), indent=2, ensure_ascii=True) + "\n")
-                for arc, data in entries:
+                            json.dumps(safe_manifest, indent=2, ensure_ascii=True) + "\n")
+                for arc, data in safe_entries:
                     zf.writestr(arc, data)
             os.replace(tmp_path, out_path)
         except Exception:

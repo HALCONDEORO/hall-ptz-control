@@ -15,6 +15,11 @@ This project uses a simple versioning approach while it is still in early produc
 - Offline camera and panel self-test (`python -m runtime.cli selftest --json`)
   built on the scripted VISCA simulator, run in CI before the unit tests.
 
+### Fixed
+
+- Support bundle: collector errors and content are redacted before the ZIP is
+  written, and a redaction failure produces no export.
+
 ## 1.2.0 - 2026-11-10
 
 Supervised Raspberry Pi camera-test release. Physical acceptance is pending;

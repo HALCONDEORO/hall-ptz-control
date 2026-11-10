@@ -397,7 +397,7 @@ def test_two_bundles_same_second_preserve_both_snapshots(tmp_path, monkeypatch):
     monkeypatch.setattr("application.support_bundle_service._utc_stamp", lambda: "20261110-180000")
     svc = _svc(tmp_path, recorder=_fake_recorder([{"event_type": "FirstSnapshot"}]))
     for name in ("_collect_version", "_collect_doctor", "_collect_install_summary", "_collect_config_summary"):
-        monkeypatch.setattr(svc, name, lambda: ("synthetic\n", ""))
+        monkeypatch.setattr(svc, name, lambda: ("{}\n", ""))
 
     first = svc.create()
     original = first.read_bytes()
@@ -412,3 +412,51 @@ def test_two_bundles_same_second_preserve_both_snapshots(tmp_path, monkeypatch):
         assert "SecondSnapshot" in zf.read("blackbox/recent_events.jsonl").decode()
         manifest = json.loads(zf.read("manifest.json"))
         assert second.stem == manifest["bundle_id"]
+
+
+def test_bundle_redacts_collection_error_text_before_export(tmp_path, monkeypatch):
+    recorder = MagicMock()
+    recorder.export_for_support.side_effect = RuntimeError("password=SYNTHETIC_SUPPORT_MARKER")
+    svc = _svc(tmp_path, recorder=recorder)
+    for name in ("_collect_version", "_collect_doctor", "_collect_install_summary", "_collect_config_summary"):
+        monkeypatch.setattr(svc, name, lambda: ("{}\n", ""))
+
+    path = svc.create()
+
+    assert path is not None
+    with zipfile.ZipFile(path) as zf:
+        for name in zf.namelist():
+            assert b"SYNTHETIC_SUPPORT_MARKER" not in zf.read(name), name
+
+
+def test_bundle_redacts_collector_content_preserving_json(tmp_path, monkeypatch):
+    svc = _svc(tmp_path)
+    monkeypatch.setattr(svc, "_collect_version", lambda: ("password=SYNTHETIC_VERSION_MARKER\n", ""))
+    monkeypatch.setattr(svc, "_collect_doctor", lambda: ("password=SYNTHETIC_DOCTOR_MARKER\n", ""))
+    monkeypatch.setattr(svc, "_collect_install_summary", lambda: (
+        json.dumps({"error": "password=SYNTHETIC_INSTALL_MARKER", "safe": "ok"}), ""))
+    monkeypatch.setattr(svc, "_collect_config_summary", lambda: (
+        json.dumps({"error": "password=SYNTHETIC_CONFIG_MARKER", "safe": "ok"}), ""))
+
+    path = svc.create()
+
+    assert path is not None
+    with zipfile.ZipFile(path) as zf:
+        for name in zf.namelist():
+            assert b"SYNTHETIC_" not in zf.read(name), name
+        assert json.loads(zf.read("install_summary.json"))["safe"] == "ok"
+        assert json.loads(zf.read("config_summary.json"))["safe"] == "ok"
+
+
+def test_bundle_redaction_failure_returns_none_without_zip(tmp_path, monkeypatch):
+    svc = _svc(tmp_path)
+    for name in ("_collect_version", "_collect_doctor", "_collect_install_summary", "_collect_config_summary"):
+        monkeypatch.setattr(svc, name, lambda: ("{}\n", ""))
+
+    def fail_redaction(*args, **kwargs):
+        raise ValueError("synthetic redaction failure")
+
+    monkeypatch.setattr("domain.redaction.RedactionGuard.redact_text", fail_redaction)
+
+    assert svc.create() is None
+    assert list((tmp_path / "bundles").glob("*.zip")) == []
