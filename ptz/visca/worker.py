@@ -205,6 +205,9 @@ class CameraWorker:
             return False
 
     def send_priority(self, cmd: ViscaCommand) -> bool:
+        return self._send_priority_admitted(cmd)
+
+    def _send_priority_admitted(self, cmd: ViscaCommand, *, deferred_failures=None) -> bool:
         """
         Vacía la cola de comandos pendientes y coloca cmd en primer lugar.
 
@@ -276,10 +279,13 @@ class CameraWorker:
         # timeout entero por un comando que ya no se va a ejecutar.
         for c in dropped:
             if c is not None and c.on_failure is not None:
-                try:
-                    c.on_failure()
-                except Exception as exc:
-                    logger.exception("CameraWorker %s: on_failure raised: %s", self.ip, exc)
+                if deferred_failures is not None:
+                    deferred_failures.append(c.on_failure)
+                else:
+                    try:
+                        c.on_failure()
+                    except Exception as exc:
+                        logger.exception("CameraWorker %s: on_failure raised: %s", self.ip, exc)
         logger.debug("%s cam=%s type=%s queued (priority)",
                      cmd.cmd_id, self.ip,
                      CameraWorker._classify_payload(cmd.payload))
@@ -301,15 +307,44 @@ class CameraWorker:
         lo interrumpió. Solo para comandos priority: ambas mitades del STOP
         (pan/tilt y zoom) deben salir aunque se interrumpan entre sí.
         """
-        try:
-            self._queue.put_nowait(cmd)
-            logger.info("%s cam=%s STOP reencolado tras interrupción", cmd.cmd_id, self.ip)
-        except queue.Full:
-            # Tras el drain de send_priority la cola solo puede llevar el
-            # sentinel y las dos mitades de STOP: lleno aquí es inesperado.
-            logger.error("%s cam=%s STOP perdido: cola llena al reencolar", cmd.cmd_id, self.ip)
+        if not self._is_stop_payload(cmd.payload):
+            cmd.cancelled.set()
+            if cmd.on_failure is not None:
+                try:
+                    cmd.on_failure()
+                except Exception:
+                    logger.exception("Canceled priority command failure callback raised")
+            return
+        dropped = None
+        with self._queue.not_full:
+            q = self._queue.queue
+            # An interrupted STOP must stay ahead of fresh ordinary work.
+            # Appending it could stop a MOVE accepted after emergency admission.
+            if any(c is not None and c.priority and c.payload == cmd.payload
+                   for c in q):
+                return
+            if self._queue.maxsize > 0 and len(q) >= self._queue.maxsize:
+                index = next((i for i in range(len(q) - 1, -1, -1)
+                              if q[i] is not None and not q[i].priority), None)
+                if index is None:
+                    logger.error("CameraWorker %s: no room to requeue STOP", self.ip)
+                    return
+                dropped = q[index]
+                del q[index]
+            index = next((i for i, c in enumerate(q)
+                          if c is not None and not c.priority), len(q))
+            q.insert(index, cmd)
+            self._queue.not_empty.notify()
+        if dropped is not None and dropped.on_failure is not None:
+            try:
+                dropped.on_failure()
+            except Exception:
+                logger.exception("CameraWorker %s: on_failure raised", self.ip)
 
     def send_confirmed(self, cmd: ViscaCommand, timeout: float) -> bool:
+        return self._send_confirmed_admitted(cmd, timeout)
+
+    def _send_confirmed_admitted(self, cmd: ViscaCommand, timeout: float, *, admit=None) -> bool:
         """
         Encola `cmd` y bloquea al llamante hasta Completion, Error o timeout.
 
@@ -325,7 +360,8 @@ class CameraWorker:
         cmd.on_failure = lambda: (box.__setitem__("ok", False), done.set())
         cmd.fast_connect = True
         cmd.expires_at = time.monotonic() + timeout
-        if not self.send(cmd):
+        accepted = self.send(cmd) if admit is None else admit(lambda: self.send(cmd))
+        if not accepted:
             logger.warning("%s cam=%s send_confirmed: cola llena", cmd.cmd_id, self.ip)
             return False
         if not done.wait(timeout):
