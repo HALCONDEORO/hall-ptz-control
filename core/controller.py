@@ -64,7 +64,9 @@ class Controller:
         self._pending_preset_persistence: set[int] = set()
         fence = getattr(camera_port, "_motion_admission", None)
         self._motion = fence if isinstance(fence, MotionAdmission) else MotionAdmission(lambda cid: cid)
-        self._bus.register_motion_safety(self._prepare_motion, self._emergency_stop)
+        self._bus.register_motion_safety(
+            self._prepare_motion, self._emergency_stop, self._cancel_emergency_stop
+        )
         self._register()
 
     def _register(self) -> None:
@@ -98,6 +100,9 @@ class Controller:
                   else self._motion.capture(camera_id))
         event._motion_ticket = ticket
         return cam  # Two logical slots bound the pending emergency lane.
+
+    def _cancel_emergency_stop(self, event):
+        self._motion.cancel(event._motion_ticket)
 
     def _emergency_stop(self, event):
         ticket = event._motion_ticket
