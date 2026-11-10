@@ -245,7 +245,12 @@ def _build_yaml(
 
 
 def _yaml_str(value: str) -> str:
-    escaped = value.replace('"', '\\"')
+    # Backslash must be escaped first: in a YAML double-quoted scalar an
+    # unescaped backslash introduces an escape sequence, so a legacy value
+    # like "Rack \\2" made the generated config.yaml unloadable
+    # (ScannerError: unknown escape character) and "C:\\new" silently
+    # became an embedded newline.
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{escaped}"'
 
 
