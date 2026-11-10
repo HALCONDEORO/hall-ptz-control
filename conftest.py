@@ -194,8 +194,19 @@ def _qapp_available():
     qtw = sys.modules.get("PyQt5.QtWidgets")
     if qtw is None or getattr(qtw, "__file__", None) is None:
         return
+    instance = qtw.QApplication.instance()
+    if instance is not None and not isinstance(instance, qtw.QApplication):
+        # A bare QCoreApplication already owns this process: instance() is
+        # non-None, yet building a QWidget would qFatal/abort the interpreter
+        # and take down the whole run. Skip loudly instead of crashing — the
+        # offender is a test module creating QCoreApplication at import time.
+        _pytest.skip(
+            "proceso con QCoreApplication pelado (sin QApplication): "
+            "no se pueden construir QWidget aquí — algún módulo de test creó "
+            "QCoreApplication al importarse"
+        )
     try:
-        if qtw.QApplication.instance() is None:
+        if instance is None:
             qtw.QApplication([])
     except Exception:  # noqa: BLE001 — best-effort, never block a test on this
         pass
