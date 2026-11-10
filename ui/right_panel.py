@@ -118,6 +118,16 @@ class RightPanel:
         self._no_camera_label.setVisible(not visible)
         QtCore.QTimer.singleShot(0, self._fit_container_height)
 
+    def set_camera_transport_state(self, connected: bool):
+        """Keep the panel in place while preventing motion during reconnect."""
+        self._motion_widget.setEnabled(connected)
+        self._mw.ZoomSlider.setEnabled(connected)
+        self._connection_status_label.setVisible(
+            not connected and self._mw.session_active
+            and not getattr(self._mw, '_shutting_down', False))
+        if not connected:
+            self._mw._zoom_timer.stop()
+
     # ── Fondo exterior oscuro ─────────────────────────────────────────────────
 
     def _build_outer_bg(self):
@@ -152,6 +162,16 @@ class RightPanel:
         layout.setSpacing(4)
 
         self._add_camera_selector(layout)
+        self._connection_status_label = QLabel('Reconectando...', self._container)
+        self._connection_status_label.setAlignment(Qt.AlignCenter)
+        self._connection_status_label.setMinimumHeight(26)
+        status_policy = self._connection_status_label.sizePolicy()
+        status_policy.setRetainSizeWhenHidden(True)
+        self._connection_status_label.setSizePolicy(status_policy)
+        self._connection_status_label.setStyleSheet(
+            "font: 600 14px 'Inter Tight'; color: #996000; padding: 4px;")
+        self._connection_status_label.hide()
+        layout.addWidget(self._connection_status_label)
 
         # ── Contenedor de controles PTZ + Focus/Exposure ──────────────────────
         self._controls_widget = QWidget(self._container)
@@ -273,6 +293,7 @@ class RightPanel:
         mw = self._mw
 
         block = QFrame(self._container)
+        self._motion_widget = block
         block.setStyleSheet(
             "QFrame { background-color: #F2F2F2; border-radius: 12px; border: none; }"
         )
@@ -364,7 +385,7 @@ class RightPanel:
 
         def _send_zoom_absolute():
             port = getattr(mw, '_camera_port', None)
-            if port is None:
+            if port is None or not self._motion_widget.isEnabled():
                 return
             cam_id = "cam1" if mw.Cam1.isChecked() else "cam2"
             self._zoom_dispatcher.submit(port, cam_id, mw.ZoomSlider.value())
@@ -373,7 +394,7 @@ class RightPanel:
         mw._zoom_feedback = False
         def _zoom_value_changed(value):
             mw.ZoomValueLabel.setText(f"{value}%")
-            if not mw._zoom_feedback:
+            if not mw._zoom_feedback and self._motion_widget.isEnabled():
                 record_activity = getattr(mw, '_record_activity', None)
                 if callable(record_activity):
                     record_activity()

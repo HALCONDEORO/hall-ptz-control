@@ -1,4 +1,4 @@
-"""Virtual time proves only sustained loss hides previously visible controls."""
+"""Transport loss never removes session controls, even after old deadlines."""
 from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
@@ -44,23 +44,24 @@ def test_short_disconnect_keeps_controls_and_recovery_is_immediate(rig):
     assert not controller.timer.isActive()
 
 
-def test_sustained_disconnect_hides_after_one_non_sliding_deadline(rig):
+def test_sustained_disconnect_keeps_panel_and_disables_motion(rig):
     window, controller = rig
     controller.update()
     window.Cam1._connected = False
     controller.update()
     controller.update()
-    assert controller.timer.starts == 1
+    assert controller.timer.starts == 0
     assert controller.visible
     controller.timer.fire()
-    assert not controller.visible
+    assert controller.visible
+    window._right_panel.set_camera_transport_state.assert_called_with(False)
     window.Cam1._connected = True
     controller.update()
     assert controller.visible
 
 
 @pytest.mark.parametrize('action', ['session_end', 'shutdown', 'offline_selection'])
-def test_session_end_shutdown_and_offline_selection_do_not_keep_controls(rig, action):
+def test_only_session_end_or_shutdown_hides_controls(rig, action):
     window, controller = rig
     controller.update()
     window.Cam1._connected = False
@@ -72,15 +73,16 @@ def test_session_end_shutdown_and_offline_selection_do_not_keep_controls(rig, ac
     else:
         window.Cam1.isChecked = lambda: False
     controller.update()
-    assert not controller.visible
+    assert controller.visible == (action == 'offline_selection')
     assert not controller.timer.isActive()
 
 
-def test_startup_offline_has_no_false_connected_grace(rig):
+def test_startup_offline_shows_disabled_controls(rig):
     window, controller = rig
     window.Cam1._connected = False
     controller.update()
-    assert not controller.visible
+    assert controller.visible
+    window._right_panel.set_camera_transport_state.assert_called_with(False)
     assert not controller.timer.isActive()
 
 
