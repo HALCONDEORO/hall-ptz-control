@@ -87,6 +87,14 @@ def build_settings(raw: Dict[str, Any]) -> AppSettings:
             remediation="The top level of config.yaml must be a YAML mapping",
         )
 
+    for section in ('site', 'atem', 'runtime', 'features', 'network'):
+        if section in raw and raw[section] is not None and not isinstance(raw[section], dict):
+            raise ConfigError(
+                f"{section}: expected a mapping",
+                field_path=section,
+                remediation=f"Use a YAML mapping for {section}, or omit the section",
+            )
+
     site = _load_site(raw.get("site") or {})
     cameras = _load_cameras(raw.get("cameras") or [])
     atem = _load_atem(raw.get("atem") or {})
