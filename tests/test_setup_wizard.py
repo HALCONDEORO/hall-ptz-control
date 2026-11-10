@@ -312,8 +312,10 @@ class _FakeHandoff:
     def __init__(self, result=None):
         self._result = result
         self.began_with = None
+        self.begin_calls = 0
 
     def begin(self, answers):
+        self.begin_calls += 1
         self.began_with = answers
 
     def poll(self):
@@ -344,6 +346,45 @@ class TestInstallingPage:
         page._poll_once()
         assert page.isComplete() is True
         assert "complete" in page._status.text().lower()
+
+    def test_reentry_while_in_flight_does_not_begin_again(self, _qapp):
+        """Back + Next mid-install resumes polling; it must not re-begin().
+
+        ProvisionHandoff.begin(): "This does not make retries safe while an
+        earlier operation is active; callers must establish its outcome
+        before submitting another request."
+        """
+        from ui.setup_wizard import SetupWizard
+
+        handoff = _FakeHandoff(result=None)  # still running
+        wizard = SetupWizard(handoff=handoff)
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        assert handoff.begin_calls == 1
+
+        page.cleanupPage()       # operator pressed Back mid-install
+        page.initializePage()    # ... and Next again
+        assert handoff.begin_calls == 1
+        assert page.isComplete() is False
+        page._timer.stop()
+
+    def test_reentry_after_failure_begins_again(self, _qapp):
+        # The designed retry path stays open: once a failure landed,
+        # Back + Next submits fresh answers.
+        from application.provision_handoff import HandoffResult
+        from ui.setup_wizard import SetupWizard
+
+        handoff = _FakeHandoff(result=HandoffResult(ok=False, error="boom"))
+        wizard = SetupWizard(handoff=handoff)
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        page._poll_once()        # failure landed
+        assert page.isComplete() is False
+
+        page.cleanupPage()
+        page.initializePage()
+        assert handoff.begin_calls == 2
+        page._timer.stop()
 
     def test_failure_keeps_page_incomplete(self, _qapp):
         from application.provision_handoff import HandoffResult
