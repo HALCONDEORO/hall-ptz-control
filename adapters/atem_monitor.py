@@ -160,9 +160,12 @@ class ATEMMonitor(QThread):
                     self._poll_loop(atem)
                 finally:
                     self._close_atem(atem)
-                return
-
-            self._close_atem(atem)
+                if self.isInterruptionRequested():
+                    return
+                # A failed established session uses the same bounded backoff
+                # budget as connection failure, never an unbounded hot loop.
+            else:
+                self._close_atem(atem)
 
             if self.isInterruptionRequested():
                 return
@@ -236,20 +239,27 @@ class ATEMMonitor(QThread):
 
     def _poll_loop(self, atem) -> None:
         prev_input = None
+        consecutive_errors = 0
         while not self.isInterruptionRequested():
             try:
                 cur = source_number(atem.programInput[0].videoSource)
+                consecutive_errors = 0
                 if self._state == ATEMState.ERROR:
+                    self.last_error = ""
                     logger.info("ATEM: poll recovered from ERROR — marking CONNECTED")
                     self._emit_state(ATEMState.CONNECTED)
                 if cur != prev_input:
                     self.program_changed.emit(cur)
                     self._safe_store_update(program_input=cur)
                 prev_input = cur
-            except Exception:
-                logger.exception("ATEM poll cycle failed")
-                if self._state != ATEMState.ERROR:
-                    self._emit_state(ATEMState.ERROR, last_error="poll cycle failed")
+            except Exception as exc:
+                consecutive_errors += 1
+                self.last_error = f"ATEM poll cycle failed: {exc}"
+                if consecutive_errors == 1:
+                    logger.warning("ATEM poll cycle failed: %s", exc)
+                    self._emit_state(ATEMState.ERROR, last_error=self.last_error)
+                if consecutive_errors >= 3:
+                    return  # retire dead client; reconnect with backoff
             self._poll_pip(atem)
             time.sleep(0.1)
 
