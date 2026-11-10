@@ -114,6 +114,18 @@ mw.atem_ready = False
 mw.atem_state_changed.emit(None)
 app.processEvents()
 assert not automation.isVisible()
+# Destroy widgets while their signal owner and QApplication still exist.
+# Leaving this graph to interpreter shutdown can destroy Qt in the wrong order.
+from PyQt5 import sip
+from PyQt5.QtCore import QCoreApplication, QEvent, QTimer
+for timer in dialog.findChildren(QTimer):
+    timer.stop()
+dialog.hide()
+sip.delete(dialog)
+QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+app.processEvents()
+sip.delete(mw)
+app.processEvents()
 '''
     result = subprocess.run([sys.executable, '-c', script],
         cwd=Path(__file__).resolve().parents[1],
