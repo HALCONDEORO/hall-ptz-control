@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - An active password lockout now survives Operator/Admin mode toggles:
   the button stays disabled and the timer keeps running until it expires.
+- test_seat_builder no longer leaves fake SpecialDragButton/QtSvg stubs in
+  sys.modules, which poisoned later real-widget tests in the same process.
 - Login mode toggle (Operator/Admin) no longer resets the failed-attempt
   counter, so the progressive lockout cannot be bypassed by switching modes.
 - Legacy migration escapes backslashes in values written to config.yaml,
