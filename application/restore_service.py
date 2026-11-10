@@ -256,9 +256,15 @@ class RestoreService:
                 "or may be corrupt. Restore aborted."
             )
         try:
-            return json.loads(zf.read("manifest.json").decode("utf-8"))
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise RestoreError(f"manifest.json is corrupt: {exc}") from exc
+        if not isinstance(manifest, dict):
+            raise RestoreError("Manifest must be a JSON object. Restore aborted.")
+        included = manifest.get("included", [])
+        if not isinstance(included, list) or not all(isinstance(name, str) for name in included):
+            raise RestoreError("Manifest included must be a list of paths. Restore aborted.")
+        return manifest
 
     def _verify_hashes(self, zf: zipfile.ZipFile, manifest: dict) -> None:
         """
