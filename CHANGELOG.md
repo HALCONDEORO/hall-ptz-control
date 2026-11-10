@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Warn when a seat rename cannot save its existing camera preset, while
+  keeping the in-memory rename available for the next persistence retry.
 - Demo reset refuses service-install production data paths before creating
   or overwriting files, including nested directories.
 - The shutdown intent dialog is extracted from the main window with

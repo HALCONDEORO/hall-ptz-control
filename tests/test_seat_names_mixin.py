@@ -336,12 +336,11 @@ class TestUndoAfterRename:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  _on_names_list_changed — aviso cuando falla la persistencia del preset
+#  _on_names_list_changed: warn when preset persistence fails
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestRenamePresetPersistWarning:
-    """rename() devuelve False también cuando old_name no tiene preset (caso
-    normal): solo se avisa si HABÍA preset y el guardado en disco falló."""
+    """Warn only if a preset existed and its disk save failed."""
 
     def test_warns_when_preset_rename_persist_fails(self):
         ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
@@ -354,7 +353,7 @@ class TestRenamePresetPersistWarning:
     def test_no_warning_when_old_name_has_no_preset(self):
         ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
         w._preset_svc.has_preset.return_value = False
-        w._preset_svc.rename.return_value = False  # rename ignora: no había preset
+        w._preset_svc.rename.return_value = False  # no preset existed
         with patch("PyQt5.QtWidgets.QMessageBox.warning") as warn:
             SeatNamesController._on_names_list_changed(ctrl, "PersonA", "PersonB")
         warn.assert_not_called()
@@ -368,8 +367,7 @@ class TestRenamePresetPersistWarning:
         warn.assert_not_called()
 
     def test_seat_rename_still_applied_on_persist_failure(self):
-        """El rename de asiento/lista se mantiene aunque falle el disco (la
-        memoria sigue coherente con la lista de nombres; se avisa y listo)."""
+        """Keep the seat rename in memory when saving its preset fails."""
         ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
         w._preset_svc.has_preset.return_value = True
         w._preset_svc.rename.return_value = False

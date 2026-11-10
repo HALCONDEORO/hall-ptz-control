@@ -95,18 +95,14 @@ class SeatNamesController:
                         btn.set_name(new_name, emit_signal=False)
 
             # Migrar preset de Chairman si la persona renombrada tenía uno.
-            # rename() devuelve False tanto cuando old_name no tiene preset
-            # (caso normal: nada que migrar) como cuando falla el guardado en
-            # disco. Solo se avisa en el segundo caso: la lista de nombres ya
-            # se persistió con el nombre nuevo y, sin aviso, el preset quedaría
-            # huérfano en el siguiente arranque sin que el operador lo supiera.
-            # El mapeo queda pendiente en memoria y se reintenta en el próximo
-            # guardado de preset (ver test_chairman_persistence_retry).
+            # A missing preset and a failed disk save both return False.
+            # Warn only if a preset existed. Keep the pending in-memory map;
+            # the next whole-map save retries it (see persistence retry tests).
             had_preset = self._w._preset_svc.has_preset(old_name)
             persisted = self._w._preset_svc.rename(old_name, new_name)
             if had_preset and not persisted:
                 logger.warning(
-                    "Preset de '%s' renombrado en memoria pero no persistido en disco",
+                    "Preset for '%s' renamed in memory but not saved to disk",
                     new_name,
                 )
                 from PyQt5.QtWidgets import QMessageBox
@@ -114,7 +110,7 @@ class SeatNamesController:
                     self._w,
                     "Position preset not saved",
                     f'The saved camera position for "{new_name}" could not be '
-                    "written to disk.\nIt will be lost when the app restarts; "
+                    "written to disk.\nIt may be lost when the app restarts; "
                     "save the position again to keep it.",
                 )
 
