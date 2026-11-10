@@ -47,6 +47,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Run camera and panel offline self-test
+        run: python -m runtime.cli selftest --json
+
       # The full suite in one pytest process reliably aborts CI with SIGABRT (see
       # issue #873): a native resource leak in Qt's offscreen QPA platform that
       # deleteLater()/processEvents()/gc.collect() cannot reclaim — confirmed by
