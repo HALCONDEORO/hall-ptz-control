@@ -292,7 +292,11 @@ class RestoreService:
 
         for arc_name, expected_hash in hash_map.items():
             if arc_name not in zf.namelist():
-                continue  # file was skipped (not in archive) — nothing to verify
+                # BackupService records hashes only for included files, never
+                # for skipped optional files. Absence means an incomplete ZIP.
+                raise RestoreError(
+                    f"Missing hashed member '{arc_name}' from backup. Restore aborted."
+                )
             actual_data = zf.read(arc_name)
             actual_hash = hashlib.sha256(actual_data).hexdigest()
             if actual_hash != expected_hash:
