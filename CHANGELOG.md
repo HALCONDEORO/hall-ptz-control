@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 - test_seat_builder no longer leaves fake SpecialDragButton/QtSvg stubs in
   sys.modules, which poisoned later real-widget tests in the same process.
+- Login mode toggle (Operator/Admin) no longer resets the failed-attempt
+  counter, so the progressive lockout cannot be bypassed by switching modes.
+- Legacy migration escapes backslashes in values written to config.yaml,
+  so migrated values round-trip byte-exact and the generated file stays valid YAML.
 - Restore rejects a backup whose manifest declares a hash for a member
   missing from the archive, before any write, in both normal and dry-run mode.
 - Support bundle: collector errors and content are redacted before the ZIP is
