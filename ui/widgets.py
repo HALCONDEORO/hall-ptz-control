@@ -240,6 +240,12 @@ class PresetActionMixin:
         if not hasattr(self, '_long_press_timer'):
             super().mousePressEvent(event)
             return
+        if event.button() == Qt.RightButton:
+            self._long_press_timer.stop()
+            self._press_pos = None
+            self._set_cb(self._preset_number)
+            event.accept()
+            return
         if event.button() == Qt.LeftButton:
             self._long_press_fired = False
             self._press_pos = event.pos()
