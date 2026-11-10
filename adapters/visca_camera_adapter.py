@@ -19,6 +19,7 @@ import socket
 import time
 import uuid
 import threading
+from functools import wraps
 from typing import TYPE_CHECKING, Callable
 
 from config import (
@@ -31,6 +32,7 @@ from config import (
 CONFIRMED_CMD_TIMEOUT = CAMERA_CONNECT_TIMEOUT * 3 + VISCA_READ_TIMEOUT + 5.0
 
 
+from core.motion_admission import MotionAdmission
 from domain.ports import CameraStatus
 from domain.supportability import CommandResult
 from ptz.visca.parser import contains_final_response
@@ -45,6 +47,16 @@ _CAMERA_INDEX: dict[str, int] = {
     "cam1": 1,
     "cam2": 2,
 }
+
+
+def _motion_command(method):
+    @wraps(method)
+    def guarded(self, camera_id, *args, **kwargs):
+        fence = self._motion_admission
+        ticket = fence.ticket() or fence.capture(camera_id)
+        with fence.intent(ticket):
+            return method(self, camera_id, *args, **kwargs)
+    return guarded
 
 
 class ViscaCameraAdapter:
@@ -64,6 +76,7 @@ class ViscaCameraAdapter:
     ) -> None:
         self._mgr = manager
         self._cam_configs = cam_configs
+        self._motion_admission = MotionAdmission(lambda camera_id: self._cam_info(camera_id)[0])
         self._display_query_lock = threading.RLock()
         self._endpoint_generations: dict[int, int] = {1: 0, 2: 0}
         self._backlight_on: dict[str, bool] = {}
@@ -126,6 +139,7 @@ class ViscaCameraAdapter:
 
     # ── CameraPort implementation ─────────────────────────────────────────────
 
+    @_motion_command
     def recall_preset(self, camera_id: str, preset: int) -> CommandResult:
         preset_hex = PRESET_MAP.get(preset)
         if not preset_hex:
@@ -146,6 +160,7 @@ class ViscaCameraAdapter:
         ok = self._send_confirmed(ip, cam_id_hex, f"01043f01{preset_hex}ff")
         return self._result("save_preset", camera_id, ok, t0)
 
+    @_motion_command
     def move(self, camera_id: str, pan_speed: int, tilt_speed: int) -> CommandResult:
         pan_dir  = 0x02 if pan_speed  > 0 else (0x01 if pan_speed  < 0 else 0x03)
         tilt_dir = 0x01 if tilt_speed > 0 else (0x02 if tilt_speed < 0 else 0x03)
@@ -158,8 +173,11 @@ class ViscaCameraAdapter:
         return self._queued_result("move", camera_id, queued)
 
     def stop_move(self, camera_id: str) -> CommandResult:
+        fence = self._motion_admission
+        ticket = fence.ticket() or fence.retire(camera_id)
         ip, cam_id_hex = self._cam_info(camera_id)
         if not ip:
+            ticket.ready.set()
             # Cámara no instalada (p.ej. sala de 1 cámara): sin worker hacia
             # una IP vacía — en Linux ("", 5678) conecta con localhost.
             logger.warning("stop_move: %s has no IP configured", camera_id)
@@ -171,10 +189,45 @@ class ViscaCameraAdapter:
         # STOP always sends its own zoom-stop. Pan/tilt stop first, zoom stop
         # second; both priority. CameraWorker.send_priority keeps already
         # queued priority STOP frames, so this ordering is preserved.
-        pan_queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01060100000303FF"), priority=True)
-        zoom_queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01040700FF"), priority=True)
-        return self._queued_result("stop_move", camera_id, pan_queued and zoom_queued)
+        # Worker lookup/callbacks happen outside the admission lock and UI thread.
+        try:
+            if ticket.endpoint != ip:
+                return self._queued_result("stop_move", camera_id, False)
+            worker = self._mgr.worker(ip)
+            from ptz.visca import ViscaCommand
 
+            deferred_failures = []
+            priority_admit = getattr(worker, "_send_priority_admitted", None)
+
+            def send_stop(cmd):
+                if priority_admit is None:  # Legacy queue-only test doubles.
+                    return worker.send_priority(cmd)
+                return priority_admit(cmd, deferred_failures=deferred_failures)
+
+            def enqueue():
+                pan = send_stop(ViscaCommand(
+                    camera=self._index(camera_id),
+                    payload=bytes.fromhex(cam_id_hex + "01060100000303FF"),
+                ))
+                zoom = send_stop(ViscaCommand(
+                    camera=self._index(camera_id),
+                    payload=bytes.fromhex(cam_id_hex + "01040700FF"),
+                ))
+                return pan and zoom
+
+            queued = fence.stop(ticket, enqueue)
+            # Current adapter confirmations only notify Events. Still keep callbacks
+            # out of the fence lock so an unexpected callback cannot block UI emits.
+            for notify in deferred_failures:
+                try:
+                    notify()
+                except Exception:
+                    logger.exception("Dropped command failure callback raised")
+            return self._queued_result("stop_move", camera_id, queued)
+        finally:
+            ticket.ready.set()
+
+    @_motion_command
     def zoom(self, camera_id: str, speed: int) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
         if speed == 0:
@@ -200,9 +253,10 @@ class ViscaCameraAdapter:
         ok = self._send_confirmed(ip, cam_id_hex, "01040003FF")
         return self._result("standby", camera_id, ok, t0)
 
+    @_motion_command
     def home(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
-        queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "010604FF"), priority=True)
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "010604FF"))
         return self._queued_result("home", camera_id, queued)
 
     def focus_auto(self, camera_id: str) -> CommandResult:
@@ -281,6 +335,7 @@ class ViscaCameraAdapter:
                         self._mgr.set_backlight(ip, new_state)
             return self._result("backlight_toggle", camera_id, ok, t0)
 
+    @_motion_command
     def zoom_absolute(self, camera_id: str, position: int) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
         _zoom_max = 0x4000
@@ -292,13 +347,17 @@ class ViscaCameraAdapter:
         cmd_hex = f"010447{p:02X}{q:02X}{r:02X}{s:02X}FF"
         t0 = time.monotonic()
         ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
+        ticket = self._motion_admission.ticket()
         if ok:
+            # Acquire the display lock before the admission lock: UI epoch
+            # capture must never wait for a display callback/query lock.
             with self._display_query_lock:
-                idx = self._index(camera_id)
-                self._endpoint_generations[idx] = self._endpoint_generations.get(idx, 0) + 1
-                # A confirmed movement supersedes both cached and in-flight observations.
-                if self._cam_info_by_index(idx) == (ip, cam_id_hex):
-                    self._mgr.invalidate_zoom(ip)
+                def update():
+                    idx = self._index(camera_id)
+                    self._endpoint_generations[idx] = self._endpoint_generations.get(idx, 0) + 1
+                    if self._cam_info_by_index(idx) == (ip, cam_id_hex):
+                        self._mgr.invalidate_zoom(ip)
+                self._motion_admission.commit(ticket, update)
         return self._result("zoom_absolute", camera_id, ok, t0)
 
     def stop_all(self) -> CommandResult:
@@ -359,9 +418,15 @@ class ViscaCameraAdapter:
     def invalidate_zoom(self, camera: int) -> None:
         """Retire feedback captured before a confirmed preset recall."""
         with self._display_query_lock:
-            ip, _ = self._cam_info_by_index(camera)
-            self._endpoint_generations[camera] = self._endpoint_generations.get(camera, 0) + 1
-            self._mgr.invalidate_zoom(ip)
+            def update():
+                ip, _ = self._cam_info_by_index(camera)
+                self._endpoint_generations[camera] = self._endpoint_generations.get(camera, 0) + 1
+                self._mgr.invalidate_zoom(ip)
+            ticket = self._motion_admission.ticket()
+            if ticket is None:
+                update()
+            else:
+                self._motion_admission.commit(ticket, update)
 
     # ── UI-state synchronisation helpers (read queries) ───────────────────────
     # Called by the UI layer after startup and camera reconnection to sync
@@ -534,9 +599,13 @@ class ViscaCameraAdapter:
             return False
         idx = 2 if cam_id_hex.lower() == "82" else 1
         worker = self._mgr.worker(ip)
-        return worker.send_confirmed(
-            ViscaCommand(camera=idx, payload=payload),
-            timeout=CONFIRMED_CMD_TIMEOUT,
+        cmd = ViscaCommand(camera=idx, payload=payload)
+        admitted = getattr(worker, "_send_confirmed_admitted", None)
+        if admitted is None:  # Legacy queue-only test doubles.
+            return worker.send_confirmed(cmd, timeout=CONFIRMED_CMD_TIMEOUT)
+        return admitted(
+            cmd, timeout=CONFIRMED_CMD_TIMEOUT,
+            admit=lambda send: self._motion_admission.admit(ip, send),
         )
 
     def _send_queued(
@@ -554,9 +623,9 @@ class ViscaCameraAdapter:
         idx = self._index(camera_id)
         worker = self._mgr.worker(ip)
         cmd = ViscaCommand(camera=idx, payload=payload, coalesce=coalesce)
-        if priority:
-            return worker.send_priority(cmd)
-        return worker.send(cmd)
+        return self._motion_admission.admit(
+            ip, lambda: worker.send_priority(cmd) if priority else worker.send(cmd)
+        )
 
     # ── Private ───────────────────────────────────────────────────────────────
 

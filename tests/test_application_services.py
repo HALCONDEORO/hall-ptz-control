@@ -197,14 +197,17 @@ class TestViscaCameraAdapterCommands:
             ("10.0.0.12", "82", "01040003FF"),
         ]
 
-    def test_home_uses_priority_queue_not_confirmed(self, monkeypatch):
+    def test_home_uses_cancelable_normal_queue_not_confirmed(self, monkeypatch):
         adapter, mgr = self._adapter(monkeypatch)
 
         adapter.home("cam1")
 
         worker = mgr.workers["10.0.0.11"]
-        assert worker.sent == []
-        assert worker.priority[0].payload.hex().upper() == "81010604FF"
+        # HOME is motion, not an emergency. It must never clear/replay a STOP.
+        assert worker.priority == []
+        assert len(worker.sent) == 1
+        assert worker.sent[0].priority is False
+        assert worker.sent[0].payload.hex().upper() == "81010604FF"
 
     def test_move_clamps_speeds_and_encodes_directions(self, monkeypatch):
         adapter, mgr = self._adapter(monkeypatch)
