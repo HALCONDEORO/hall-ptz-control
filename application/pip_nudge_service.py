@@ -93,6 +93,11 @@ class PiPNudgeService:
             else:
                 self.on_pip_off()
 
+    def reset_feedback(self) -> None:
+        """A new camera session may have missed PiP changes while inactive."""
+        with self._lock:
+            self._observed_enabled = None
+
     def on_pip_on(self) -> None:
         """Aplica el desplazamiento lateral al activarse el PiP."""
         with self._lock:
