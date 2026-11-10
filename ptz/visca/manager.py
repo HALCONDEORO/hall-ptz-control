@@ -181,6 +181,10 @@ class CameraManager:
             self._on_worker_ready(w)
         return w
 
+    def worker_is_current(self, worker: CameraWorker) -> bool:
+        """Nonblocking identity snapshot for queued GUI signal delivery."""
+        return not self._closed and self._workers.get(worker.ip) is worker
+
     def worker_is_healthy(self, key: int, max_progress_age: float) -> bool:
         """Inspect the active endpoint without creating a worker as a side effect."""
         self._validate_camera_key(key)

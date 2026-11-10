@@ -708,13 +708,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         logger.info("Watchdog VISCA: estado y caps restablecidos al inicio de sesión")
 
     def _on_worker_ready(self, worker) -> None:
-        worker.signals.visca_error.connect(self._on_visca_speed_error)
-        worker.signals.connection_changed.connect(
-            lambda ok, _ip=worker.ip: self._on_cam_connected(ok, _ip))
-        worker.signals.connection_changed.connect(
-            lambda ok, _ip=worker.ip: self._on_cam_connection_changed(ok, _ip))
-        from ui.camera_led_wiring import wire_connecting_led
-        wire_connecting_led(self, worker)
+        from ui.camera_led_wiring import wire_camera_worker
+        wire_camera_worker(self, worker)
 
     def _on_cam_connection_changed(self, ok: bool, ip: str) -> None:
         """Refleja el estado de conexión del worker en el LED de la cámara.
