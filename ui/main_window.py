@@ -1026,9 +1026,10 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._update_exposure_ui()
 
     def _open_config_dialog(self):
-        # Reuse existing transport state; a second TCP probe can evict the worker.
+        from adapters.sim_mode import is_active
+        simulated = is_active()
         for cam in (CAM1, CAM2):
-            cam.check = "Green" if self._cameras.is_connected(cam.ip) else "Red"
+            cam.check = "Green" if simulated or self._cameras.is_connected(cam.ip) else "Red"
         dlg = ConfigDialog(parent=self)
         dlg.exec_()
         self._right_panel._update_mode_buttons()

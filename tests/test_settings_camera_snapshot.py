@@ -19,7 +19,8 @@ def open_settings_method(cam1, cam2, dialog, forbidden_probe):
     return namespace["_open_config_dialog"]
 
 
-def test_opening_settings_uses_existing_transport_state_without_second_session():
+def test_opening_settings_uses_existing_transport_state_without_second_session(monkeypatch):
+    monkeypatch.setattr("adapters.sim_mode.is_active", lambda: False)
     cam1 = SimpleNamespace(ip="192.0.2.1", check="Red")
     cam2 = SimpleNamespace(ip="192.0.2.2", check="Green")
     dialog = Mock()
@@ -35,3 +36,17 @@ def test_opening_settings_uses_existing_transport_state_without_second_session()
     dialog.assert_called_once_with(parent=window)
     dialog.return_value.exec_.assert_called_once_with()
     window._right_panel._update_mode_buttons.assert_called_once_with()
+
+
+def test_simulation_stays_green_without_tcp_worker_or_network_probe(monkeypatch):
+    monkeypatch.setattr("adapters.sim_mode.is_active", lambda: True)
+    cam1 = SimpleNamespace(ip="192.0.2.1", check="Red")
+    cam2 = SimpleNamespace(ip="192.0.2.2", check="Red")
+    dialog = Mock()
+    forbidden = Mock(side_effect=AssertionError("no network in simulation"))
+    window = SimpleNamespace(_cameras=SimpleNamespace(is_connected=forbidden),
+        _right_panel=SimpleNamespace(_update_mode_buttons=Mock()))
+    open_settings_method(cam1, cam2, dialog, forbidden)(window)
+    assert (cam1.check, cam2.check) == ("Green", "Green")
+    forbidden.assert_not_called()
+    dialog.return_value.exec_.assert_called_once_with()
