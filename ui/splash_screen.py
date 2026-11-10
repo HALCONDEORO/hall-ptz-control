@@ -1230,12 +1230,7 @@ class SplashScreen(QWidget):
         return self._test_camera(CAM2.ip, CAM2.cam_id)
 
     def _test_camera(self, ip: str, cam_id: str) -> bool:
-        """
-        Read-only TCP connectivity probe; camera power belongs to phase 2.
-        Usa context manager para garantizar que el socket se cierra aunque
-        connect_ex lance OSError (evita leak de file descriptors).
-        En modo simulación devuelve True directamente (sin hardware real).
-        """
+        """Read-only TCP probe (True in simulation); camera power belongs to phase 2."""
         if _sim_mode.is_active():
             return True
         try:
