@@ -106,6 +106,8 @@ def _load_cam_configs_from_yaml():
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
         # Mutate the shared objects, never rebind: Splash/Admin/services already
         # imported references to them. Workers must consume that same identity.
+        # ATEM consumers also keep imported references to this shared object.
+        ATEM.ip = settings.atem.ip
         for current, saved in zip((CAM1, CAM2), settings.cameras):
             current.ip = saved.ip
             current.cam_id = saved.visca_id

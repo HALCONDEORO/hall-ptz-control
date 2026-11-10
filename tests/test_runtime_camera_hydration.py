@@ -11,13 +11,15 @@ def camera_ui():
     ensure_real_qt()
     import ui.main_window as mw
     before = [(cam.ip, cam.cam_id, cam.check) for cam in (mw.CAM1, mw.CAM2)]
+    old_atem_ip = mw.ATEM.ip
     yield mw
+    mw.ATEM.ip = old_atem_ip
     for cam, saved in zip((mw.CAM1, mw.CAM2), before):
         cam.ip, cam.cam_id, cam.check = saved
 
 
 def settings():
-    return SimpleNamespace(cameras=[
+    return SimpleNamespace(atem=SimpleNamespace(ip='192.0.2.50'), cameras=[
         SimpleNamespace(ip='192.0.2.11', visca_id='81'),
         SimpleNamespace(ip='192.0.2.12', visca_id='82'),
     ])
@@ -61,3 +63,41 @@ def test_reload_updates_previously_imported_references(camera_ui):
     assert first is first_ref
     assert second is second_ref
     assert (second_ref.ip, second_ref.cam_id) == ('192.0.2.22', '83')
+
+
+def test_hydrates_shared_atem_object_from_effective_config(camera_ui):
+    mw = camera_ui
+    ref = mw.ATEM
+    mw.ATEM.ip = ''
+    saved = settings()
+    with patch('config.effective.load_effective_config', return_value=saved), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM is ref
+    assert ref.ip == '192.0.2.50'
+
+
+def test_empty_effective_atem_clears_previous_value(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = '192.0.2.50'
+    saved = settings()
+    saved.atem.ip = ''
+    with patch('config.effective.load_effective_config', return_value=saved), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM.ip == ''
+
+
+def test_simulation_preserves_its_atem_address(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = '127.0.0.3'
+    with patch('config.effective.load_effective_config') as load, patch('adapters.sim_mode.is_active', return_value=True):
+        mw._load_cam_configs_from_yaml()
+    load.assert_not_called()
+    assert mw.ATEM.ip == '127.0.0.3'
+
+
+def test_unreadable_settings_preserve_atem_address(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = '192.0.2.60'
+    with patch('config.effective.load_effective_config', side_effect=OSError('unreadable')), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM.ip == '192.0.2.60'
