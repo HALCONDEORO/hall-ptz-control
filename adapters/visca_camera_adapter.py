@@ -67,6 +67,7 @@ class ViscaCameraAdapter:
         self._display_query_lock = threading.RLock()
         self._endpoint_generations: dict[int, int] = {1: 0, 2: 0}
         self._backlight_on: dict[str, bool] = {}
+        self._ae_refresh_pending: dict[int, tuple[int, Callable[[], None]]] = {}
         self._backlight_toggle_locks = {1: threading.Lock(), 2: threading.Lock()}
         # Speed caps: watchdog in main_window reduces these on VISCA error (#740).
         self.pan_cap:        int = PAN_SPEED_MAX
@@ -441,8 +442,11 @@ class ViscaCameraAdapter:
         with self._display_query_lock:
             ip, cam_id_hex = self._cam_info_by_index(camera_key)
             generation = self._endpoint_generations.get(camera_key, 0)
-        if not self._mgr.ae_query_try_acquire(ip):
-            return  # query already in flight
+            if not self._mgr.ae_query_try_acquire(ip):
+                # A step may complete while an older observation is in flight.
+                # Coalesce to one final read, keeping the newest callback.
+                self._ae_refresh_pending[camera_key] = (generation, on_exposure_changed)
+                return
 
         def _fetch() -> None:
             try:
@@ -466,7 +470,13 @@ class ViscaCameraAdapter:
                         logger.info("ExpComp cam%d (%s): %d", camera_key, ip, exp_level)
                     on_exposure_changed()
             finally:
-                self._mgr.ae_query_release(ip)
+                with self._display_query_lock:
+                    self._mgr.ae_query_release(ip)
+                    pending = self._ae_refresh_pending.pop(camera_key, None)
+                    retry = (pending is not None and pending[0] ==
+                             self._endpoint_generations.get(camera_key, 0))
+                if retry:
+                    self.async_refresh_ae_mode(camera_key, pending[1])
 
         threading.Thread(target=_fetch, daemon=True).start()
 

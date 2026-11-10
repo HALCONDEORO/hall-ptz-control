@@ -187,3 +187,20 @@ def test_cancelled_deferred_query_releases_endpoint_lease(rig, kind):
     assert len(pending) == 1
     pending.pop(0)()
     callback.assert_called_once()
+
+
+def test_step_during_inflight_query_reads_final_value(rig):
+    adapter, manager, pending = rig
+    first, latest = Mock(), Mock()
+    adapter._query_ae_and_exp_comp.side_effect = [('auto', -1), ('auto', 1)]
+    adapter.async_refresh_ae_mode(1, first)
+    # Two completed adjustments request readback while the first read is busy.
+    adapter.async_refresh_ae_mode(1, Mock())
+    adapter.async_refresh_ae_mode(1, latest)
+    assert len(pending) == 1
+    pending.pop(0)()
+    assert len(pending) == 1
+    pending.pop(0)()
+    assert manager.exposure_level[1] == 1
+    latest.assert_called_once()
+    assert not pending
