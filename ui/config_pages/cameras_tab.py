@@ -187,6 +187,10 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     btn_scan.setToolTip('Read-only power inquiry, no movement. Stop the session first. '
                         'Unavailable in simulation to avoid contacting real devices.')
     layout.addWidget(btn_scan, 0, Qt.AlignRight)
+    scan_note = QLabel('Configured cameras are omitted from discovery to protect their existing connection.')
+    scan_note.setWordWrap(True)
+    scan_note.setStyleSheet(f"font: 12px; color: {_C_MUTED};")
+    layout.addWidget(scan_note)
 
     # ── Helpers de asignación ─────────────────────────────────────────
 
@@ -388,7 +392,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         import logging as _logging
         _log = _logging.getLogger(__name__)
         try:
-            found = discover_and_verify(subnet)
+            found = discover_and_verify(subnet, exclude_ips=(CAM1.ip, CAM2.ip))
         except Exception as exc:  # noqa: BLE001
             _log.error("Camera scan failed: %s", exc)
             found = None

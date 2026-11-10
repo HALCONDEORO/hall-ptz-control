@@ -15,3 +15,10 @@ recovery from a stuck old worker. This preserves the existing safety contract;
 it is not a guarantee that an offline camera received STOP.
 
 No camera firmware, hardware, live network or deployment was tested in this PR.
+
+In-app discovery omits the two configured camera IPs from TCP scan, ARP
+revalidation and identity inquiry. Their existing cards remain the place to
+inspect/edit/reconnect them. This protects a worker's connection on cameras
+that allow only one TCP controller session. It does not prove single-session
+ownership against other applications, external CLI probes or simultaneous
+configuration changes made elsewhere during a scan.

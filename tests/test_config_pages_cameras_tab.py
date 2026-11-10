@@ -48,7 +48,7 @@ def discovery(monkeypatch):
 
     state = {"found": ["172.16.1.21", "172.16.1.22"], "error": None}
 
-    def _discover(subnet):
+    def _discover(subnet, **kwargs):
         if state["error"] is not None:
             raise state["error"]
         return [CameraCandidate(ip, True) for ip in state["found"]]
@@ -358,7 +358,7 @@ class TestVerifiedDiscoverySafety:
     def test_unknown_ports_are_not_assignable(self, monkeypatch):
         from application.camera_discovery_verification import CameraCandidate
         import application.camera_discovery_verification as service
-        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: [
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet, **kwargs: [
             CameraCandidate('192.0.2.10', False), CameraCandidate('192.0.2.11', True)])
         dialog, mw, layout = build(monkeypatch)
         button_named(layout, 'Find and check cameras').click()
@@ -399,7 +399,7 @@ class TestVerifiedDiscoverySafety:
         from PyQt5.QtWidgets import QLineEdit
         import application.camera_discovery_verification as service
         seen = []
-        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: seen.append(subnet))
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet, **kwargs: seen.append(subnet))
         dialog, mw, layout = build(monkeypatch)
         dialog.findChild(QLineEdit, 'cameraDiscoverySubnet').setText('bad')
         button_named(layout, 'Find and check cameras').click()
@@ -410,7 +410,7 @@ class TestVerifiedDiscoverySafety:
         from PyQt5.QtWidgets import QLineEdit
         import application.camera_discovery_verification as service
         seen = []
-        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: seen.append(subnet) or [])
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet, **kwargs: seen.append(subnet) or [])
         dialog, mw, layout = build(monkeypatch)
         dialog.findChild(QLineEdit, 'cameraDiscoverySubnet').setText('192.0.2')
         button_named(layout, 'Find and check cameras').click()
