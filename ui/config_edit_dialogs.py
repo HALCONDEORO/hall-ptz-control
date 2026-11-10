@@ -68,7 +68,7 @@ class _CamEditDialog(QDialog):
 
         self.setWindowTitle(f'Edit {cam_name} {field}')
         self.setWindowModality(Qt.WindowModal)
-        self.setFixedSize(380, 200)
+        self.setFixedSize(380, 240)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
 
         self.setStyleSheet(
@@ -121,6 +121,7 @@ class _CamEditDialog(QDialog):
         body_v.addWidget(self._input)
 
         self._err = QLabel('')
+        self._err.setWordWrap(True)
         self._err.setStyleSheet(error_label_qss())
         body_v.addWidget(self._err)
 
@@ -163,7 +164,10 @@ class _CamEditDialog(QDialog):
             else:
                 result = svc.set_camera_visca_id(self._cam_num, text)
             if result.code != "OK":
-                self._err.setText(result.message or 'Not saved. Check configuration permissions.')
+                self._err.setText(
+                    'Applied for this session only. Saving failed; changes will be lost after restart.'
+                    if result.code == 'PARTIAL_OK' else (result.message or 'Not saved.')
+                )
                 return
         else:
             self._err.setText('Configuration service unavailable. Nothing saved.')
@@ -182,7 +186,7 @@ class _ATEMEditDialog(QDialog):
 
         self.setWindowTitle('Edit ATEM IP')
         self.setWindowModality(Qt.WindowModal)
-        self.setFixedSize(380, 200)
+        self.setFixedSize(380, 240)
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
 
         self.setStyleSheet(
@@ -235,6 +239,7 @@ class _ATEMEditDialog(QDialog):
         body_v.addWidget(self._input)
 
         self._err = QLabel('')
+        self._err.setWordWrap(True)
         self._err.setStyleSheet(error_label_qss())
         body_v.addWidget(self._err)
 
@@ -272,7 +277,10 @@ class _ATEMEditDialog(QDialog):
         if svc is not None:
             result = svc.set_atem_ip(text)
             if result.code != "OK":
-                self._err.setText(result.message or 'Not saved. Check configuration permissions.')
+                self._err.setText(
+                    'Applied for this session only. Saving failed; changes will be lost after restart.'
+                    if result.code == 'PARTIAL_OK' else (result.message or 'Not saved.')
+                )
                 return
         else:
             self._err.setText('Configuration service unavailable. Nothing saved.')
