@@ -1306,7 +1306,10 @@ class SplashScreen(QWidget):
             return True
         subnet = get_camera_subnet()
         self._update_log(f"  Scanning {subnet}.1-254 port {VISCA_PORT}...")
-        found = tcp_scan(subnet)
+        # Diagnostics may run while persistent camera workers are alive.
+        # Never steal a single-session camera connection to test its port.
+        excluded = {cam.ip for cam in (CAM1, CAM2) if cam.ip}
+        found = tcp_scan(subnet, exclude_ips=excluded)
         if found:
             self._update_log(f"  VISCA found: {', '.join(found)}")
         else:
