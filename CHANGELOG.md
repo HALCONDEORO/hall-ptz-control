@@ -17,6 +17,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- The extracted main-window budget is capped at 1700 lines, below the
+  previous 1792-line ceiling, leaving room for approved reconnect safety work.
+- VISCA watchdog logic is extracted from the main window with regression
+  tests, reducing its size limit without changing the intended behavior.
 - Each logging handler receives its own repeat filter so file logs do not
   lose records already seen by the console; startup tests isolate filter state.
 - Test setup preloads real Qt and shared UI modules so later tests do not
