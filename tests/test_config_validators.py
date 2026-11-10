@@ -26,6 +26,14 @@ def _ensure_qt_stubs() -> None:
         "PyQt5.QtGui", "PyQt5.QtSvg",
     ):
         if mod_name not in sys.modules:
+            # Prefer the real module: a stub left in sys.modules poisons later
+            # tests that build real widgets (MainWindow smoke: Mock has no
+            # attribute 'setFixedSize').
+            try:
+                __import__(mod_name)
+                continue
+            except ImportError:
+                pass
             sys.modules[mod_name] = types.ModuleType(mod_name)
 
     qtc = sys.modules["PyQt5.QtCore"]
