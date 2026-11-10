@@ -51,7 +51,27 @@ _DEFAULT_CONFIG_DIR = Path.home() / '.config' / 'khptz'
 # (NAS, USB, directorio de pruebas) sin tocar el código.
 _data_dir_env = os.environ.get('KHPTZ_DATA_DIR') or ''
 CONFIG_DIR = Path(_data_dir_env) if _data_dir_env else _DEFAULT_CONFIG_DIR
-CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_config_dir() -> None:
+    """Create CONFIG_DIR, best-effort — never raise at import time.
+
+    This module is imported by main.py before logging or the crash reporter
+    are installed, so an OSError here (read-only or not-yet-mounted data
+    partition, KHPTZ_DATA_DIR pointing at an unmounted USB, bad permissions)
+    used to abort the interpreter with a bare traceback: under systemd that
+    is a restart loop with no log and no crash report. The first real write
+    to CONFIG_DIR surfaces the underlying problem with context instead.
+    """
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.warning(
+            "No se pudo crear el directorio de datos %s: %s", CONFIG_DIR, exc,
+        )
+
+
+_ensure_config_dir()
 
 # Rutas de archivos de datos JSON
 CHAIRMAN_PRESETS_FILE  = CONFIG_DIR / 'chairman_presets.json'
