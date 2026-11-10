@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - The setup wizard no longer suggests an address ending in .255 when
   proposing the next camera address in the same subnet.
+- Startup loads the saved ATEM address from effective settings before the
+  monitor starts, instead of requiring it to be entered again in Settings.
 - ATEM polling detects a dropped link instead of continuing to report
   cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
