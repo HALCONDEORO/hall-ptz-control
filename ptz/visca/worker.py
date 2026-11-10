@@ -800,6 +800,9 @@ class CameraWorker:
         esperas: si send_priority() activa el interrupt, este método aborta
         sin esperar el timeout completo (fix #181).
         """
+        self._last_read_end_reason = 'io_error'
+        self._last_read_raw_bytes = 0
+        self._last_read_pending_bytes = 0
         buf = b''
         pending = b''
         received_bytes = 0
@@ -807,9 +810,11 @@ class CameraWorker:
         deadline = time.monotonic() + VISCA_READ_TIMEOUT
         while True:
             if self._interrupt.is_set() or self._shutdown.is_set():
+                self._last_read_end_reason = 'interrupted'
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                self._last_read_end_reason = 'deadline'
                 break
             try:
                 readable, _, _ = select.select([sock], [], [], min(remaining, 0.05))
@@ -823,8 +828,10 @@ class CameraWorker:
                 continue   # rodaja de 50 ms agotada; vuelve a comprobar interrupt y deadline
             chunk = sock.recv(1024)
             if not chunk:
+                self._last_read_end_reason = 'peer_eof'
                 break
             received_bytes += len(chunk)
+            self._last_read_raw_bytes = received_bytes
             if received_bytes > MAX_VISCA_RESPONSE_BYTES:
                 # Fail the whole read, never accept a truncated final frame.
                 # The worker's OSError path closes the ambiguous session.
@@ -836,7 +843,9 @@ class CameraWorker:
                 accepted, ack_identity = self._correlate_response_frame(frame, ack_identity)
                 if accepted:
                     buf += framed
+            self._last_read_pending_bytes = len(pending)
             if CameraWorker._has_final_visca_frame(buf):
+                self._last_read_end_reason = 'terminal'
                 break
         return buf
 
@@ -999,6 +1008,9 @@ class CameraWorker:
                     if cmd.payload and 0x81 <= cmd.payload[0] <= 0x87:
                         self._response_headers.add((cmd.payload[0] - 0x80 + 8) << 4)
                     sock_ref.sendall(cmd.payload)
+                    self._last_read_end_reason = 'unknown'
+                    self._last_read_raw_bytes = 0
+                    self._last_read_pending_bytes = 0
                     response = self._read_visca_response(sock_ref)
 
                     # Si send_priority() interrumpió la lectura: un STOP no se
@@ -1035,9 +1047,11 @@ class CameraWorker:
                         # confirmación de la cámara → tratar como fallo.
                         logger.warning(
                             "%s cam=%s no final VISCA frame for [%s] "
-                            "(%d bytes: %s)",
+                            "(%d bytes: %s) read_end=%s raw_received=%d pending_bytes=%d",
                             cmd.cmd_id, self.ip, cmd_type, len(response),
                             response.hex() if response else "empty",
+                            self._last_read_end_reason,
+                            self._last_read_raw_bytes, self._last_read_pending_bytes,
                         )
                         # La cámara puede completar DESPUÉS del timeout; esa
                         # trama tardía quedaría en el buffer y el siguiente
