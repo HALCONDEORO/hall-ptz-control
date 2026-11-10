@@ -16,32 +16,16 @@ _DOT_GREEN = "background: #2e7d32; border-radius: 6px;"
 _DOT_RED = "background: #c62828; border-radius: 6px;"
 
 
-def apply_atem_button_state(btn, dot, panel, state, fake_atem) -> None:
-    """Apply the ATEM connection state to the button, dot and panel.
-
-    Demo/sim (fake_atem present): the dot reflects the FakeATEM's real
-    connection state, but the button stays enabled and the panel stays
-    open when disconnected — otherwise the operator could not reach the
-    panel's Reconnect button (found in review of #921). Real hardware
-    keeps the strict behaviour: disabled button, panel force-hidden.
-    """
-    if fake_atem is not None:
-        connected = fake_atem.get_status().connected
-    else:
-        connected = (state == ATEMState.CONNECTED)
-    if connected:
+def apply_atem_button_state(btn, dot, panel, state, fake_atem, *, operative=False) -> None:
+    """Never leave an unusable ATEM surface on screen, including demo mode."""
+    visible = bool(panel is not None and operative)
+    btn.setVisible(visible)
+    dot.setVisible(visible)
+    btn.setEnabled(visible)
+    if visible:
         dot.setStyleSheet(_DOT_GREEN)
-        btn.setEnabled(True)
-        btn.setToolTip("ATEM switcher panel — conectado")
-        return
-    dot.setStyleSheet(_DOT_RED)
-    if fake_atem is not None:
-        btn.setEnabled(True)
-        btn.setToolTip("ATEM virtual desconectado — Reconnect en el panel")
-        return
-    btn.setEnabled(False)
-    btn.setToolTip(f"ATEM no disponible — {state.name if state else 'desconocido'}")
-    if btn.isChecked():
+        btn.setToolTip("ATEM switcher panel")
+    else:
         btn.setChecked(False)
         if panel is not None:
             panel.hide()

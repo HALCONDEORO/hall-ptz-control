@@ -788,7 +788,8 @@ def build_status_strip(dialog, mw):
         'ATEM', _atem_label(_atem_state), _atem_state_led(_atem_state)
     )
     h.addWidget(item_atem)
-    _add_sep()
+    from ui.atem_visibility import bind_operational_visibility
+    bind_operational_visibility(mw, item_atem)
 
     # Auto-arm
     _dispatcher = getattr(mw, '_atem_dispatcher', None)
@@ -798,6 +799,7 @@ def build_status_strip(dialog, mw):
         'green' if _armed else 'off',
     )
     h.addWidget(item_auto)
+    bind_operational_visibility(mw, item_auto)
     h.addStretch()
 
     # Runtime profile badge

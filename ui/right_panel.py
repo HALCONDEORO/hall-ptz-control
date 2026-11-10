@@ -592,7 +592,7 @@ class RightPanel:
         al menos un evento program_changed (operativo al 100%).  En cualquier
         otro caso muestra el botón amarillo Comments → Home."""
         from domain.atem_state import ATEMState
-        connected = (state == ATEMState.CONNECTED)
+        connected = (state == ATEMState.CONNECTED and self._mw.atem_operational())
         if not connected:
             self._atem_has_program = False
             self._mw.Cam1.set_on_air(False)
@@ -619,6 +619,8 @@ class RightPanel:
 
     def set_atem_program(self, input_num: int):
         """Actualiza el indicador ON AIR según el input de programa del ATEM."""
+        if not self._mw.atem_operational():
+            return
         entry = self._atem_input_map.get(input_num)
         if entry is not None:
             label, on_air_cam = entry
@@ -642,7 +644,8 @@ class RightPanel:
 
     def set_pip_state(self, pip_state) -> None:
         """Muestra/oculta el indicador PiP y su fuente cuando PiP está activo."""
-        if pip_state is None or not pip_state.enabled:
+        if (not self._mw.atem_operational()
+                or pip_state is None or not pip_state.enabled):
             self._pip_label.hide()
             return
         src = pip_state.source

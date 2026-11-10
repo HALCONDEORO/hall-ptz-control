@@ -64,6 +64,7 @@ from adapters.atem_dispatcher import ATEMDispatcher
 from ptz.visca import CameraManager
 from ui.widgets import GoButton, SpecialDragButton, PlatformPresetButton
 from ui.names_panel import NamesPanel
+from ui.atem_operational import AtemOperationalMixin
 from ui.camera_display_mixin import CameraDisplayMixin
 from ui.session_mixin import SessionController
 from ui.dialogs_mixin import DialogsController
@@ -125,7 +126,7 @@ def _load_second_platform_enabled() -> bool:
         return False
 
 
-class MainWindow(QMainWindow, CameraDisplayMixin):
+class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
     """Ventana principal 1920x1080 px."""
 
     atem_state_changed = pyqtSignal(object)
@@ -907,7 +908,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             self._btn_atem.setChecked(False)
 
     def _toggle_atem_panel(self) -> None:
-        if self._atem_panel is None:
+        if self._atem_panel is None or not self.atem_operational():
+            self._close_atem_panel()
             return
         visible = self._atem_panel.isVisible()
         if not visible and self._atem_write_adapter is not None:
@@ -924,7 +926,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         from ui.atem_button_state import apply_atem_button_state
         apply_atem_button_state(
             self._btn_atem, self._btn_atem_dot, self._atem_panel, state,
-            self._fake_atem)
+            self._fake_atem, operative=self.atem_operational())
 
     def _cache_atem_program(self, input_id: int) -> None:
         self._last_atem_program = input_id
@@ -1376,6 +1378,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         import adapters.sim_mode as _sim
         from domain.atem_runtime_policy import is_fake_atem_mode
         self._atem_state = None
+        self._atem_verified_monitor = None
         self._atem_dispatcher.reset_input_tracking()
 
         # Always clean up FakeATEM callbacks from a previous demo/sim session
@@ -1418,6 +1421,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._atem_monitor.start()
 
     def _on_atem_state_changed(self, state) -> None:
+        if state != ATEMState.CONNECTED:
+            self._atem_verified_monitor = None
         self._atem_state = state
         self._atem_dispatcher.on_atem_state_changed(state)
         self._right_panel.set_atem_state(state)
@@ -1540,6 +1545,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         but not listed for disconnect.
         """
         bindings = [
+            (monitor.program_verified, self._on_atem_program_verified),
             (monitor.program_changed, self._atem_dispatcher.on_program_changed),
             (monitor.program_changed, self._right_panel.set_atem_program),
             (monitor.program_changed, self._cache_atem_program),
