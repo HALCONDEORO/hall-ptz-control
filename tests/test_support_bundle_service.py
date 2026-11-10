@@ -391,3 +391,24 @@ def test_create_failure_is_logged_and_still_returns_none(tmp_path, monkeypatch, 
     assert len(records) == 1
     assert records[0].exc_info[0] is OSError
     assert 'Support bundle creation failed' in records[0].getMessage()
+
+
+def test_two_bundles_same_second_preserve_both_snapshots(tmp_path, monkeypatch):
+    monkeypatch.setattr("application.support_bundle_service._utc_stamp", lambda: "20261110-180000")
+    svc = _svc(tmp_path, recorder=_fake_recorder([{"event_type": "FirstSnapshot"}]))
+    for name in ("_collect_version", "_collect_doctor", "_collect_install_summary", "_collect_config_summary"):
+        monkeypatch.setattr(svc, name, lambda: ("synthetic\n", ""))
+
+    first = svc.create()
+    original = first.read_bytes()
+    svc._recorder = _fake_recorder([{"event_type": "SecondSnapshot"}])
+    second = svc.create()
+
+    assert first != second
+    assert first.read_bytes() == original
+    with zipfile.ZipFile(first) as zf:
+        assert "FirstSnapshot" in zf.read("blackbox/recent_events.jsonl").decode()
+    with zipfile.ZipFile(second) as zf:
+        assert "SecondSnapshot" in zf.read("blackbox/recent_events.jsonl").decode()
+        manifest = json.loads(zf.read("manifest.json"))
+        assert second.stem == manifest["bundle_id"]
