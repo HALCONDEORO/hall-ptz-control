@@ -1731,8 +1731,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._right_panel.set_exposure_level(self._cameras.exposure_level[cam_key])
 
     def _update_controls_visibility(self):
-        connected = self.Cam1._connected if self.Cam1.isChecked() else self.Cam2._connected
-        self._right_panel.show_camera_controls(connected and self.session_active)
+        from ui.camera_controls_visibility import update_camera_controls_visibility
+        update_camera_controls_visibility(self)
 
     @pyqtSlot()
     def _update_backlight_ui(self):

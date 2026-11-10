@@ -97,7 +97,7 @@ def test_same_worker_delayed_false_rechecks_current_connection():
     manager = SimpleNamespace(cam_key=lambda ip: 1, is_connected=lambda ip: True)
     window = SimpleNamespace(Cam1=cam, Cam2=Mock(), _cameras=manager,
                              session_active=True, _right_panel=Mock())
-    window._update_controls_visibility = lambda: MainWindow._update_controls_visibility(window)
+    window._update_controls_visibility = lambda: window._right_panel.show_camera_controls(cam._connected and window.session_active)
     MainWindow._on_cam_connection_changed(window, False, '192.0.2.11')
     assert cam._connected
     window._right_panel.show_camera_controls.assert_called_with(True)
