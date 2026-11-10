@@ -934,6 +934,16 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     fi
 fi
 
+# Controller shortcuts share the existing supervised GUI launch paths. Keep
+# this after mode switching (system mode removes the user session helper).
+if [[ "${DEV_MODE}" == "false" ]]; then
+    install -d -m 755 /usr/local/libexec
+    if ! "${PYTHON_BIN}" "${REPO_ROOT}/runtime/installer/controller_launchers.py" \
+        --mode "${GUI_MODE}" --user "${WIZARD_USER}"; then
+        warn "Controller shortcuts incomplete; existing setup/repair launchers retained."
+    fi
+fi
+
 # ── Install state (what rollback.sh needs to redeploy) ────────────────────────
 #
 # /opt/khptz is a deployed artifact, not a checkout: the rsync above excludes
