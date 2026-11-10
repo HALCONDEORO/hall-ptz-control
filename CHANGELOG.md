@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - The setup wizard no longer suggests an address ending in .255 when
   proposing the next camera address in the same subnet.
+- An unavailable data directory no longer aborts data_paths at import time,
+  before startup logging and crash handling can be installed.
 - Restore rejects malformed manifest structures with a controlled error before
   creating a safety backup or restoring data, including in dry-run mode.
 - test_config_validators prefers real PyQt5 modules over leaving stubs in
