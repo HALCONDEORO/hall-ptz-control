@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Each logging handler receives its own repeat filter so file logs do not
+  lose records already seen by the console; startup tests isolate filter state.
 - Startup loads the saved ATEM address from effective settings before the
   monitor starts, instead of requiring it to be entered again in Settings.
 - ATEM polling detects a dropped link instead of continuing to report
