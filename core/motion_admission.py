@@ -1,6 +1,6 @@
 """Endpoint motion epochs. Locks cover queue admission, never confirmation waits."""
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import threading
 
 
@@ -9,6 +9,7 @@ class MotionTicket:
     endpoint: str
     generation: int
     ready: threading.Event
+    cancelled: threading.Event = field(default_factory=threading.Event)
 
 
 class MotionAdmission:
@@ -37,7 +38,13 @@ class MotionAdmission:
             return ticket
 
     def current(self, ticket):
-        return self._epochs.get(ticket.endpoint) is ticket
+        return self._epochs.get(ticket.endpoint) is ticket and not ticket.cancelled.is_set()
+
+    def cancel(self, ticket):
+        """Release waiters without authorizing a STOP that was never admitted."""
+        with self.lock:
+            ticket.cancelled.set()
+            ticket.ready.set()
 
     @contextmanager
     def intent(self, ticket):
