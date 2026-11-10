@@ -240,3 +240,42 @@ class TestStartupCamerasLogs:
         assert any("already powered" in m and "CAM1" in m for m in messages)
         assert any("already powered" in m and "CAM2" in m for m in messages)
 
+
+
+class TestTransientCameraProbe:
+    def test_false_camera_probe_retries_then_succeeds(self):
+        stub = MagicMock()
+        probe = MagicMock(side_effect=[False, False, True])
+        with patch.object(ss._sim_mode, "is_active", return_value=False), patch.object(ss.time, "sleep") as sleep:
+            result = ss.SplashScreen._run_single_test(stub, "Camera 2 (Audience)", probe)
+        assert result["success"] is True
+        assert probe.call_count == 3
+        assert [call.args[0] for call in sleep.call_args_list] == [0.5, 1.0]
+
+    def test_camera_unavailable_still_finishes_after_three_attempts(self):
+        stub = MagicMock()
+        probe = MagicMock(return_value=False)
+        with patch.object(ss._sim_mode, "is_active", return_value=False), patch.object(ss.time, "sleep"):
+            result = ss.SplashScreen._run_single_test(stub, "Camera 1 (Platform)", probe)
+        assert result["success"] is False
+        assert probe.call_count == 3
+
+    def test_other_false_diagnostics_are_not_retried(self):
+        probe = MagicMock(return_value=False)
+        with patch.object(ss._sim_mode, "is_active", return_value=False), patch.object(ss.time, "sleep") as sleep:
+            result = ss.SplashScreen._run_single_test(MagicMock(), "Configuration", probe)
+        assert result["success"] is False
+        probe.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_connectivity_probe_never_sends_power_or_home(self):
+        stub = MagicMock()
+        sock = MagicMock()
+        sock.__enter__.return_value = sock
+        sock.connect_ex.return_value = 0
+        with patch.object(ss._sim_mode, "is_active", return_value=False), patch.object(ss.socket, "socket", return_value=sock):
+            assert ss.SplashScreen._test_camera(stub, "192.0.2.1", "81") is True
+        stub._power_on_camera.assert_not_called()
+        stub._home_camera.assert_not_called()
+        sock.send.assert_not_called()
+        sock.sendall.assert_not_called()

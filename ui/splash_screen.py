@@ -1080,7 +1080,8 @@ class SplashScreen(QWidget):
     def _run_single_test(self, name: str, test_func) -> dict:
         """
         Ejecuta un test con hasta 3 reintentos (backoff exponencial).
-        Solo reintenta si lanza excepción; False se acepta como resultado.
+        Camera connectivity probes also retry False during a bounded boot window.
+        Other diagnostics keep their existing single-result semantics.
         En modo simulación añade un retardo por test para que el ticker
         sea legible y el splash no desaparezca de inmediato.
         """
@@ -1091,6 +1092,12 @@ class SplashScreen(QWidget):
         for attempt in range(1, max_retries + 1):
             try:
                 success = test_func()
+                if (not success and name in ("Camera 1 (Platform)", "Camera 2 (Audience)")
+                        and attempt < max_retries):
+                    wait = 0.5 * (2 ** (attempt - 1))
+                    self._update_log(f"  waiting for {name} ({int(wait*1000)}ms)...")
+                    time.sleep(wait)
+                    continue
                 result.finish(success)
                 if _sim_mode.is_active():
                     time.sleep(0.45)
@@ -1224,7 +1231,7 @@ class SplashScreen(QWidget):
 
     def _test_camera(self, ip: str, cam_id: str) -> bool:
         """
-        Prueba conexión TCP con una cámara y la enciende si responde.
+        Read-only TCP connectivity probe; camera power belongs to phase 2.
         Usa context manager para garantizar que el socket se cierra aunque
         connect_ex lance OSError (evita leak de file descriptors).
         En modo simulación devuelve True directamente (sin hardware real).
@@ -1238,8 +1245,6 @@ class SplashScreen(QWidget):
         except OSError:
             return False
 
-        if connected:
-            self._power_on_camera(ip, cam_id)
         return connected
 
     def _test_config(self) -> bool:
