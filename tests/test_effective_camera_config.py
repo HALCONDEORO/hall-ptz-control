@@ -158,9 +158,23 @@ def test_cli_cameras_probes_effective_address(paths, monkeypatch):
     monkeypatch.setenv('KHPTZ_CONFIG_DIR', str(config.parent))
     monkeypatch.setenv('KHPTZ_DATA_DIR', str(overlay.parent))
     patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
-    with patch('socket.create_connection') as connect:
+    with patch('application.network_diagnostics.app_may_be_running', return_value=False), \
+            patch('socket.create_connection') as connect:
         assert main(['cameras']) == 0
     assert connect.call_args_list[0].args[0] == ('192.0.2.21', 5678)
+
+
+def test_cli_cameras_skips_probe_while_app_may_be_running(paths, monkeypatch, capsys):
+    from runtime.cli import main
+    config, overlay = paths
+    monkeypatch.setenv('KHPTZ_CONFIG_DIR', str(config.parent))
+    monkeypatch.setenv('KHPTZ_DATA_DIR', str(overlay.parent))
+    patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
+    with patch('application.network_diagnostics.app_may_be_running', return_value=True), \
+            patch('socket.create_connection') as connect:
+        assert main(['cameras']) == 0
+    assert connect.call_args_list == []
+    assert 'probe not run' in capsys.readouterr().out
 
 
 def test_repair_prefills_current_effective_values(paths, monkeypatch):

@@ -1674,6 +1674,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             event.ignore()
             return
 
+        from ui.runtime_restart import prepare_runtime_restart
+        if not prepare_runtime_restart(self):
+            event.ignore()
+            return
+
         # Marcar cierre antes de parar el supervisor para que cualquier callback
         # pendiente de QTimer.singleShot (_restart_atem_monitor, _session_home)
         # vea el flag y salga sin enviar comandos.
@@ -1693,7 +1698,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         self._supervisor.stop()
         if self.session_active:
             logger.info("[SHUTDOWN] ending active session on app close")
-            self._session.shutdown("app_close")
+            self._session.shutdown(
+                "app_close", power_off=(intent == ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS),
+            )
         logger.info("[SHUTDOWN] stopping event bus")
         self._bus.stop()
         if intent == ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS:
@@ -1724,11 +1731,10 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         # proceso AHORA — después de que el hardware esté parado y el diálogo
         # de shutdown haya sido aceptado por el operador.
         if self._pending_admin_restart:
-            import subprocess
-            logger.info("[SHUTDOWN] launching admin-restart process")
+            from ui.runtime_restart import launch_pending_restart
+            logger.info("[SHUTDOWN] launching restart process")
             try:
-                subprocess.Popen(self._pending_admin_restart,
-                                 cwd=self._pending_admin_restart_cwd)
+                launch_pending_restart(self)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("[SHUTDOWN] admin-restart launch failed: %s", exc)
             self._pending_admin_restart = None

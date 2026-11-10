@@ -12,10 +12,11 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
-from PyQt5.QtCore import QCoreApplication
+from PyQt5.QtWidgets import QApplication
 
-if not QCoreApplication.instance():
-    _app = QCoreApplication(sys.argv)
+# QApplication, never a bare QCoreApplication (see test_atem_pip.py).
+if not QApplication.instance():
+    _app = QApplication(sys.argv)
 
 from adapters.atem_monitor import ATEMMonitor
 
