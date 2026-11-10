@@ -12,29 +12,15 @@ from core.supervisor import Supervisor
 
 
 def build_supervisor(main_window) -> Supervisor:
-    """Registra los workers de cámara y el monitor ATEM y arranca el supervisor.
-
-    Los lambdas capturan el objeto worker (no la variable local), así que
-    seguirán apuntando al mismo worker aunque esta función ya haya retornado.
-
-    Salud = hilo vivo Y con señales de vida recientes: un hilo bloqueado
-    (p.ej. un callback que no retorna) también se reinicia. Si el hilo
-    colgado no termina en la espera acotada, CameraWorker.restart() no
-    crea otro hilo (nunca dos workers por cámara) y marca la cámara ERROR.
-    """
+    """Watch the currently configured camera workers and active ATEM monitor."""
     sup = Supervisor()
-    cam1 = main_window._cameras.worker(main_window._cameras.ip_for_key(1))
-    cam2 = main_window._cameras.worker(main_window._cameras.ip_for_key(2))
-    sup.registrar(
-        "camera_worker_cam1",
-        lambda: cam1._thread.is_alive() and cam1.progress_age() < WORKER_STUCK_TIMEOUT_S,
-        cam1.restart,
-    )
-    sup.registrar(
-        "camera_worker_cam2",
-        lambda: cam2._thread.is_alive() and cam2.progress_age() < WORKER_STUCK_TIMEOUT_S,
-        cam2.restart,
-    )
+    for key in (1, 2):
+        sup.registrar(
+            f"camera_worker_cam{key}",
+            lambda key=key: main_window._cameras.worker_is_healthy(
+                key, WORKER_STUCK_TIMEOUT_S),
+            lambda key=key: main_window._cameras.restart_worker(key),
+        )
     # El lambda evalúa main_window._atem_monitor en tiempo de ejecución, por lo
     # que siempre comprueba la instancia activa incluso tras un reinicio.
     sup.registrar(

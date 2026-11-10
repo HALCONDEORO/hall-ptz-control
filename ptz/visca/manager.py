@@ -168,6 +168,31 @@ class CameraManager:
             self._on_worker_ready(w)
         return w
 
+    def worker_is_healthy(self, key: int, max_progress_age: float) -> bool:
+        """Inspect the active endpoint without creating a worker as a side effect."""
+        self._validate_camera_key(key)
+        with self._workers_lock:
+            ip = self._cam1_ip if key == 1 else self._cam2_ip
+            if not ip:
+                return True  # An unconfigured camera needs no recovery.
+            worker = self._workers.get(ip)
+            return bool(worker is None or (worker._thread.is_alive()
+                        and worker.progress_age() < max_progress_age))
+
+    def restart_worker(self, key: int) -> bool:
+        """Recover only the current endpoint, serialized against reassignment.
+
+        Holding the registry lock through the bounded restart prevents an IP
+        update from retiring a worker between its selection and restart.
+        """
+        self._validate_camera_key(key)
+        with self._workers_lock:
+            ip = self._cam1_ip if key == 1 else self._cam2_ip
+            if not ip:
+                return True
+            worker = self._workers.get(ip)
+            return True if worker is None else worker.restart()
+
     def is_connected(self, ip: str) -> bool:
         """True si hay worker para esa IP y está conectado. NO crea workers."""
         if not ip:
