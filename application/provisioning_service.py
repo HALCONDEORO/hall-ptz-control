@@ -219,7 +219,9 @@ class ProvisioningService:
                 id=c.id, role=c.role, ip=c.ip, visca_id=c.visca_id,
                 name=c.name.strip() or _default_camera_name(c.role),
             )
-            for c in answers.cameras
+            for c in sorted(answers.cameras, key=lambda c: (
+                KNOWN_CAMERA_ROLES.index(c.role) if c.role in KNOWN_CAMERA_ROLES else len(KNOWN_CAMERA_ROLES)
+            ))
         ]
         atem = ATEMSettings(
             ip=answers.atem_ip,

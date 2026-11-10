@@ -104,11 +104,8 @@ def _load_cam_configs_from_yaml():
         from config.effective import load_effective_config as load_config
         from runtime.path_resolver import RuntimePathResolver
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
-        # Mutate the shared objects, never rebind: Splash/Admin/services already
-        # imported references to them. Workers must consume that same identity.
-        for current, saved in zip((CAM1, CAM2), settings.cameras):
-            current.ip = saved.ip
-            current.cam_id = saved.visca_id
+        from ui.camera_config_hydration import hydrate_camera_roles
+        hydrate_camera_roles(settings.cameras, CAM1, CAM2)
         return CAM1, CAM2
     except Exception:
         return CAM1, CAM2

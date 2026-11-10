@@ -709,3 +709,34 @@ def test_password_visibility_validation_unchanged(visibility_page):
     page.admin_confirm.setText('synthetic-operator')
     assert not page.validatePage()
     assert page.error_text() == 'Use different passwords for operator and administrator.'
+
+
+def test_remove_first_add_persist_then_hydrate_keeps_roles(wizard, tmp_path, monkeypatch):
+    page = _page(wizard, "CamerasPage")
+    page._on_remove(0)
+    page._on_add()
+    assert [c.role for c in wizard.answers.cameras] == ['comments', 'platform']
+    wizard.answers.entry_password = 'operator-pw'
+    wizard.answers.admin_password = 'admin-pw'
+    service = ProvisioningService()
+    assert service.validate(wizard.answers) == []
+    monkeypatch.setenv('KHPTZ_CONFIG_DIR', str(tmp_path / 'etc'))
+    monkeypatch.setenv('KHPTZ_DATA_DIR', str(tmp_path / 'data'))
+    monkeypatch.setattr(secret_manager, '_CONFIG_DIR', tmp_path / 'data')
+    monkeypatch.setattr(secret_manager, '_ENC_FILE', tmp_path / 'data' / 'password.enc')
+    resolver = RuntimePathResolver()
+    service.apply_files(wizard.answers, resolver=resolver)
+    saved = load_config(resolver.config_dir / 'config.yaml')
+    assert [c.role for c in saved.cameras] == ['platform', 'comments']
+    import ui.main_window as mw
+    from unittest.mock import patch
+    before = [(cam.ip, cam.cam_id) for cam in (mw.CAM1, mw.CAM2)]
+    try:
+        with patch('adapters.sim_mode.is_active', return_value=False):
+            first, second = mw._load_cam_configs_from_yaml()
+        expected = {c.role: (c.ip, c.visca_id) for c in wizard.answers.cameras}
+        assert (first.ip, first.cam_id) == expected['platform']
+        assert (second.ip, second.cam_id) == expected['comments']
+    finally:
+        for cam, values in zip((mw.CAM1, mw.CAM2), before):
+            cam.ip, cam.cam_id = values
