@@ -19,6 +19,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 - An active password lockout now survives Operator/Admin mode toggles:
   the button stays disabled and the timer keeps running until it expires.
+- cleanup_legacy_rpi_autostart.sh now passes the bare unit name to
+  systemctl (the inherited IFS broke column splitting, so legacy services
+  silently survived the migration while the report claimed they were disabled).
 - test_seat_builder no longer leaves fake SpecialDragButton/QtSvg stubs in
   sys.modules, which poisoned later real-widget tests in the same process.
 - Login mode toggle (Operator/Admin) no longer resets the failed-attempt

@@ -290,7 +290,7 @@ quarantine_user_services() {
 
 disable_system_services() {
     local unit details fragment destination
-    while read -r unit _; do
+    while IFS=$' \t' read -r unit _; do
         [[ -n "${unit}" ]] || continue
         case "${unit}" in khptz-control.service|khptz-display-ready.service|khptz-provision.service) continue ;; esac
         details="$(systemctl show "${unit}" -p Description -p ExecStart --no-pager 2>/dev/null || true)"
@@ -310,6 +310,11 @@ disable_system_services() {
             fi
             record "Disabled system service: ${unit}"
         fi
+    # IFS must include a space here: the script runs with IFS=$'\n\t', under
+    # which `read` does not split list-unit-files' space-separated columns and
+    # ${unit} becomes "foo.service  enabled" — a name every systemctl call
+    # rejects, so the legacy service silently survived the migration while the
+    # report claimed it was disabled.
     done < <(systemctl list-unit-files --type=service --no-legend --no-pager 2>/dev/null || true)
 }
 
