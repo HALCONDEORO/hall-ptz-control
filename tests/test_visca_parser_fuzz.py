@@ -27,7 +27,7 @@ from ptz.visca import parser
 
 def _zoom_completion(cam: int = 1, p=0, q=0, r=0, s=0) -> bytes:
     """Construye un frame VISCA válido de completion para consulta de zoom."""
-    return bytes([0x90 | cam, 0x50, p & 0x0F, q & 0x0F, r & 0x0F, s & 0x0F, 0xFF])
+    return bytes([(cam + 8) << 4, 0x50, p & 0x0F, q & 0x0F, r & 0x0F, s & 0x0F, 0xFF])
 
 
 def _ptz_completion(cam: int = 1, pan: int = 0, tilt: int = 0) -> bytes:
@@ -38,12 +38,12 @@ def _ptz_completion(cam: int = 1, pan: int = 0, tilt: int = 0) -> bytes:
 
     pp, pq, pr, ps = nibbles(pan)
     tp, tq, tr, ts = nibbles(tilt)
-    return bytes([0x90 | cam, 0x58, pp, pq, pr, ps, tp, tq, tr, ts, 0xFF])
+    return bytes([(cam + 8) << 4, 0x58, pp, pq, pr, ps, tp, tq, tr, ts, 0xFF])
 
 
 def _ack_frame(cam: int = 1) -> bytes:
     """Construye un frame VISCA ACK sin payload."""
-    return bytes([0x90 | cam, 0x41, 0xFF])
+    return bytes([(cam + 8) << 4, 0x41, 0xFF])
 
 
 RANDOM_SEED = 42
@@ -205,7 +205,7 @@ class TestNibbleMasking:
 
     def test_zoom_high_nibbles_rejected(self):
         # Nibbles altos presentes: el parser debe rechazar y devolver None.
-        data = bytes([0x91, 0x50, 0x40, 0x40, 0x40, 0x40, 0xFF])
+        data = bytes([0x90, 0x50, 0x40, 0x40, 0x40, 0x40, 0xFF])
         result = parser.zoom(data)
         assert result is None
 
@@ -221,12 +221,12 @@ class TestNibbleMasking:
 
     def test_ptz_high_nibbles_rejected(self):
         # PTZ with non-zero high nibble in pan bytes → None
-        data = bytes([0x91, 0x58, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF])
+        data = bytes([0x90, 0x58, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF])
         assert parser.ptz_position(data) is None
 
     def test_zoom_single_bad_nibble_rejected(self):
         # Only one byte has a bad high nibble — still rejected
-        data = bytes([0x91, 0x50, 0x00, 0x00, 0xA0, 0x00, 0xFF])
+        data = bytes([0x90, 0x50, 0x00, 0x00, 0xA0, 0x00, 0xFF])
         assert parser.zoom(data) is None
 
 
@@ -264,7 +264,7 @@ class TestValidKnownFrames:
         assert tilt == 0
 
     def test_ptz_cam_address_2(self):
-        data = bytes([0x92, 0x58, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xFF])
+        data = bytes([0xA0, 0x58, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0xFF])
         pan, tilt = parser.ptz_position(data)
         assert pan == 0x0100
         assert tilt == 0x0100

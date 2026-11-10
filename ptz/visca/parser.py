@@ -13,6 +13,16 @@ from typing import Iterator, Optional
 from .types import ZOOM_MAX
 
 
+def is_response_header(value: int) -> bool:
+    """VISCA camera-to-controller header: address 1..7 encoded as 90..F0.
+
+    The low nibble is the controller address (zero), not a socket number.
+    Sony VISCA packet structure uses A0 for camera address 2; IP devices
+    may instead use the fixed response address 90.
+    """
+    return 0x90 <= value <= 0xF0 and value & 0x0F == 0
+
+
 def _valid_nibble_bytes(frame: bytes, indexes: list[int]) -> bool:
     """Return True if every indexed byte has a zero high nibble (VISCA 0p encoding)."""
     return all((frame[i] & 0xF0) == 0 for i in indexes)
@@ -22,7 +32,7 @@ def zoom(data: bytes) -> Optional[int]:
     """
     Extrae el valor 0–0x4000 de una respuesta VISCA zoom inquiry.
     Escanea el buffer para manejar ACK + Completion en el mismo paquete TCP.
-    Formato Completion: 9x 50 0p 0q 0r 0s FF
+    Formato Completion: y0 50 0p 0q 0r 0s FF
     Devuelve None si los nibbles o el rango de zoom son inválidos.
     """
     frame = inquiry_frame(data, payload_len=4)
@@ -55,7 +65,7 @@ def ptz_position(data: bytes) -> Optional[tuple[int, int]]:
     """
     Extrae (pan, tilt) de una respuesta VISCA PTZ Position Inquiry.
     Escanea el buffer para manejar ACK + Completion en el mismo paquete TCP.
-    Formato Completion: 9x 58 0p 0q 0r 0s 0t 0u 0v 0w FF
+    Formato Completion: y0 58 0p 0q 0r 0s 0t 0u 0v 0w FF
 
     Pan and tilt values are returned as signed 16-bit integers so that
     negative camera positions (e.g. 0xFFFF = -1) are correctly represented.
@@ -82,12 +92,12 @@ def _find_completion_frame(data: bytes, response_byte: int, payload_len: int) ->
 
     Escanea en lugar de asumir offset fijo porque algunas cámaras
     (PTZOptics, Datavideo…) envían ACK + Completion en el mismo paquete TCP.
-    Formato: 9x <response_byte> [payload_len bytes] FF
+    Formato: y0 <response_byte> [payload_len bytes] FF
     """
-    frame_len = payload_len + 3  # 9x + response_byte + [payload] + FF
+    frame_len = payload_len + 3  # y0 + response_byte + [payload] + FF
     for i in range(len(data) - frame_len + 1):
         if (
-            (data[i] & 0xF0) == 0x90
+            is_response_header(data[i])
             and data[i + 1] == response_byte
             and data[i + frame_len - 1] == 0xFF
         ):
@@ -97,7 +107,7 @@ def _find_completion_frame(data: bytes, response_byte: int, payload_len: int) ->
 
 def inquiry_frame(data: bytes, payload_len: int) -> Optional[bytes]:
     """
-    Busca una trama VISCA Completion-with-data (9x 50 … FF) en el buffer.
+    Busca una trama VISCA Completion-with-data (y0 50 … FF) en el buffer.
 
     Wrapper de _find_completion_frame para mantener la interfaz existente.
     """
@@ -105,7 +115,7 @@ def inquiry_frame(data: bytes, payload_len: int) -> Optional[bytes]:
 
 
 def _is_exact_inquiry(frame: bytes, payload_len: int) -> bool:
-    return (len(frame) == payload_len + 3 and (frame[0] & 0xF0) == 0x90
+    return (len(frame) == payload_len + 3 and is_response_header(frame[0])
             and frame[1] == 0x50 and frame[-1] == 0xFF)
 
 
@@ -147,7 +157,7 @@ def _response_frames(buf: bytes) -> Iterator[bytes]:
     code; accepting only their type byte would stop the transport read early.
     """
     for frame in buf.split(b"\xff")[:-1]:
-        if len(frame) < 2 or (frame[0] & 0xF0) != 0x90:
+        if len(frame) < 2 or not is_response_header(frame[0]):
             continue
         kind = frame[1] & 0xF0
         if kind in (0x40, 0x50) or (kind == 0x60 and len(frame) >= 3):
@@ -155,10 +165,10 @@ def _response_frames(buf: bytes) -> Iterator[bytes]:
 
 
 def contains_final_response(buf: bytes) -> bool:
-    """True si *buf* contiene una trama VISCA terminal: Completion (9x 5y FF)
-    o Error (9x 6y FF).
+    """True si *buf* contiene una trama VISCA terminal: Completion (y0 5y FF)
+    o Error (y0 6y FF).
 
-    El ACK (9x 4y FF) NO es terminal: muchas cámaras lo envían antes del
+    El ACK (y0 4y FF) NO es terminal: muchas cámaras lo envían antes del
     Completion en un segmento TCP separado.  Quien lee una respuesta confirmada
     debe seguir leyendo hasta ver una trama terminal para no:
       - reportar éxito al recibir solo el ACK, ni
@@ -169,7 +179,7 @@ def contains_final_response(buf: bytes) -> bool:
 
 
 def contains_completion(buf: bytes) -> bool:
-    """True si *buf* contiene una trama VISCA Completion (9x 5y FF).
+    """True si *buf* contiene una trama VISCA Completion (y0 5y FF).
 
     Distinto de contains_final_response: ignora los frames de Error.
     Útil cuando el llamador ya sabe que hubo una trama terminal y necesita
@@ -190,7 +200,7 @@ def validate_visca_response(response: bytes) -> tuple[bool, str]:
     segments received via _recv_visca_response, which loops until a terminal
     frame).
 
-    Returns (True, "") only when a Completion frame (9x 5y FF) is present.
+    Returns (True, "") only when a Completion frame (y0 5y FF) is present.
     Returns (False, reason) for ACK-only, Error frames, empty buffers and
     malformed data.
 
