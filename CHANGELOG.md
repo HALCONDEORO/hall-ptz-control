@@ -19,6 +19,12 @@ This project uses a simple versioning approach while it is still in early produc
 
 - Each logging handler receives its own repeat filter so file logs do not
   lose records already seen by the console; startup tests isolate filter state.
+- Test setup preloads real Qt and shared UI modules so later tests do not
+  inherit partial stubs installed during collection.
+- Demo reset refuses service-install production data paths before creating
+  or overwriting files, including nested directories.
+- The shutdown intent dialog is extracted from the main window with
+  focused regression tests, keeping its existing choices and behavior.
 - Startup loads the saved ATEM address from effective settings before the
   monitor starts, instead of requiring it to be entered again in Settings.
 - ATEM polling detects a dropped link instead of continuing to report
