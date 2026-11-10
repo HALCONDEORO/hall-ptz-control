@@ -93,11 +93,13 @@ from adapters.gpio_monitor import GpioMonitor
 
 
 def _load_cam_configs_from_yaml():
-    """Load camera CameraConfig objects from config.yaml.
+    """Load camera and ATEM config objects from config.yaml.
 
     Returns (cam1, cam2) with real IPs from config.yaml when available.
     Falls back to the CAM1/CAM2 globals (empty-string defaults, or sim-patched)
-    when config.yaml is absent or unreadable.
+    when config.yaml is absent or unreadable. Also hydrates the ATEM global
+    from the same effective settings: it is the monitor's only boot-time
+    source for the switcher IP.
     """
     import adapters.sim_mode as sim_mode
     if sim_mode.is_active():
@@ -106,8 +108,9 @@ def _load_cam_configs_from_yaml():
         from config.effective import load_effective_config as load_config
         from runtime.path_resolver import RuntimePathResolver
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
-        from ui.camera_config_hydration import hydrate_camera_roles
+        from ui.camera_config_hydration import hydrate_atem, hydrate_camera_roles
         hydrate_camera_roles(settings.cameras, CAM1, CAM2)
+        hydrate_atem(getattr(settings, 'atem', None), ATEM)
         return CAM1, CAM2
     except Exception:
         return CAM1, CAM2

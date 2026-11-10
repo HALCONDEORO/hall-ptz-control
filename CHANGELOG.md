@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - A disconnected ATEM monitor becomes eligible for a supervisor retry after
   thirty seconds instead of remaining permanently treated as healthy.
+- Startup loads the saved ATEM address from effective settings before the
+  monitor starts, instead of requiring it to be entered again in Settings.
 - ATEM polling detects a dropped link instead of continuing to report
   cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
