@@ -1421,6 +1421,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         self._atem_monitor.start()
 
     def _on_atem_state_changed(self, state) -> None:
+        sender = self.sender()
+        if sender is not None and sender is not self._atem_monitor:
+            return
         if state != ATEMState.CONNECTED:
             self._atem_verified_monitor = None
         self._atem_state = state

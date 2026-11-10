@@ -149,3 +149,41 @@ with TemporaryDirectory() as root:
     window.hide()
     sim.deactivate()
 ''')
+
+
+def test_retired_monitor_state_cannot_clear_current_verification():
+    _run(r'''
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import Mock
+from PyQt5.QtWidgets import QApplication
+from PyQt5.QtCore import Qt
+import adapters.sim_mode as sim
+from domain.atem_state import ATEMState
+with TemporaryDirectory() as root:
+    sim._APP_DIR = Path(root)
+    sim.BACKUP = Path(root) / 'backup.json'
+    sim.activate()
+    app = QApplication([])
+    from ui.main_window import MainWindow
+    from adapters.atem_monitor import ATEMMonitor
+    window = MainWindow()
+    current, retired = ATEMMonitor('192.0.2.1'), ATEMMonitor('192.0.2.2')
+    window._atem_monitor = current
+    window._atem_is_configured = lambda: True
+    window._update_atem_button = Mock()
+    window._right_panel.set_atem_program = Mock()
+    current._emit_state(ATEMState.CONNECTED)
+    window._on_atem_state_changed(ATEMState.CONNECTED)
+    current.program_verified.connect(window._on_atem_program_verified, Qt.QueuedConnection)
+    current.program_verified.emit(3)
+    app.processEvents()
+    assert window.atem_operational()
+    retired.state_changed.connect(window._on_atem_state_changed, Qt.QueuedConnection)
+    retired._emit_state(ATEMState.ERROR)
+    app.processEvents()
+    assert window.atem_operational(), 'Retired monitor hid current healthy ATEM'
+    assert window._atem_verified_monitor is current
+    window.hide()
+    sim.deactivate()
+''')

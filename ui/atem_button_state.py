@@ -8,7 +8,6 @@ grow honest behaviour without growing main_window.py.
 
 import logging
 
-from domain.atem_state import ATEMState
 
 logger = logging.getLogger(__name__)
 
