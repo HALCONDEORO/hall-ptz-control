@@ -492,7 +492,9 @@ def build_preset_validation_section(dialog, layout, mw):
     btn_run_named.clicked.connect(_on_run_named)
     btn_cancel.clicked.connect(_on_cancel)
 
-    # Only stop the runner on close — never touch widgets from destroyed signal.
+    # accept/reject hide a parent-owned dialog without destroying it.
+    # Cancel immediately on finish, with destruction retained as a fallback.
+    dialog.finished.connect(lambda _=None: _stop_runner())
     dialog.destroyed.connect(lambda _=None: _stop_runner())
 
 
