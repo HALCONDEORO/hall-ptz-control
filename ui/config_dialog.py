@@ -36,9 +36,6 @@ from __future__ import annotations
 
 import os
 import socket
-import subprocess
-import sys
-from pathlib import Path
 import threading
 from typing import Optional
 
@@ -950,77 +947,8 @@ class ConfigDialog(QDialog):
         if reply != QMessageBox.Yes:
             return
 
-        demo_dir = Path.home() / ".config" / "khptz-demo"
-
-        if target_mode == "production":
-            try:
-                if _sim_mode.is_active():
-                    _sim_mode.deactivate()
-            except RuntimeError as exc:
-                QMessageBox.warning(
-                    self,
-                    title,
-                    str(exc) or "Could not disable simulation mode.",
-                )
-                return
-        else:
-            try:
-                if not _sim_mode.is_active():
-                    _sim_mode.activate()
-            except RuntimeError as exc:
-                QMessageBox.warning(
-                    self,
-                    title,
-                    str(exc) or "Could not enable simulation mode.",
-                )
-                return
-
-            if target_mode == "demo":
-                try:
-                    from application.demo_reset_service import DemoResetService
-
-                    result = DemoResetService(demo_data_dir=demo_dir).reset()
-                except Exception as exc:
-                    QMessageBox.warning(
-                        self,
-                        title,
-                        f"Could not reset demo data:\n{exc}",
-                    )
-                    return
-
-                if not result.success:
-                    QMessageBox.warning(
-                        self,
-                        title,
-                        result.error or "Could not reset demo data.",
-                    )
-                    return
-
-        env = os.environ.copy()
-        env["KHPTZ_PROFILE"] = target_mode
-        if target_mode in {"demo", "simulation"}:
-            env["KHPTZ_DATA_DIR"] = str(demo_dir)
-        elif Path(env.get("KHPTZ_DATA_DIR", "")).expanduser() == demo_dir:
-            env.pop("KHPTZ_DATA_DIR", None)
-
-        main_path = Path(__file__).with_name("main.py")
-        try:
-            subprocess.Popen(
-                [sys.executable, str(main_path)],
-                cwd=str(main_path.parent),
-                env=env,
-                close_fds=True,
-            )
-        except OSError as exc:
-            QMessageBox.warning(
-                self,
-                title,
-                f"Could not launch {target_mode} mode:\n{exc}",
-            )
-            return
-
-        self.close()
-        mw.close()
+        from ui.runtime_restart import queue_runtime_restart
+        queue_runtime_restart(self, mw, target_mode)
 
 
     def _toast(self, message: str, kind: str = 'ok', duration: int = 2800) -> None:
