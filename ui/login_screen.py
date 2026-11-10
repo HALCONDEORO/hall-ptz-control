@@ -398,7 +398,11 @@ class LoginScreen(QWidget):
         if mode not in _MODE_ROLE:
             raise ValueError(f"Unknown login mode: {mode!r}")
         self._mode = mode
-        self.attempts = 0
+        # Deliberately NOT resetting self.attempts here: the Operator <-> Admin
+        # toggle goes through _set_mode, and resetting the counter let anyone
+        # wipe the progressive lockout with two clicks and keep guessing the
+        # password at full speed. The counter lives for the whole LoginScreen
+        # lifetime (fresh instance per app start).
         self.password_input.clear()
         self._set_status('', 'hidden')
         self._cancel_countdown()
