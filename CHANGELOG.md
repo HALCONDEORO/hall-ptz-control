@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Reject backup ZIP archives with duplicate member names before restoring
+  files, including dry-run validation.
 - The shutdown intent dialog is extracted from the main window with
   focused regression tests, keeping its existing choices and behavior.
 - Startup loads the saved ATEM address from effective settings before the
