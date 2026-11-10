@@ -587,7 +587,11 @@ class CameraWorker:
             sock_ref = self._sock
 
         if sock_ref is not None and self._socket_alive(sock_ref):
-            self._set_connected(True)
+            # The transport probe runs without the registry lock. stop() or
+            # reconnect_all() may have retired this socket while it ran.
+            with self._lock:
+                if self._sock is sock_ref and not self._shutdown.is_set():
+                    self._set_connected(True)
             return
 
         # Socket muerto o inexistente: reconectar SIN tener el lock.
