@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - Splash TCP scan no longer flags healthy installs as failed (red TCP chip
   on every startup since 8c8e8a6).
+- Diagnostics no longer reference a non-existent Status.WARN, which crashed
+  `khptz doctor` in user mode when a credential was unreadable.
 - An active password lockout now survives Operator/Admin mode toggles:
   the button stays disabled and the timer keeps running until it expires.
 - cleanup_legacy_rpi_autostart.sh now passes the bare unit name to
