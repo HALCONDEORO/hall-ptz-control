@@ -19,7 +19,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-readonly SCRIPT_VERSION="1"
+readonly SCRIPT_VERSION="2"
 readonly SERVICE="khptz-control.service"
 readonly CLEANUP="scripts/cleanup_legacy_rpi_autostart.sh"
 
@@ -129,7 +129,47 @@ capture_khptz() {
 
 section() { printf '\n===== %s =====\n' "$*"; }
 
+# GUI mode (#885): which launcher owns the GUI decides which unit and journal
+# the checks below must follow. Read it through the shared install-state
+# reader — the same one install.sh and validate_rpi_acceptance.sh (#890) use —
+# so this validator can never disagree with the installer about the mode.
+# Absent or unreadable state falls back to "system", the mode of every
+# pre-#885 install (the safe direction: a user-mode machine misread as system
+# would demand a service that must stay disabled).
+_state_lib="${SCRIPT_DIR}/lib/install_state.sh"
+GUI_MODE="system"
+if [[ -r "${_state_lib}" ]]; then
+    # shellcheck source=/dev/null
+    source "${_state_lib}"
+    GUI_MODE="$(khptz_gui_mode)"
+fi
+# The unit whose state and journal evidence the GUI: the system service in
+# system mode, the desktop user's khptz-gui unit in user mode.
+GUI_UNIT="${SERVICE}"
+if [[ "${GUI_MODE}" == "user" ]]; then
+    GUI_UNIT="khptz-gui.service"
+fi
+
+# Property of the unit that owns the GUI, regardless of mode.
+svc_prop() {
+    if [[ "${GUI_MODE}" == "user" ]]; then
+        runuser -u "${DESKTOP_USER}" -- systemctl --user show "${GUI_UNIT}" -p "$1" --value 2>/dev/null || true
+    else
+        systemctl show "${GUI_UNIT}" -p "$1" --value 2>/dev/null || true
+    fi
+}
+
+# Journal lines of the unit that owns the GUI, regardless of mode.
+gui_journal() {
+    if [[ "${GUI_MODE}" == "user" ]]; then
+        runuser -u "${DESKTOP_USER}" -- journalctl --user-unit="${GUI_UNIT}" --no-pager 2>/dev/null || true
+    else
+        journalctl -u "${GUI_UNIT}" --no-pager 2>/dev/null || true
+    fi
+}
+
 info "KHPTZ deployment validation v${SCRIPT_VERSION} for ${DESKTOP_USER} on ${TARGET_DISPLAY}"
+info "GUI mode: ${GUI_MODE} (GUI unit under test: ${GUI_UNIT})"
 info "Report: ${REPORT}"
 run_khptz version
 
@@ -182,11 +222,23 @@ else
     printf '%s\n' "${KHPTZ_PROCS}"
 fi
 
-# khptz-control.service active.
-if systemctl is-active --quiet "${SERVICE}"; then
-    ok "${SERVICE} is active."
+# The GUI unit must be active — which unit that is follows the GUI mode
+# (#885). In user mode khptz-control is deliberately disabled: reporting it
+# as a failure would send the installer chasing a healthy appliance.
+if [[ "${GUI_MODE}" == "user" ]]; then
+    if systemctl is-enabled --quiet "${SERVICE}" 2>/dev/null; then
+        bad "${SERVICE} is enabled in GUI mode 'user' — session and service would race the same GUI (#885)."
+    else
+        ok "${SERVICE} is disabled; the desktop session owns the GUI."
+    fi
+    GUI_ACTIVE="$(runuser -u "${DESKTOP_USER}" -- systemctl --user is-active "${GUI_UNIT}" 2>/dev/null || true)"
 else
-    bad "${SERVICE} is not active."
+    GUI_ACTIVE="$(systemctl is-active "${GUI_UNIT}" 2>/dev/null || true)"
+fi
+if [[ "${GUI_ACTIVE}" == "active" ]]; then
+    ok "${GUI_UNIT} is active."
+else
+    bad "GUI unit ${GUI_UNIT} is not active (state: ${GUI_ACTIVE:-unknown}, mode: ${GUI_MODE})."
 fi
 
 # No second/legacy controller running.
@@ -231,12 +283,11 @@ section "Wizard / Qt Bullseye checks (#886)"
 # the exact Qt message. ui/styles.py already guards against it by falling back
 # to native styling, so its absence confirms the guard held.
 if command -v journalctl >/dev/null 2>&1; then
-    QSS_HITS="$(journalctl -u "${SERVICE}" --no-pager 2>/dev/null \
-        | grep -c 'Could not parse stylesheet' || true)"
+    QSS_HITS="$(gui_journal | grep -c 'Could not parse stylesheet' || true)"
     if [[ "${QSS_HITS}" -eq 0 ]]; then
-        ok "No 'Could not parse stylesheet' in the ${SERVICE} journal."
+        ok "No 'Could not parse stylesheet' in the ${GUI_UNIT} journal."
     else
-        bad "${QSS_HITS} 'Could not parse stylesheet' message(s) in the journal (#886)."
+        bad "${QSS_HITS} 'Could not parse stylesheet' message(s) in the ${GUI_UNIT} journal (#886)."
     fi
 else
     warn "journalctl unavailable; cannot check for stylesheet parse errors."
@@ -266,13 +317,12 @@ section "X11 / systemd session startup checks (#885)"
 # and a manual xhost/systemd workaround would be needed.
 if command -v journalctl >/dev/null 2>&1; then
     X11_PATTERN='No protocol specified|could not connect to display|Could not load the Qt platform plugin|could not connect to any X display|XDG_RUNTIME_DIR not set|Failed to start message bus|Read-only file system'
-    X11_HITS="$(journalctl -u "${SERVICE}" --no-pager 2>/dev/null \
-        | grep -Ec "${X11_PATTERN}" || true)"
+    X11_HITS="$(gui_journal | grep -Ec "${X11_PATTERN}" || true)"
     if [[ "${X11_HITS}" -eq 0 ]]; then
-        ok "No X11/display/D-Bus session errors in the ${SERVICE} journal."
+        ok "No X11/display/D-Bus session errors in the ${GUI_UNIT} journal."
     else
-        bad "${X11_HITS} X11/display/D-Bus session error line(s) in the journal (#885):"
-        journalctl -u "${SERVICE}" --no-pager 2>/dev/null | grep -E "${X11_PATTERN}" | tail -10 || true
+        bad "${X11_HITS} X11/display/D-Bus session error line(s) in the ${GUI_UNIT} journal (#885):"
+        gui_journal | grep -E "${X11_PATTERN}" | tail -10 || true
     fi
 else
     warn "journalctl unavailable; cannot check for X11/display session errors."
@@ -294,18 +344,18 @@ fi
 
 # Controlled restart, not an infinite rapid loop (#885). The unit caps restarts
 # at StartLimitBurst within StartLimitIntervalSec; a hit means it gave up looping.
-SVC_RESULT="$(systemctl show "${SERVICE}" -p Result --value 2>/dev/null || true)"
-SVC_NRESTARTS="$(systemctl show "${SERVICE}" -p NRestarts --value 2>/dev/null || true)"
-SVC_SUBSTATE="$(systemctl show "${SERVICE}" -p SubState --value 2>/dev/null || true)"
+SVC_RESULT="$(svc_prop Result)"
+SVC_NRESTARTS="$(svc_prop NRestarts)"
+SVC_SUBSTATE="$(svc_prop SubState)"
 info "Service Result=${SVC_RESULT:-?} NRestarts=${SVC_NRESTARTS:-?} SubState=${SVC_SUBSTATE:-?}"
 if [[ "${SVC_RESULT}" == "start-limit-hit" ]]; then
-    bad "${SERVICE} hit its restart limit — it is failing in a loop (#885)."
+    bad "${GUI_UNIT} hit its restart limit — it is failing in a loop (#885)."
 elif [[ "${SVC_SUBSTATE}" == "auto-restart" ]]; then
-    bad "${SERVICE} is in auto-restart (currently cycling) — re-check after it settles (#885)."
+    bad "${GUI_UNIT} is in auto-restart (currently cycling) — re-check after it settles (#885)."
 elif [[ -n "${SVC_NRESTARTS}" && "${SVC_NRESTARTS}" =~ ^[0-9]+$ && "${SVC_NRESTARTS}" -gt 3 ]]; then
-    warn "${SERVICE} has restarted ${SVC_NRESTARTS} times this boot — investigate stability (#885)."
+    warn "${GUI_UNIT} has restarted ${SVC_NRESTARTS} times this boot — investigate stability (#885)."
 else
-    ok "${SERVICE} restart state is controlled (no rapid loop)."
+    ok "${GUI_UNIT} restart state is controlled (no rapid loop)."
 fi
 
 # Display access must be scoped, never a global 'xhost +' (disabled ACL). Query
