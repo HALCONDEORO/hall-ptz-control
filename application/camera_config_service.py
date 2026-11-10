@@ -94,8 +94,12 @@ class CameraConfigService:
         if clean == self._other_camera_value(cam_num, "ip"):
             return self._invalid("set_camera_ip", target, "Each camera must have a distinct IP.")
 
-        self._camera(cam_num).ip = clean
-        self._repoint_runtime(cam_num, clean)
+        current = self._camera(cam_num)
+        changed = current.ip != clean
+        current.ip = clean
+        if changed:
+            self._repoint_runtime(cam_num, clean)
+        # Still retry persistence for a prior session-only change.
         return self._persist(
             "set_camera_ip", target, cam_index=cam_num - 1, cam_ip=clean
         )
