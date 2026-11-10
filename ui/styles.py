@@ -289,3 +289,20 @@ def svg_icon_from_markup(markup: str, size: int = 14, color: str | None = None):
     from PyQt5.QtCore import QByteArray
     from PyQt5.QtSvg import QSvgRenderer
     return _render_icon(QSvgRenderer(QByteArray(markup.encode('utf-8'))), size, color)
+
+
+TOUCH_SCROLLBAR_WIDTH = 32
+
+
+def touch_scrollbar_qss() -> str:
+    """Shared vertical touch target for every scrollable window."""
+    return (
+        f"QScrollBar:vertical {{ width: {TOUCH_SCROLLBAR_WIDTH}px;"
+        " background: #E5EAE2; margin: 2px; border-radius: 12px; }"
+        "QScrollBar::handle:vertical { background: #4A7A44; min-height: 64px;"
+        " border: 3px solid #E5EAE2; border-radius: 12px; }"
+        "QScrollBar::handle:vertical:hover { background: #2E5229; }"
+        "QScrollBar::handle:vertical:pressed { background: #1A3318; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: none; }"
+    )

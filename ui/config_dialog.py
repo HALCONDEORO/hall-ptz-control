@@ -323,30 +323,7 @@ class ConfigDialog(QDialog):
             scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             scroll_area.setStyleSheet(
                 "QScrollArea { background: transparent; border: none; }"
-                "QScrollBar:vertical {"
-                "  background: transparent;"
-                "  width: 6px;"
-                "  margin: 4px 2px 4px 0px;"
-                "}"
-                "QScrollBar::handle:vertical {"
-                f" background: {_C_FIELD_BD};"
-                "  min-height: 32px;"
-                "  border-radius: 3px;"
-                "}"
-                "QScrollBar::handle:vertical:hover {"
-                f" background: {_C_MUTED};"
-                "}"
-                "QScrollBar::handle:vertical:pressed {"
-                f" background: {_C_BRAND_LIGHT};"
-                "}"
-                "QScrollBar::add-line:vertical,"
-                "QScrollBar::sub-line:vertical {"
-                "  height: 0px;"
-                "}"
-                "QScrollBar::add-page:vertical,"
-                "QScrollBar::sub-page:vertical {"
-                "  background: none;"
-                "}"
+                + _S.touch_scrollbar_qss()
             )
             content = QWidget()
             content.setStyleSheet("background: transparent;")
