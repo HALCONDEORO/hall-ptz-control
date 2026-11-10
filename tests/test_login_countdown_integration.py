@@ -147,3 +147,79 @@ class TestModeSwitchKeepsLockoutCounter:
         assert login.attempts == 4
         assert login.is_locked is True
         login.lockout_timer.stop()
+
+
+class TestLockoutSurvivesModeToggle:
+    """Regression: a running password lockout must survive mode toggles.
+
+    Before the fix, switching to Operator cleared is_locked and re-enabled the
+    button; switching back to Admin left ACCESS enabled with the password
+    field disabled, and attempts resumed before the lockout timer ended."""
+
+    def _lock(self, login):
+        login._set_mode("admin")
+        login.attempts = 2
+        login._on_login_failure()   # attempt 3 -> 10s lockout
+        assert login.is_locked is True
+        assert login.lockout_timer.isActive()
+
+    def _finish_lockout(self, login):
+        login.remaining_seconds = 1
+        login.lockout_timer.timeout.emit()   # 1 -> 0 -> unlock path
+
+    @staticmethod
+    def _force_schedule_bypass(monkeypatch):
+        import application.schedule_config as sc
+        monkeypatch.setattr(sc, "is_within_schedule", lambda: True)
+
+    def test_toggle_to_operator_keeps_lock(self, login, monkeypatch):
+        self._force_schedule_bypass(monkeypatch)
+        self._lock(login)
+        login._on_switch_user()   # -> operator auto-entry (bypass)
+        assert login._mode == "operator"
+        assert login._operator_auto is True
+        assert login.is_locked is True
+        assert not login.login_btn.isEnabled()
+        assert not login._countdown_timer.isActive()
+
+    def test_toggle_back_to_admin_keeps_form_disabled(self, login):
+        self._lock(login)
+        login._on_switch_user()   # -> operator
+        login._on_switch_user()   # -> admin
+        assert login._mode == "admin"
+        assert login.is_locked is True
+        assert not login.login_btn.isEnabled()
+        assert not login.password_input.isEnabled()
+
+    def test_unlock_in_operator_resumes_countdown(self, login, monkeypatch):
+        self._force_schedule_bypass(monkeypatch)
+        self._lock(login)
+        login._on_switch_user()   # -> operator, countdown paused by the lock
+        self._finish_lockout(login)
+        assert login.is_locked is False
+        assert login.login_btn.isEnabled()
+        assert login._countdown_timer.isActive()
+
+    def test_unlock_in_admin_reenables_password_field(self, login):
+        self._lock(login)
+        self._finish_lockout(login)
+        assert login.is_locked is False
+        assert login.password_input.isEnabled()
+        assert login.login_btn.isEnabled()
+
+    def test_unlock_in_operator_then_admin_reenables_password_field(self, login, monkeypatch):
+        # Regression: when the lockout timer ends while Operator auto-entry is
+        # active, the unlock path used to leave password_input disabled; the
+        # next switch to Admin only disables the field while is_locked, so the
+        # form stayed unusable until an app restart.
+        self._force_schedule_bypass(monkeypatch)
+        self._lock(login)
+        login._on_switch_user()        # -> operator (auto-entry, lock pauses it)
+        assert login._operator_auto is True
+        self._finish_lockout(login)    # lockout ends in Operator mode
+        assert login.is_locked is False
+        assert login.password_input.isEnabled()
+        login._on_switch_user()        # -> admin
+        assert login._mode == "admin"
+        assert login.password_input.isEnabled()
+        assert login.login_btn.isEnabled()
