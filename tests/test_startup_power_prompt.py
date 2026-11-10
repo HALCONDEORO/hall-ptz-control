@@ -93,6 +93,8 @@ def patched_config(monkeypatch):
 
 
 def _run(monkeypatch, fake_self, click_role):
+    # Decision-only double: real Qt sizing is covered by test_message_box_layout.
+    monkeypatch.setattr("ui.main_window.fit_message_box_buttons", lambda _box: None)
     _StubMessageBox.click_role = click_role
     monkeypatch.setattr("PyQt5.QtWidgets.QMessageBox", _StubMessageBox)
     MainWindow._maybe_prompt_power_on(fake_self)
