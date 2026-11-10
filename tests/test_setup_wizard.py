@@ -278,6 +278,32 @@ class TestReviewGating:
         assert review.isComplete() is True
 
 
+class TestReviewDeviceDetails:
+    def test_lists_exact_camera_identity_and_no_passwords(self, wizard):
+        from application.provisioning_service import CameraAnswer
+        wizard.answers.cameras = [
+            CameraAnswer("platform", "platform", "192.0.2.11", "81", "Platform"),
+            CameraAnswer("comments", "comments", "192.0.2.12", "82", "Comments"),
+        ]
+        wizard.answers.entry_password = "operator-test-secret"
+        wizard.answers.admin_password = "admin-test-secret"
+        review = _page(wizard, "ReviewPage")
+        review.initializePage()
+        text = review._summary.text()
+        assert "Camera 1: Platform [platform] | 192.0.2.11 | VISCA 81" in text
+        assert "Camera 2: Comments [comments] | 192.0.2.12 | VISCA 82" in text
+        assert "ATEM: disabled" in text
+        assert wizard.answers.entry_password not in text
+        assert wizard.answers.admin_password not in text
+
+    def test_enabled_atem_shows_its_address(self, wizard):
+        wizard.answers.atem_enabled = True
+        wizard.answers.atem_ip = "192.0.2.50"
+        review = _page(wizard, "ReviewPage")
+        review.initializePage()
+        assert "ATEM: enabled | 192.0.2.50" in review._summary.text()
+
+
 class _FakeHandoff:
     """Stand-in for ProvisionHandoff: records begin() and returns a queued result."""
 
