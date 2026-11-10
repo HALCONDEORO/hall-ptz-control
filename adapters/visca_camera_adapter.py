@@ -463,6 +463,8 @@ class ViscaCameraAdapter:
         """
         with self._display_query_lock:
             ip, cam_id_hex = self._cam_info_by_index(camera_key)
+            if not ip or not ip.strip():
+                return
             generation = self._endpoint_generations.get(camera_key, 0)
             cached = self._mgr.get_zoom(ip)
             if isinstance(cached, int) and cached >= 0:
@@ -509,6 +511,8 @@ class ViscaCameraAdapter:
         """
         with self._display_query_lock:
             ip, cam_id_hex = self._cam_info_by_index(camera_key)
+            if not ip or not ip.strip():
+                return
             generation = self._endpoint_generations.get(camera_key, 0)
             if not self._mgr.ae_query_try_acquire(ip):
                 # A step may complete while an older observation is in flight.

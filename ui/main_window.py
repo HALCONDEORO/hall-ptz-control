@@ -206,8 +206,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         # la IP en Ajustes. Antes el LED sólo se cableaba a los workers de
         # arranque, así que tras cambiar la IP la cámara reconectaba pero el LED
         # se quedaba en rojo / "desconectado".
-        self._cameras.worker(self._cameras.ip_for_key(1))
-        self._cameras.worker(self._cameras.ip_for_key(2))
+        from ui.camera_worker_startup import start_configured_camera_workers
+        start_configured_camera_workers(self._cameras)
         self._update_controls_visibility()
 
         # ── Modo simulación ───────────────────────────────────────────────
