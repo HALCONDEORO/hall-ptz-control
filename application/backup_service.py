@@ -13,12 +13,15 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
+
+from core.atomic_write import write_bytes_atomic
 
 
 _MANIFEST_SCHEMA_VERSION = 2
@@ -152,10 +155,14 @@ class BackupService:
         }
 
         try:
-            with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
-                zf.writestr("manifest.json", json.dumps(manifest, indent=2))
-                for arc_name, payload in snapshots.items():
-                    zf.writestr(arc_name, payload)
+            # Build the complete ZIP before publishing it. A failed member write
+            # must not truncate an existing backup or expose a partial new one.
+            with io.BytesIO() as buffer:
+                with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                    zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+                    for arc_name, payload in snapshots.items():
+                        zf.writestr(arc_name, payload)
+                write_bytes_atomic(dest, buffer.getvalue(), preserve_metadata=True)
         except Exception as exc:
             self._record_event("BackupFailed", error=str(exc))
             raise
