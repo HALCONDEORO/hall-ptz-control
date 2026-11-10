@@ -324,7 +324,7 @@ class RestoreService:
 
     @staticmethod
     def _atomic_write(data: bytes, dest: Path) -> None:
-        write_bytes_atomic(dest, data)
+        write_bytes_atomic(dest, data, preserve_metadata=True)
 
     def _record_event(self, event_type: str, **extra) -> None:
         if self._recorder is None:

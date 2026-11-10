@@ -10,11 +10,12 @@ from dataclasses import asdict
 import fcntl
 import json
 import logging
+import os
 import threading
 from pathlib import Path
 
 from config.loader import build_settings, load_config
-from core.atomic_write import write_text_atomic
+from core.atomic_write import write_text_atomic, group_shared_mode
 from runtime.path_resolver import RuntimePathResolver
 
 OVERLAY_NAME = 'camera_overrides.json'
@@ -31,7 +32,17 @@ def _overlay_transaction(path: Path):
         lock = _path_locks.setdefault(key, threading.Lock())
     with lock:
         key.parent.mkdir(parents=True, exist_ok=True)
-        with key.with_name(key.name + '.lock').open('a') as handle:
+        lock_path = key.with_name(key.name + '.lock')
+        shared_mode = group_shared_mode(key.parent)
+        # The inode stays stable; read-only flock also lets another group
+        # member lock an old 0644 file without needing to write its contents.
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDONLY, 0o600)
+        with os.fdopen(fd, 'r') as handle:
+            if shared_mode is not None and os.fstat(fd).st_uid == os.geteuid():
+                parent_gid = key.parent.stat().st_gid
+                if os.fstat(fd).st_gid != parent_gid:
+                    os.fchown(fd, -1, parent_gid)
+                os.fchmod(fd, shared_mode)
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
             try:
                 yield

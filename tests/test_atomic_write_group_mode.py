@@ -126,4 +126,4 @@ class TestRestorePathUsesIt:
             Path(__file__).resolve().parent.parent
             / "application" / "restore_service.py"
         ).read_text(encoding="utf-8")
-        assert "write_bytes_atomic(dest, data)" in source
+        assert "write_bytes_atomic(dest, data, preserve_metadata=True)" in source
