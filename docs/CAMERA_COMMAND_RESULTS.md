@@ -22,3 +22,11 @@ inspect/edit/reconnect them. This protects a worker's connection on cameras
 that allow only one TCP controller session. It does not prove single-session
 ownership against other applications, external CLI probes or simultaneous
 configuration changes made elsewhere during a scan.
+
+Opening Settings reads the existing CameraManager connection snapshot instead
+of opening extra TCP probe sessions. The displayed online/offline state is
+transport state, not proof of VISCA command success or physical camera health.
+This avoids blocking the GUI on network connect/join and avoids evicting a
+single-session camera's persistent worker merely by opening Settings.
+Explicit discovery and post-assignment checks are separate paths; this fix
+makes no claim that every external diagnostic has been serialized yet.

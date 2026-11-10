@@ -46,7 +46,9 @@ class CameraManager:
         # varios hilos (Qt principal, monitor ATEM vía nudge, threads de query),
         # y sin lock dos llamadas concurrentes para la misma IP crearían dos
         # CameraWorker (y dos threads TCP) — TOCTOU.
-        self._workers_lock: threading.Lock = threading.Lock()
+        # Recovery can notify a completion callback that reads manager state.
+        # Keep reassignment serialized, but permit same-thread status re-entry.
+        self._workers_lock = threading.RLock()
         self._workers: dict[str, CameraWorker] = {}
 
         # Cache de zoom: None = sin valor local, necesita query de red.
@@ -197,8 +199,9 @@ class CameraManager:
         """True si hay worker para esa IP y está conectado. NO crea workers."""
         if not ip:
             return False
-        with self._workers_lock:
-            w = self._workers.get(ip)
+        # One reference lookup is a transport snapshot, not a lifecycle
+        # operation. Never wait for restart's bounded join on the GUI thread.
+        w = self._workers.get(ip)
         return bool(w is not None and w.is_connected)
 
     @staticmethod
