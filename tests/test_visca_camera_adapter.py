@@ -300,16 +300,16 @@ class TestStandby:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# home (fire-and-forget, priority queue)
+# home (fire-and-forget, cancelable ordinary queue)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestHome:
-    def test_enqueues_to_priority_queue(self):
+    def test_enqueues_to_ordinary_queue(self):
         adapter, mgr = _make_adapter()
         adapter.home("cam1")
         worker = mgr.workers.get("10.0.0.1")
-        assert worker is not None and worker.priority
-        assert worker.sent == []
+        assert worker is not None and worker.sent
+        assert worker.priority == []
 
     def test_always_returns_ok(self):
         adapter, _ = _make_adapter()

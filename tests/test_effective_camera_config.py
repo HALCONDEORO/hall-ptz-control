@@ -328,3 +328,21 @@ def test_saving_after_base_camera_id_rename_discards_orphaned_entries(paths):
     assert settings.cameras[0].ip == '192.0.2.11'
     assert settings.cameras[1].ip == '192.0.2.22'
     assert settings.atem.pip_nudge.pan_speed == 2
+
+
+def test_shared_overlay_lock_mode_and_inode_survive_updates(paths):
+    import os
+    config, overlay = paths
+    overlay.parent.mkdir()
+    overlay.parent.chmod(0o2770)
+    old_umask = os.umask(0o022)
+    try:
+        patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
+        lock = overlay.with_name(overlay.name + '.lock')
+        first = lock.stat()
+        assert first.st_mode & 0o777 == 0o660
+        assert first.st_gid == overlay.parent.stat().st_gid
+        patch_runtime_config(config, overlay_path=overlay, cam_index=1, cam_ip='192.0.2.22')
+        assert lock.stat().st_ino == first.st_ino
+    finally:
+        os.umask(old_umask)

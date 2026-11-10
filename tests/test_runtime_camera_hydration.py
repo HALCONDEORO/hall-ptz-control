@@ -18,8 +18,8 @@ def camera_ui():
 
 def settings():
     return SimpleNamespace(cameras=[
-        SimpleNamespace(ip='192.0.2.11', visca_id='81'),
-        SimpleNamespace(ip='192.0.2.12', visca_id='82'),
+        SimpleNamespace(role='platform', ip='192.0.2.11', visca_id='81'),
+        SimpleNamespace(role='comments', ip='192.0.2.12', visca_id='82'),
     ])
 
 
@@ -61,3 +61,21 @@ def test_reload_updates_previously_imported_references(camera_ui):
     assert first is first_ref
     assert second is second_ref
     assert (second_ref.ip, second_ref.cam_id) == ('192.0.2.22', '83')
+
+
+def test_reversed_saved_order_hydrates_by_role(camera_ui):
+    saved = settings()
+    saved.cameras.reverse()
+    with patch('config.effective.load_effective_config', return_value=saved), patch('adapters.sim_mode.is_active', return_value=False):
+        first, second = camera_ui._load_cam_configs_from_yaml()
+    assert first.ip == '192.0.2.11'
+    assert second.ip == '192.0.2.12'
+
+
+def test_missing_platform_does_not_copy_comments_into_platform(camera_ui):
+    saved = settings()
+    saved.cameras = saved.cameras[1:]
+    with patch('config.effective.load_effective_config', return_value=saved), patch('adapters.sim_mode.is_active', return_value=False):
+        first, second = camera_ui._load_cam_configs_from_yaml()
+    assert first.ip == ''
+    assert second.ip == '192.0.2.12'

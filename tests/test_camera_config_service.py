@@ -168,3 +168,50 @@ def test_apply_simulation_ips_does_not_touch_yaml(fake_config, config_yaml):
     assert (fake_config.CAM1.ip, fake_config.CAM2.ip) == ("127.0.0.1", "127.0.0.2")
     saved = yaml.safe_load(config_yaml.read_text(encoding="utf-8"))
     assert saved["cameras"][0]["ip"] == "0.0.0.0"  # untouched
+
+
+def test_same_ip_retries_save_without_repointing_live_session(fake_config, config_yaml):
+    runtime = _FakeRuntime()
+    fake_config.CAM1.ip = '192.0.2.11'
+    service = _service(fake_config, config_yaml, manager=runtime)
+    result = service.set_camera_ip(1, '192.0.2.11')
+    assert result.code == 'OK'
+    assert runtime.calls == []
+    assert yaml.safe_load(config_yaml.read_text())['cameras'][0]['ip'] == '192.0.2.11'
+
+
+@pytest.mark.parametrize('failed_target', ['manager', 'port'])
+def test_same_ip_retries_failed_runtime_repoint_then_becomes_noop(fake_config, config_yaml, failed_target):
+    class Runtime(_FakeRuntime):
+        def __init__(self, fail):
+            super().__init__()
+            self.fail = fail
+            self.ip = '192.0.2.10'
+        def update_camera_ip(self, camera_index, new_ip):
+            super().update_camera_ip(camera_index, new_ip)
+            if self.fail:
+                self.fail = False
+                raise RuntimeError('first repoint failed')
+            self.ip = new_ip
+        def ip_for_key(self, key):
+            return self.ip if key == 1 else '192.0.2.12'
+    manager = Runtime(failed_target == 'manager')
+    port = Runtime(failed_target == 'port')
+    service = _service(fake_config, config_yaml, manager=manager, port=port)
+    assert service.set_camera_ip(1, '192.0.2.11').ok
+    assert service.set_camera_ip(1, '192.0.2.11').ok
+    assert manager.ip == port.ip == '192.0.2.11'
+    assert len(manager.calls) == len(port.calls) == 2
+    assert service.set_camera_ip(1, '192.0.2.11').ok
+    assert len(manager.calls) == len(port.calls) == 2
+
+
+def test_same_ip_reconciles_runtime_mismatch_without_prior_pending_flag(fake_config, config_yaml):
+    class Runtime(_FakeRuntime):
+        def ip_for_key(self, key):
+            return '192.0.2.10' if key == 1 else '192.0.2.12'
+    runtime = Runtime()
+    fake_config.CAM1.ip = '192.0.2.11'
+    service = _service(fake_config, config_yaml, manager=runtime)
+    assert service.set_camera_ip(1, '192.0.2.11').ok
+    assert runtime.calls == [(1, '192.0.2.11')]

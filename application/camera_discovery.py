@@ -62,7 +62,7 @@ def _tcp_connect(host: str, timeout: float = 0.3, port: int = VISCA_PORT) -> boo
 
 
 def tcp_scan(subnet: str = '', workers: int = 50, timeout: float = 0.3,
-             port: int = VISCA_PORT) -> List[str]:
+             port: int = VISCA_PORT, exclude_ips=()) -> List[str]:
     """
     Escanea las 254 IPs de la subred /24 en *port* con 'workers' threads
     paralelos. Devuelve lista ordenada de IPs que aceptan conexión TCP.
@@ -76,7 +76,8 @@ def tcp_scan(subnet: str = '', workers: int = 50, timeout: float = 0.3,
     if not subnet:
         subnet = get_camera_subnet()
 
-    hosts = [f"{subnet}.{i}" for i in range(1, 255)]
+    excluded = set(exclude_ips)
+    hosts = [f"{subnet}.{i}" for i in range(1, 255) if f"{subnet}.{i}" not in excluded]
     found: List[str] = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         for host, ok in zip(hosts, ex.map(lambda h: _tcp_connect(h, timeout, port), hosts)):
@@ -127,7 +128,7 @@ def arp_scan(subnet: str = '') -> List[str]:
 #  DESCUBRIMIENTO COMBINADO
 # ─────────────────────────────────────────────────────────────────────────────
 
-def discover_cameras(subnet: str = '') -> List[str]:
+def discover_cameras(subnet: str = '', exclude_ips=()) -> List[str]:
     """
     Combina TCP scan y ARP table.
     TCP results are already VISCA_PORT-validated. ARP-only candidates are
@@ -136,8 +137,9 @@ def discover_cameras(subnet: str = '') -> List[str]:
     """
     if not subnet:
         subnet = get_camera_subnet()
-    tcp = set(tcp_scan(subnet))
-    arp_only = set(arp_scan(subnet)) - tcp
+    excluded = set(exclude_ips)
+    tcp = set(tcp_scan(subnet, exclude_ips=excluded) if excluded else tcp_scan(subnet)) - excluded
+    arp_only = set(arp_scan(subnet)) - tcp - excluded
     confirmed_arp = {ip for ip in arp_only if _tcp_connect(ip)}
     return sorted(tcp | confirmed_arp)
 

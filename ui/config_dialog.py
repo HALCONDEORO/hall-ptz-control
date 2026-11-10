@@ -323,30 +323,7 @@ class ConfigDialog(QDialog):
             scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
             scroll_area.setStyleSheet(
                 "QScrollArea { background: transparent; border: none; }"
-                "QScrollBar:vertical {"
-                "  background: transparent;"
-                "  width: 6px;"
-                "  margin: 4px 2px 4px 0px;"
-                "}"
-                "QScrollBar::handle:vertical {"
-                f" background: {_C_FIELD_BD};"
-                "  min-height: 32px;"
-                "  border-radius: 3px;"
-                "}"
-                "QScrollBar::handle:vertical:hover {"
-                f" background: {_C_MUTED};"
-                "}"
-                "QScrollBar::handle:vertical:pressed {"
-                f" background: {_C_BRAND_LIGHT};"
-                "}"
-                "QScrollBar::add-line:vertical,"
-                "QScrollBar::sub-line:vertical {"
-                "  height: 0px;"
-                "}"
-                "QScrollBar::add-page:vertical,"
-                "QScrollBar::sub-page:vertical {"
-                "  background: none;"
-                "}"
+                + _S.touch_scrollbar_qss()
             )
             content = QWidget()
             content.setStyleSheet("background: transparent;")
@@ -1103,10 +1080,12 @@ class ConfigDialog(QDialog):
             "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
             f" stop:0 {_C_ERROR}, stop:1 #8E0F18); border: none; border-radius: 9px;"
             " padding: 7px 16px; min-width: 90px; min-height: 36px;"
-            " font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; }"
+            " font-size: 13px; font-weight: bold; font-family: 'Inter Tight'; color: white; }"
             "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
             " stop:0 #d41828, stop:1 #a01020); }"
         )
+        from ui.message_box_layout import fit_message_box_buttons
+        fit_message_box_buttons(box)
         box.exec_()
         return box.clickedButton() is act
 

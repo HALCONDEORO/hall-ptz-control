@@ -461,11 +461,34 @@ class RightPanel:
             btn.setFixedHeight(50)
             btn.setToolTip(tooltip)
             btn.setStyleSheet(self._btn_focus_base_style)
-            btn.clicked.connect(
-                (lambda m=port_method: (
-                    lambda: _run_off_ui(getattr(_get_port(), m, lambda _: None), _active_cam_id())
-                ))()
-            )
+            def _exposure_clicked(_checked=False, method=port_method):
+                port = _get_port()
+                if port is None:
+                    return
+                from ui.display_freshness import capture_display_generation
+                camera_id = _active_cam_id()
+                cam_key = 1 if camera_id == "cam1" else 2
+                generation = capture_display_generation(port, cam_key)
+                window_ref = weakref.ref(mw)
+
+                def _step_and_read_back():
+                    result = getattr(port, method)(camera_id)
+                    if result is None or not result.ok:
+                        return
+                    if capture_display_generation(port, cam_key) != generation:
+                        return
+                    # Read the observed camera value, never increment a UI counter.
+                    from ui.camera_display_mixin import _queue_display_update
+                    port.async_refresh_ae_mode(
+                        cam_key,
+                        lambda: _queue_display_update(
+                            window_ref, "_apply_exposure_update", cam_key, generation,
+                        ),
+                    )
+
+                _run_off_ui(_step_and_read_back)
+
+            btn.clicked.connect(_exposure_clicked)
             exp_row.addWidget(btn)
 
         mw.BtnBacklight = QPushButton('Backlight\nOFF', self._container)

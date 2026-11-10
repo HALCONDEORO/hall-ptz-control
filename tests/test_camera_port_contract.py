@@ -531,12 +531,15 @@ class TestViscaCameraAdapterDelegation:
         adapter.standby("cam2")
         assert calls[0][0] == "10.0.0.2"
 
-    def test_home_uses_priority_queue(self):
+    def test_home_uses_cancelable_normal_queue_not_confirmed(self):
         adapter, mgr, _ = self._adapter_with_confirmed_capture()
         adapter.home("cam1")
         worker = mgr.workers["10.0.0.1"]
-        assert worker.sent == []
-        assert worker.priority[0].payload.hex().upper() == "81010604FF"
+        # HOME is motion, not an emergency. It must never clear/replay a STOP.
+        assert worker.priority == []
+        assert len(worker.sent) == 1
+        assert worker.sent[0].priority is False
+        assert worker.sent[0].payload.hex().upper() == "81010604FF"
 
     def test_failed_recall_sets_ok_false(self):
         adapter, _ = _make_visca_adapter(default_ok=False)

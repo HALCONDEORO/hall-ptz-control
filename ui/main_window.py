@@ -75,6 +75,7 @@ from ui.seat_builder import build_special_seat_button
 
 from ui.chairman_button import ChairmanButton
 from ui.camera_indicator import CameraIndicator
+from ui.message_box_layout import fit_message_box_buttons
 from ui.auditorium_overlay import AuditoriumOverlay
 from ui.mode_border_overlay import ModeBorderOverlay
 
@@ -104,11 +105,8 @@ def _load_cam_configs_from_yaml():
         from config.effective import load_effective_config as load_config
         from runtime.path_resolver import RuntimePathResolver
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
-        # Mutate the shared objects, never rebind: Splash/Admin/services already
-        # imported references to them. Workers must consume that same identity.
-        for current, saved in zip((CAM1, CAM2), settings.cameras):
-            current.ip = saved.ip
-            current.cam_id = saved.visca_id
+        from ui.camera_config_hydration import hydrate_camera_roles
+        hydrate_camera_roles(settings.cameras, CAM1, CAM2)
         return CAM1, CAM2
     except Exception:
         return CAM1, CAM2
@@ -1637,15 +1635,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         # Safe default/escape: a stray Enter or tap cancels, never powers off.
         msg.setDefaultButton(btn_cancel)
         msg.setEscapeButton(btn_cancel)
-        # Mark the destructive option red so it reads as the heavy action.
-        btn_off.setStyleSheet(
-            "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            " stop:0 #C0141F, stop:1 #8E0F18); border: none; border-radius: 9px;"
-            " padding: 7px 16px; min-width: 90px; min-height: 36px;"
-            " font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; }"
-            "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            " stop:0 #d41828, stop:1 #a01020); }"
-        )
+        from ui.message_box_layout import destructive_message_button_qss
+        btn_off.setStyleSheet(destructive_message_button_qss())
+        fit_message_box_buttons(msg)
         msg.exec_()
         clicked = msg.clickedButton()
         if clicked is btn_keep:

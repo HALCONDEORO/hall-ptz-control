@@ -78,8 +78,8 @@ def main():
     try:
         app = QApplication(sys.argv)
         signal.signal(signal.SIGTERM, lambda *_: app.quit())
-        from ui.styles import message_box_qss
-        app.setStyleSheet(message_box_qss())
+        from ui.styles import message_box_qss, touch_scrollbar_qss
+        app.setStyleSheet(message_box_qss() + touch_scrollbar_qss())
         install_virtual_keyboard(app)
 
         main_win = MainWindow()

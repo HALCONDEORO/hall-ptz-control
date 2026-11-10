@@ -470,3 +470,37 @@ def test_cli_restore_dry_run_returns_zero_and_no_files_written(tmp_path, monkeyp
     assert rc == 0
     # dry-run must not restore — file must still show the overwritten content
     assert (data_dir / "seat_names.json").read_text(encoding="utf-8") == "CHANGED"
+
+
+def test_restore_preserves_existing_access_metadata(tmp_path):
+    import os
+    from unittest.mock import patch
+    dest = tmp_path / 'config.yaml'
+    dest.write_bytes(b'old')
+    dest.chmod(0o640)
+    before = dest.stat()
+    with patch('core.atomic_write.os.fchown', wraps=os.fchown) as chown:
+        RestoreService._atomic_write(b'new', dest)
+    after = dest.stat()
+    assert dest.read_bytes() == b'new'
+    assert after.st_mode & 0o777 == 0o640
+    assert (after.st_uid, after.st_gid) == (before.st_uid, before.st_gid)
+    # Same-owner saves must work without privileges or unnecessary chown.
+    chown.assert_not_called()
+
+
+def test_restore_chowns_temp_before_replacement_when_owner_differs(tmp_path):
+    import os
+    from unittest.mock import patch
+    dest = tmp_path / 'config.yaml'
+    dest.write_bytes(b'old')
+    dest.chmod(0o640)
+    original_fstat = os.fstat
+    def different_writer(fd):
+        values = list(original_fstat(fd))
+        values[4] += 1
+        return os.stat_result(values)
+    with patch('core.atomic_write.os.fstat', side_effect=different_writer), \
+         patch('core.atomic_write.os.fchown') as chown:
+        RestoreService._atomic_write(b'new', dest)
+    assert chown.call_args.args[1:] == (dest.stat().st_uid, dest.stat().st_gid)

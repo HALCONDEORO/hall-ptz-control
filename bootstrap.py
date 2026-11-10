@@ -167,7 +167,6 @@ def build_app_context(cameras, flight_recorder=None) -> AppContext:
     state = SystemState()
 
     bus = AsyncEventBus()
-    bus.start()
 
     cam_configs = _load_cam_configs()
 
@@ -207,6 +206,8 @@ def build_app_context(cameras, flight_recorder=None) -> AppContext:
         call_set_policy=CallSetCommandPolicy(),
         bus=bus,
     )
+
+    bus.start()
 
     return AppContext(
         state=state,

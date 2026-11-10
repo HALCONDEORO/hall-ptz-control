@@ -14,6 +14,8 @@
 from __future__ import annotations
 
 import logging
+from functools import wraps
+from core.motion_admission import MotionAdmission
 from typing import TYPE_CHECKING
 
 from core.events import AsyncEventBus, EventType, Event
@@ -25,6 +27,21 @@ if TYPE_CHECKING:
     from ports.camera_port import CameraPort
 
 logger = logging.getLogger(__name__)
+
+
+def _motion_handler(handler):
+    @wraps(handler)
+    def guarded(self, event):
+        ticket = getattr(event, '_motion_ticket', None)
+        if ticket is None:  # Direct handler callers (legacy/tests).
+            self._prepare_motion(event)
+            ticket = event._motion_ticket
+        with self._motion.lock:
+            if not self._motion.current(ticket):
+                return
+        with self._motion.intent(ticket):
+            return handler(self, event)
+    return guarded
 
 
 class Controller:
@@ -45,12 +62,16 @@ class Controller:
         # Camera-confirmed slots survive a disk failure, but are not durable
         # until a later retry persists them. Track stable slots, not mutable names.
         self._pending_preset_persistence: set[int] = set()
+        fence = getattr(camera_port, "_motion_admission", None)
+        self._motion = fence if isinstance(fence, MotionAdmission) else MotionAdmission(lambda cid: cid)
+        self._bus.register_motion_safety(
+            self._prepare_motion, self._emergency_stop, self._cancel_emergency_stop
+        )
         self._register()
 
     def _register(self) -> None:
         self._bus.subscribe(EventType.SEAT_SELECTED,         self._on_seat_selected)
         self._bus.subscribe(EventType.CAMERA_MOVE,           self._on_camera_move)
-        self._bus.subscribe(EventType.CAMERA_STOP,           self._on_camera_stop)
         self._bus.subscribe(EventType.CAMERA_ZOOM,           self._on_camera_zoom)
         self._bus.subscribe(EventType.CAMERA_HOME,           self._on_camera_home)
         self._bus.subscribe(EventType.CHAIRMAN_ASSIGNED,     self._on_chairman_assigned)
@@ -62,6 +83,37 @@ class Controller:
     # ─────────────────────────────────────────────────────────────────────
     #  Helpers
     # ─────────────────────────────────────────────────────────────────────
+
+    _MOTION_EVENTS = frozenset({
+        EventType.SEAT_SELECTED, EventType.CAMERA_MOVE, EventType.CAMERA_ZOOM,
+        EventType.CAMERA_HOME, EventType.CHAIRMAN_ASSIGNED,
+    })
+
+    def _prepare_motion(self, event):
+        if event.type not in self._MOTION_EVENTS and event.type is not EventType.CAMERA_STOP:
+            return None
+        cam = (1 if event.type is EventType.CHAIRMAN_ASSIGNED else
+               event.payload.get("camera", self._state.active_camera))
+        event.payload = dict(event.payload, camera=cam)
+        camera_id = self._cam_id(cam)
+        ticket = (self._motion.retire(camera_id) if event.type is EventType.CAMERA_STOP
+                  else self._motion.capture(camera_id))
+        event._motion_ticket = ticket
+        return cam  # Two logical slots bound the pending emergency lane.
+
+    def _cancel_emergency_stop(self, event):
+        self._motion.cancel(event._motion_ticket)
+
+    def _emergency_stop(self, event):
+        ticket = event._motion_ticket
+        try:
+            with self._motion.intent(ticket):
+                self._on_camera_stop(event)
+        finally:
+            ticket.ready.set()  # Failure must not strand future admissions.
+
+    def _commit_motion(self, event, update):
+        return self._motion.commit(event._motion_ticket, update)
 
     @staticmethod
     def _cam_id(cam: int) -> str:
@@ -92,6 +144,7 @@ class Controller:
     #  Handlers
     # ─────────────────────────────────────────────────────────────────────
 
+    @_motion_handler
     def _on_seat_selected(self, event: Event) -> None:
         if self._no_session("seat_selected", event.payload):
             return
@@ -114,9 +167,12 @@ class Controller:
 
         result = self._camera_port.recall_preset(self._cam_id(cam), preset)
         if self._result_ok(result):
-            self._state.camera(cam).active_preset = preset
-            self._invalidate_zoom(cam)
+            def update():
+                self._state.camera(cam).active_preset = preset
+            if self._commit_motion(event, update):
+                self._invalidate_zoom(cam)
 
+    @_motion_handler
     def _on_camera_move(self, event: Event) -> None:
         if self._no_session("camera_move", event.payload):
             return
@@ -124,19 +180,34 @@ class Controller:
         pan  = event.payload["pan_speed"]
         tilt = event.payload["tilt_speed"]
         self._camera_port.move(self._cam_id(cam), pan, tilt)
-        cam_state = self._state.camera(cam)
-        cam_state.pan_speed  = pan
-        cam_state.tilt_speed = tilt
+        def update():
+            cam_state = self._state.camera(cam)
+            cam_state.pan_speed = pan
+            cam_state.tilt_speed = tilt
+        self._commit_motion(event, update)
 
     def _on_camera_stop(self, event: Event) -> None:
         # stop_move is always safe to send — it should work even without a session
         # (e.g., stop a runaway move after session ends).  No session guard here.
+        if not hasattr(event, '_motion_ticket'):
+            self._prepare_motion(event)
         cam = event.payload["camera"]
+        def update():
+            # Clear every logical view of the stopped physical endpoint.
+            endpoint = event._motion_ticket.endpoint
+            for logical in (1, 2):
+                try:
+                    matches = self._motion.endpoint(self._cam_id(logical)) == endpoint
+                except ValueError:
+                    matches = False
+                if matches:
+                    cam_state = self._state.camera(logical)
+                    cam_state.pan_speed = 0
+                    cam_state.tilt_speed = 0
+        self._commit_motion(event, update)
         self._camera_port.stop_move(self._cam_id(cam))
-        cam_state = self._state.camera(cam)
-        cam_state.pan_speed  = 0
-        cam_state.tilt_speed = 0
 
+    @_motion_handler
     def _on_camera_zoom(self, event: Event) -> None:
         if self._no_session("camera_zoom", event.payload):
             return
@@ -144,12 +215,14 @@ class Controller:
         speed = event.payload["speed"]
         self._camera_port.zoom(self._cam_id(cam), speed)
 
+    @_motion_handler
     def _on_camera_home(self, event: Event) -> None:
         if self._no_session("camera_home", event.payload):
             return
         cam = event.payload["camera"]
         self._camera_port.home(self._cam_id(cam))
 
+    @_motion_handler
     def _on_chairman_assigned(self, event: Event) -> None:
         if self._no_session("chairman_assigned", event.payload):
             return
@@ -161,8 +234,10 @@ class Controller:
         cam = 1  # Chairman siempre controla Cam1 (Platform)
         result = self._camera_port.recall_preset(self._cam_id(cam), preset)
         if self._result_ok(result):
-            self._state.camera(cam).active_preset = preset
-            self._invalidate_zoom(cam)
+            def update():
+                self._state.camera(cam).active_preset = preset
+            if self._commit_motion(event, update):
+                self._invalidate_zoom(cam)
         else:
             logger.warning("chairman_assigned: fallo al hacer recall preset %d", preset)
 

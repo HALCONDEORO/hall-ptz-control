@@ -106,6 +106,9 @@ class ViscaCommand:
     sent_at: float                           = 0.0  # first network send attempt; 0 while queued
 
 
+MAX_VISCA_RESPONSE_BYTES = 4096  # bounded aggregate, including ignored/partial frames
+
+
 class CameraWorkerSignals(QObject):
     """Señales Qt para CameraWorker (QObject requerido para pyqtSignal)."""
     connection_changed       = pyqtSignal(bool)    # True = conectado, False = desconectado
@@ -205,6 +208,9 @@ class CameraWorker:
             return False
 
     def send_priority(self, cmd: ViscaCommand) -> bool:
+        return self._send_priority_admitted(cmd)
+
+    def _send_priority_admitted(self, cmd: ViscaCommand, *, deferred_failures=None) -> bool:
         """
         Vacía la cola de comandos pendientes y coloca cmd en primer lugar.
 
@@ -276,13 +282,60 @@ class CameraWorker:
         # timeout entero por un comando que ya no se va a ejecutar.
         for c in dropped:
             if c is not None and c.on_failure is not None:
-                try:
-                    c.on_failure()
-                except Exception as exc:
-                    logger.exception("CameraWorker %s: on_failure raised: %s", self.ip, exc)
+                if deferred_failures is not None:
+                    deferred_failures.append(c.on_failure)
+                else:
+                    try:
+                        c.on_failure()
+                    except Exception as exc:
+                        logger.exception("CameraWorker %s: on_failure raised: %s", self.ip, exc)
         logger.debug("%s cam=%s type=%s queued (priority)",
                      cmd.cmd_id, self.ip,
                      CameraWorker._classify_payload(cmd.payload))
+        return True
+
+    def _send_stop_batch_admitted(self, commands, *, deferred_failures=None) -> bool:
+        """Publish a STOP pair with one interrupt and one queue wakeup.
+
+        Frames remain separate commands with separate response validation.
+        No consumer can take the first half before the second is queued.
+        """
+        commands = tuple(commands)
+        if (not commands or len(commands) > 2
+                or any(not self._is_stop_payload(c.payload) for c in commands)
+                or len({c.payload for c in commands}) != len(commands)):
+            return False
+        payloads = {c.payload for c in commands}
+        dropped = []
+        with self._queue.not_full:
+            q = self._queue.queue
+            kept = [c for c in q if c is None or (
+                c.priority and self._is_stop_payload(c.payload)
+                and c.payload not in payloads)]
+            # No half-admission or discarded sentinel if the entire pair cannot fit.
+            if self._queue.maxsize > 0 and len(kept) + len(commands) > self._queue.maxsize:
+                return False
+            dropped = [c for c in q if c is not None and not (
+                c.priority and self._is_stop_payload(c.payload)
+                and c.payload not in payloads)]
+            now = time.monotonic()
+            for cmd in commands:
+                cmd.priority = True
+                cmd.queued_at = now
+            self._interrupt.set()
+            q.clear()
+            q.extend(kept)
+            q.extend(commands)
+            self._queue.not_empty.notify()
+        for cmd in dropped:
+            if cmd.on_failure is not None:
+                if deferred_failures is not None:
+                    deferred_failures.append(cmd.on_failure)
+                else:
+                    try:
+                        cmd.on_failure()
+                    except Exception:
+                        logger.exception("Dropped STOP-batch command callback raised")
         return True
 
     def heartbeat_age(self) -> float:
@@ -301,15 +354,44 @@ class CameraWorker:
         lo interrumpió. Solo para comandos priority: ambas mitades del STOP
         (pan/tilt y zoom) deben salir aunque se interrumpan entre sí.
         """
-        try:
-            self._queue.put_nowait(cmd)
-            logger.info("%s cam=%s STOP reencolado tras interrupción", cmd.cmd_id, self.ip)
-        except queue.Full:
-            # Tras el drain de send_priority la cola solo puede llevar el
-            # sentinel y las dos mitades de STOP: lleno aquí es inesperado.
-            logger.error("%s cam=%s STOP perdido: cola llena al reencolar", cmd.cmd_id, self.ip)
+        if not self._is_stop_payload(cmd.payload):
+            cmd.cancelled.set()
+            if cmd.on_failure is not None:
+                try:
+                    cmd.on_failure()
+                except Exception:
+                    logger.exception("Canceled priority command failure callback raised")
+            return
+        dropped = None
+        with self._queue.not_full:
+            q = self._queue.queue
+            # An interrupted STOP must stay ahead of fresh ordinary work.
+            # Appending it could stop a MOVE accepted after emergency admission.
+            if any(c is not None and c.priority and c.payload == cmd.payload
+                   for c in q):
+                return
+            if self._queue.maxsize > 0 and len(q) >= self._queue.maxsize:
+                index = next((i for i in range(len(q) - 1, -1, -1)
+                              if q[i] is not None and not q[i].priority), None)
+                if index is None:
+                    logger.error("CameraWorker %s: no room to requeue STOP", self.ip)
+                    return
+                dropped = q[index]
+                del q[index]
+            index = next((i for i, c in enumerate(q)
+                          if c is not None and not c.priority), len(q))
+            q.insert(index, cmd)
+            self._queue.not_empty.notify()
+        if dropped is not None and dropped.on_failure is not None:
+            try:
+                dropped.on_failure()
+            except Exception:
+                logger.exception("CameraWorker %s: on_failure raised", self.ip)
 
     def send_confirmed(self, cmd: ViscaCommand, timeout: float) -> bool:
+        return self._send_confirmed_admitted(cmd, timeout)
+
+    def _send_confirmed_admitted(self, cmd: ViscaCommand, timeout: float, *, admit=None) -> bool:
         """
         Encola `cmd` y bloquea al llamante hasta Completion, Error o timeout.
 
@@ -325,7 +407,8 @@ class CameraWorker:
         cmd.on_failure = lambda: (box.__setitem__("ok", False), done.set())
         cmd.fast_connect = True
         cmd.expires_at = time.monotonic() + timeout
-        if not self.send(cmd):
+        accepted = self.send(cmd) if admit is None else admit(lambda: self.send(cmd))
+        if not accepted:
             logger.warning("%s cam=%s send_confirmed: cola llena", cmd.cmd_id, self.ip)
             return False
         if not done.wait(timeout):
@@ -500,9 +583,7 @@ class CameraWorker:
         # la UI.  Los reintentos son interrumpibles vía _interrupt.
         self._close_socket()
         new_sock = self._connect_with_retry()
-        with self._lock:
-            self._sock = new_sock
-        self._set_connected(new_sock is not None)
+        self._publish_socket(new_sock)
 
     @staticmethod
     def _socket_alive(sock: socket.socket) -> bool:
@@ -592,6 +673,10 @@ class CameraWorker:
             self._set_state(CameraConnectionState.CONNECTING)
             sock = self._connect()
             if sock is not None:
+                if self._shutdown.is_set() or self._interrupt.is_set():
+                    sock.close()
+                    self._set_connected(False)
+                    return None
                 return sock
             if attempt == max_att:
                 logger.warning(
@@ -607,6 +692,18 @@ class CameraWorker:
             if self._wait_interruptible(backoff):
                 return None
         return None  # reached only when max_attempts == 0
+
+    def _publish_socket(self, sock):
+        """Transfer a fresh connection only while this worker still owns it."""
+        with self._lock:
+            if self._shutdown.is_set():
+                if sock is not None:
+                    sock.close()
+                self._set_connected(False)
+                return None
+            self._sock = sock
+            self._set_connected(sock is not None)
+            return sock
 
     def _close_socket(self):
         """Cierra el socket actual de forma segura, ignorando errores."""
@@ -688,6 +785,7 @@ class CameraWorker:
         """
         buf = b''
         pending = b''
+        received_bytes = 0
         ack_identity = None
         deadline = time.monotonic() + VISCA_READ_TIMEOUT
         while True:
@@ -709,6 +807,11 @@ class CameraWorker:
             chunk = sock.recv(1024)
             if not chunk:
                 break
+            received_bytes += len(chunk)
+            if received_bytes > MAX_VISCA_RESPONSE_BYTES:
+                # Fail the whole read, never accept a truncated final frame.
+                # The worker's OSError path closes the ambiguous session.
+                raise OSError(errno.EMSGSIZE, "VISCA response exceeds bounded read budget")
             pending += chunk
             while b"\xff" in pending:
                 frame, pending = pending.split(b"\xff", 1)
@@ -842,8 +945,7 @@ class CameraWorker:
                     # presupuesto largo de reconexión: intentos inmediatos.
                     policy = _PRIORITY_RETRY_POLICY if (cmd.priority or cmd.fast_connect) else CAMERA_RETRY_POLICY
                     sock_ref = self._connect_with_retry(policy=policy)
-                    with self._lock:
-                        self._sock = sock_ref
+                    sock_ref = self._publish_socket(sock_ref)
 
                 if sock_ref is None:
                     # Sin conexión. Un STOP interrumpido por otro STOP más
@@ -885,7 +987,13 @@ class CameraWorker:
                     # Si send_priority() interrumpió la lectura: un STOP no se
                     # pierde — se reencola tras el más nuevo; un comando normal
                     # queda obsoleto y un confirmado falla hacia su llamante.
-                    if self._interrupt.is_set():
+                    # A later STOP half must not cancel a STOP that already
+                    # returned a terminal frame. Keep normal validation below:
+                    # ACK-only/partial responses still take the interrupt path,
+                    # and non-STOP commands retain fail-closed cancellation.
+                    completed_stop = (self._is_stop_payload(cmd.payload)
+                                      and self._has_final_visca_frame(response))
+                    if self._interrupt.is_set() and not completed_stop:
                         _interrupted = True
                         if cmd.priority:
                             self._requeue(cmd)

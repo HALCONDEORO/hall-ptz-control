@@ -98,14 +98,30 @@ class AsyncEventBus:
         self._worker: Optional[threading.Thread] = None
         self._lifecycle_lock = threading.Lock()
         self._stop_requested = False
+        # One explicit queue-only STOP subscriber; ordinary handlers stay serial.
+        self._safety_prepare = None
+        self._safety_stop = None
+        self._safety_cancel = None
+        self._emergency_active = None
+        self._emergency = {}
+        self._emergency_condition = threading.Condition()
+        self._emergency_stopping = False
+        self._emergency_worker = None
 
     # ── Ciclo de vida ────────────────────────────────────────────────────────
 
     def start(self) -> None:
         with self._lifecycle_lock:
-            if self._worker is not None and self._worker.is_alive():
+            if any(w is not None and w.is_alive() for w in
+                   (self._worker, self._emergency_worker)):
                 return  # Includes a worker still finishing a timed-out stop.
             self._stop_requested = False
+            with self._emergency_condition:
+                self._emergency_stopping = False
+            self._emergency_worker = threading.Thread(
+                target=self._run_emergency, name="AsyncEventBus-STOP", daemon=True,
+            )
+            self._emergency_worker.start()
             self._worker = threading.Thread(
                 target=self._run,
                 name="AsyncEventBus-worker",
@@ -117,15 +133,25 @@ class AsyncEventBus:
         with self._lifecycle_lock:
             worker = self._worker
             if worker is None:
+                with self._emergency_condition:
+                    self._cancel_emergency_barriers()
                 return
             if not self._stop_requested:
                 self._queue.put(None)
                 self._stop_requested = True
+                with self._emergency_condition:
+                    self._emergency_stopping = True
+                    self._emergency_condition.notify_all()
         # A handler may request stop itself. Let it return and consume the
         # sentinel rather than trying to join its own thread.
         if worker is threading.current_thread():
             return
         worker.join(timeout=2.0)
+        emergency = self._emergency_worker
+        if emergency is not None and emergency is not threading.current_thread():
+            emergency.join(timeout=2.0)
+        with self._emergency_condition:
+            self._cancel_emergency_barriers()
         with self._lifecycle_lock:
             if self._worker is worker and not worker.is_alive():
                 self._worker = None
@@ -162,7 +188,64 @@ class AsyncEventBus:
     # ── Publicación ──────────────────────────────────────────────────────────
 
     def emit(self, event_type: EventType, **payload: Any) -> None:
-        self._queue.put(Event(type=event_type, payload=payload))
+        event = Event(type=event_type, payload=payload)
+        # Preparation only captures/retires epochs. No port calls or user handlers.
+        with self._emergency_condition:
+            if self._safety_prepare is not None:
+                key = self._safety_prepare(event)
+                if event_type is EventType.CAMERA_STOP:
+                    if self._worker is None or self._stop_requested:
+                        if self._safety_cancel is not None:
+                            self._safety_cancel(event)
+                        return
+                    self._emergency[key] = event
+                    self._emergency_condition.notify()
+                    return
+            self._queue.put(event)
+
+    def register_motion_safety(self, prepare, stop_handler, cancel_handler=None) -> None:
+        """Register the controller's sole STOP lane before starting the bus.
+
+        prepare must be bounded, memory-only; stop_handler must only admit STOP.
+        This is deliberately not a general parallel subscription API.
+        """
+        with self._lifecycle_lock:
+            if self._safety_prepare is not None or self._worker is not None:
+                raise RuntimeError("motion safety must be registered once before start")
+            self._safety_prepare = prepare
+            self._safety_stop = stop_handler
+            self._safety_cancel = cancel_handler
+
+    def _cancel_emergency_barriers(self):
+        # Called under the emergency condition. Never mark cancellation as STOP
+        # success: the endpoint stays closed until a new live STOP is admitted.
+        if self._safety_cancel is not None:
+            events = list(self._emergency.values())
+            if self._emergency_active is not None:
+                events.append(self._emergency_active)
+            for event in events:
+                self._safety_cancel(event)
+
+    def _run_emergency(self) -> None:
+        while True:
+            with self._emergency_condition:
+                self._emergency_condition.wait_for(
+                    lambda: self._emergency or self._emergency_stopping
+                )
+                if not self._emergency:
+                    return
+                key = next(iter(self._emergency))
+                event = self._emergency.pop(key)
+                self._emergency_active = event
+            try:
+                self._safety_stop(event)
+            except Exception:
+                logger.exception("Emergency STOP admission failed")
+            finally:
+                with self._emergency_condition:
+                    self._emergency_active = None
+            # Observers retain serial dispatch on the ordinary consumer.
+            self._queue.put(event)
 
     # ── Worker interno ───────────────────────────────────────────────────────
 

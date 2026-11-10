@@ -279,3 +279,14 @@ class TestTransientCameraProbe:
         stub._home_camera.assert_not_called()
         sock.send.assert_not_called()
         sock.sendall.assert_not_called()
+
+
+def test_diagnostic_tcp_scan_never_probes_configured_camera_sessions():
+    stub = MagicMock()
+    with patch.object(ss._sim_mode, 'is_active', return_value=False), \
+         patch.object(ss, 'get_camera_subnet', return_value='192.0.2'), \
+         patch.object(ss, 'CAM1', types.SimpleNamespace(ip='192.0.2.11')), \
+         patch.object(ss, 'CAM2', types.SimpleNamespace(ip='192.0.2.12')), \
+         patch.object(ss, 'tcp_scan', return_value=['192.0.2.20']) as scan:
+        assert ss.SplashScreen._test_tcp_scan(stub) is True
+    scan.assert_called_once_with('192.0.2', exclude_ips={'192.0.2.11', '192.0.2.12'})

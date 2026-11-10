@@ -26,9 +26,11 @@ def maybe_prompt_power_on(self) -> None:
     box.setInformativeText('Start the session and turn on the cameras, or leave them as they are.')
     yes_btn = box.addButton('Turn on cameras', QMessageBox.AcceptRole)
     no_btn = box.addButton('Not now', QMessageBox.RejectRole)
+    from ui.message_box_layout import fit_message_box_buttons
+    fit_message_box_buttons(box)
     for button in (yes_btn, no_btn):
-        button.setMinimumHeight(52)
-        button.setMinimumWidth(220)
+        button.setMinimumHeight(max(52, button.minimumHeight()))
+        button.setMinimumWidth(max(220, button.minimumWidth()))
     box.setStyleSheet('QMessageBox { font-size: 18px; } '
                       'QPushButton { font-size: 16px; padding: 10px 16px; }')
     box.setDefaultButton(no_btn)
