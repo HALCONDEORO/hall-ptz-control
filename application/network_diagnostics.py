@@ -10,8 +10,11 @@
 
 from __future__ import annotations
 
+import getpass
 import ipaddress
+import os
 import socket
+import subprocess
 import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional
@@ -23,6 +26,76 @@ import config as _runtime_config
 VISCA_PORT = _runtime_config.VISCA_PORT
 # Puerto de control del ATEM (BlackMagic)
 ATEM_PORT = 9910
+
+#: systemd units that own the running app's camera sessions (#885).
+SYSTEM_UNIT = "khptz-control"
+GUI_UNIT = "khptz-gui.service"
+
+
+def _unit_state(argv: List[str]) -> Optional[str]:
+    """Return systemctl's is-active answer for a unit, or None when unknown.
+
+    Only the four definitive states are returned; an error, a missing unit or
+    missing systemd yields None so callers can treat the case as "unknown"
+    rather than "not running".
+    """
+    try:
+        result = subprocess.run(
+            argv, capture_output=True, text=True, timeout=5,
+        )
+    except Exception:  # noqa: BLE001 — no systemd, no runuser, timeout: unknown
+        return None
+    state = result.stdout.strip()
+    return state if state in ("active", "activating", "inactive", "failed") else None
+
+
+def _gui_unit_state_for(user: str) -> Optional[str]:
+    """is-active for the desktop user's session-owned GUI unit.
+
+    Returns None when the unit state cannot be determined (neither root nor
+    the desktop user is asking).
+    """
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None and getuid() == 0:
+        return _unit_state(
+            ["runuser", "-u", user, "--", "systemctl", "--user", "is-active", GUI_UNIT]
+        )
+    try:
+        if getpass.getuser() == user:
+            return _unit_state(["systemctl", "--user", "is-active", GUI_UNIT])
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def app_may_be_running(resolver=None) -> bool:
+    """True whenever the local app may own live camera sessions.
+
+    The VISCA probe in check_cameras() opens a second TCP connection to each
+    camera; on single-session models that evicts the app's own worker, which
+    is exactly the "camera dropped for no reason" an operator was diagnosing
+    when they ran doctor (#144/#145 doctrine). Skipping a probe is always
+    safe, so any doubt returns True — probing happens only when the unit
+    that owns the GUI is definitively inactive.
+    """
+    system_state = _unit_state(["systemctl", "is-active", SYSTEM_UNIT])
+    if system_state in ("active", "activating"):
+        return True
+    try:
+        from runtime.install_state import GUI_MODE_USER, gui_mode, state_value
+    except Exception:  # noqa: BLE001
+        return system_state not in ("inactive", "failed")
+    if gui_mode(resolver) == GUI_MODE_USER:
+        user = state_value("KHPTZ_WIZARD_USER", resolver)
+        gui_state = _gui_unit_state_for(user) if user else None
+        if gui_state in ("active", "activating"):
+            return True
+        if system_state is None or gui_state is None:
+            return True  # could not prove the app is down
+        return False
+    # System mode (or a pre-#885 install with no recorded mode): the system
+    # unit owns the GUI, and it was already checked above.
+    return system_state not in ("inactive", "failed")
 
 
 @dataclass
@@ -71,6 +144,11 @@ class NetworkDiagnosticsService:
     local_ips_fn:
         Injectable function ``() -> list[str]`` returning this host's IPv4 addresses.
         Defaults to ``_system_local_ipv4_addresses()``. Override in tests.
+    app_running_fn:
+        Injectable function ``() -> bool`` telling whether the local app may
+        own live camera sessions. Defaults to ``app_may_be_running``. While it
+        returns True, camera VISCA probes are skipped so a diagnostic cannot
+        evict a single-session camera's worker. Override in tests.
     """
 
     def __init__(
@@ -78,11 +156,13 @@ class NetworkDiagnosticsService:
         probe_fn: Optional[Callable[[str, int], bool]] = None,
         timeout: float = 1.0,
         local_ips_fn: Optional[Callable[[], list[str]]] = None,
+        app_running_fn: Optional[Callable[[], bool]] = None,
     ) -> None:
         self._timeout = timeout
         self._probe_fn_injected = probe_fn is not None
         self._probe = probe_fn or (lambda host, port: _tcp_probe(host, port, self._timeout))
         self._local_ips = local_ips_fn or _system_local_ipv4_addresses
+        self._app_running = app_running_fn or app_may_be_running
 
     # ── Pi subnet check ───────────────────────────────────────────────────────
 
@@ -156,8 +236,16 @@ class NetworkDiagnosticsService:
         return reachable, elapsed_ms
 
     def check_cameras(self, settings) -> List[CheckResult]:
-        """Return one CheckResult per configured camera."""
+        """Return one CheckResult per configured camera.
+
+        While the local app may own live camera sessions, the TCP probe is
+        skipped: opening a second connection to the VISCA port can evict a
+        single-session camera's worker, so the diagnostic would cause the
+        very disconnect it is meant to explain. A camera with no IP still
+        FAILs — that is a configuration fact, not a probe result.
+        """
         results = []
+        probe_allowed = not self._app_running()
         for cam in settings.cameras:
             ip = cam.ip.strip()
             if not ip:
@@ -167,6 +255,15 @@ class NetworkDiagnosticsService:
                 ))
                 continue
             visca_port = _visca_port()
+            if not probe_allowed:
+                results.append(CheckResult(
+                    f"camera_{cam.id}_reachable",
+                    Status.OK,
+                    f"Camera '{cam.id}' ({ip}): configured — VISCA probe not "
+                    f"run while the app may own the camera session (a second "
+                    f"connection can evict it); live state is on the camera card",
+                ))
+                continue
             if self._probe_fn_injected:
                 reachable = self._probe(ip, visca_port)
                 latency_ms = 0.0

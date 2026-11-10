@@ -30,6 +30,9 @@ motion readiness. Error, ACK-only, missing/unknown power data and stale results
 from a replaced endpoint do not turn the new endpoint's badge green. The check
 runs off the GUI thread and results are also endpoint-checked on GUI delivery.
 Standalone discovery and external CLI/diagnostic probes remain separate paths.
+The in-app diagnostics run and `khptz doctor`/`khptz cameras` no longer open a
+second VISCA connection while the app may own the camera session: their camera
+probe is skipped unless the unit that owns the GUI is definitively inactive.
 
 Opening Settings reads the existing CameraManager connection snapshot instead
 of opening extra TCP probe sessions. The displayed online/offline state is
