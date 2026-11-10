@@ -426,14 +426,24 @@ class LoginScreen(QWidget):
 
         if self._operator_auto:
             # Auto-entrada con cuenta atrás: sin contraseña (dentro de horario).
-            self.is_locked = False
-            self.login_btn.setEnabled(True)
-            self._start_operator_countdown()
-            self.login_btn.setFocus()
+            # Un bloqueo temporal activo sobrevive al cambio de modo: la cuenta
+            # atrás y el botón esperan a que termine el timer de bloqueo.
+            self.login_btn.setEnabled(not self.is_locked)
+            if not self.is_locked:
+                self._start_operator_countdown()
+                self.login_btn.setFocus()
         else:  # admin, u operador fuera de horario (pide contraseña de operador)
             self.login_btn.setText('ACCESS')
-            self._check_password_configured()
-            self.password_input.setFocus()
+            if self.is_locked:
+                # Bloqueo en curso: el formulario permanece deshabilitado hasta
+                # que el timer de bloqueo lo reactive. Antes, volver de Operador
+                # a Admin dejaba el botón ACCESS habilitado (y el flag
+                # is_locked borrado), reanudando los intentos antes de tiempo.
+                self.password_input.setEnabled(False)
+                self.login_btn.setEnabled(False)
+            else:
+                self._check_password_configured()
+                self.password_input.setFocus()
 
     # ── Cuenta atrás de auto-entrada como Operador ─────────────────────────────
 
@@ -617,10 +627,14 @@ class LoginScreen(QWidget):
             else:
                 # Desbloquear cuando termine
                 self.is_locked = False
-                self.password_input.setEnabled(True)
                 self.login_btn.setEnabled(True)
                 self._set_status('✓ Unlock complete — retry', 'success')
-                self.password_input.setFocus()
+                if self._operator_auto:
+                    # El bloqueo pausó la cuenta atrás de Operador: reanudarla.
+                    self._start_operator_countdown()
+                else:
+                    self.password_input.setEnabled(True)
+                    self.password_input.setFocus()
                 # Detener timer
                 self.lockout_timer.stop()
 
