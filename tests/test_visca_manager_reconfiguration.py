@@ -2,7 +2,7 @@
 # Licensed under the MIT License. See LICENSE in the repository root.
 """Reconfiguration must not inherit another endpoint's cache or query lease."""
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -59,3 +59,15 @@ def test_retired_zoom_result_does_not_overwrite_new_endpoint(manager):
     manager.set_zoom("192.0.2.3", 12)
     manager.set_zoom("192.0.2.1", 78)
     assert manager.get_zoom("192.0.2.3") == 12
+
+
+def test_same_ip_keeps_worker_connection_and_observations(manager):
+    with patch('ptz.visca.manager.CameraWorker') as factory:
+        original = Mock()
+        manager._workers['192.0.2.1'] = original
+        manager.set_zoom('192.0.2.1', 42)
+        manager.update_camera_ip(1, '192.0.2.1')
+        assert manager.worker('192.0.2.1') is original
+        factory.assert_not_called()
+        original.stop.assert_not_called()
+        assert manager.get_zoom('192.0.2.1') == 42

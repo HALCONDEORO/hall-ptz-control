@@ -106,6 +106,8 @@ class CameraManager:
         self._validate_camera_key(cam_key)
         with self._workers_lock:
             old_ip = self._cam1_ip if cam_key == 1 else self._cam2_ip
+            if old_ip == new_ip:
+                return
             with self._inflight_lock:
                 if cam_key == 1:
                     self._cam1_ip = new_ip
