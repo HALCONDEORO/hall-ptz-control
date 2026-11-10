@@ -717,7 +717,9 @@ class CameraWorker:
         llamado desde otro contexto), la excepción de send/recv se captura
         y el worker reintenta reconectando.
         """
-        while True:
+        while not self._shutdown.is_set():
+            # A full queue can reject stop()'s sentinel. The shutdown flag is
+            # authoritative; never depend on admitting an extra queue item.
             self._last_heartbeat = time.monotonic()
             self._last_progress  = self._last_heartbeat
             # Espera hasta HEARTBEAT_TIMEOUT s; si no hay comando, ejecuta heartbeat y vuelve a esperar
