@@ -503,9 +503,7 @@ class CameraWorker:
         # la UI.  Los reintentos son interrumpibles vía _interrupt.
         self._close_socket()
         new_sock = self._connect_with_retry()
-        with self._lock:
-            self._sock = new_sock
-        self._set_connected(new_sock is not None)
+        self._publish_socket(new_sock)
 
     @staticmethod
     def _socket_alive(sock: socket.socket) -> bool:
@@ -595,6 +593,10 @@ class CameraWorker:
             self._set_state(CameraConnectionState.CONNECTING)
             sock = self._connect()
             if sock is not None:
+                if self._shutdown.is_set() or self._interrupt.is_set():
+                    sock.close()
+                    self._set_connected(False)
+                    return None
                 return sock
             if attempt == max_att:
                 logger.warning(
@@ -610,6 +612,18 @@ class CameraWorker:
             if self._wait_interruptible(backoff):
                 return None
         return None  # reached only when max_attempts == 0
+
+    def _publish_socket(self, sock):
+        """Transfer a fresh connection only while this worker still owns it."""
+        with self._lock:
+            if self._shutdown.is_set():
+                if sock is not None:
+                    sock.close()
+                self._set_connected(False)
+                return None
+            self._sock = sock
+            self._set_connected(sock is not None)
+            return sock
 
     def _close_socket(self):
         """Cierra el socket actual de forma segura, ignorando errores."""
@@ -851,8 +865,7 @@ class CameraWorker:
                     # presupuesto largo de reconexión: intentos inmediatos.
                     policy = _PRIORITY_RETRY_POLICY if (cmd.priority or cmd.fast_connect) else CAMERA_RETRY_POLICY
                     sock_ref = self._connect_with_retry(policy=policy)
-                    with self._lock:
-                        self._sock = sock_ref
+                    sock_ref = self._publish_socket(sock_ref)
 
                 if sock_ref is None:
                     # Sin conexión. Un STOP interrumpido por otro STOP más
