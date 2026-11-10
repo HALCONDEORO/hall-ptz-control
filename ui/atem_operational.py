@@ -5,6 +5,15 @@ from domain.atem_state import ATEMState
 
 
 def atem_operational(window):
+    fake = getattr(window, '_fake_atem', None)
+    if fake is not None and getattr(window, '_atem_monitor', None) is None:
+        # Demo/sim: there is no live monitor to verify and no IP to check —
+        # the FakeATEM itself is the operative surface. Gate on its own
+        # connection state so demo controls stay usable.
+        try:
+            return bool(fake.get_status().connected)
+        except Exception:
+            return False
     monitor = getattr(window, '_atem_monitor', None)
     return bool(
         window._atem_is_configured()

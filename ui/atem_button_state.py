@@ -16,7 +16,27 @@ _DOT_RED = "background: #c62828; border-radius: 6px;"
 
 
 def apply_atem_button_state(btn, dot, panel, state, fake_atem, *, operative=False) -> None:
-    """Never leave an unusable ATEM surface on screen, including demo mode."""
+    """Never leave an unusable ATEM surface on screen (live hardware).
+
+    Demo/sim (fake_atem present) keeps the button reachable even when the
+    virtual switcher is disconnected: the demo panel owns the Reconnect
+    control, so hiding the button would lock the operator out (#921).
+    """
+    if fake_atem is not None:
+        try:
+            connected = bool(fake_atem.get_status().connected)
+        except Exception:
+            connected = False
+        visible = panel is not None
+        btn.setVisible(visible)
+        dot.setVisible(visible)
+        btn.setEnabled(visible)
+        if visible:
+            dot.setStyleSheet(_DOT_GREEN if connected else _DOT_RED)
+            btn.setToolTip(
+                "ATEM switcher panel" if connected
+                else "ATEM virtual desconectado — Reconnect en el panel")
+        return
     visible = bool(panel is not None and operative)
     btn.setVisible(visible)
     dot.setVisible(visible)
