@@ -596,3 +596,13 @@ def test_successful_power_on_records_each_camera(caplog):
         svc._power_thread.join(timeout=5)
     assert "Power ON completed for cam1" in caplog.text
     assert "Power ON completed for cam2" in caplog.text
+
+
+def test_end_keep_cameras_cancels_polls_without_standby():
+    svc, port = _svc()
+    svc._active = True
+    svc.end(reason='app_close', power_off=False)
+    assert svc.active is False
+    assert svc.session_id is None
+    assert port.calls == [('cancel_polls', 'cam1'), ('cancel_polls', 'cam2')]
+    assert not hasattr(svc, '_standby_thread')

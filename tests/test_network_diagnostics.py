@@ -32,6 +32,7 @@ def test_network_diagnostics_uses_runtime_visca_port(monkeypatch):
     seen_ports = []
     svc = NetworkDiagnosticsService(
         probe_fn=lambda host, port: seen_ports.append(port) or True,
+        app_running_fn=lambda: False,
     )
     settings = SimpleNamespace(
         cameras=[SimpleNamespace(id="platform", ip="172.16.1.11")]
@@ -189,7 +190,8 @@ class TestNetworkDiagnosticsService:
 
     def test_reachable_camera_ok(self, tmp_path):
         s = _settings(tmp_path, {"cameras": [_cam("platform", "192.168.1.11")]})
-        svc = NetworkDiagnosticsService(probe_fn=_make_probe({"192.168.1.11": True}))
+        svc = NetworkDiagnosticsService(
+            probe_fn=_make_probe({"192.168.1.11": True}), app_running_fn=lambda: False)
         results = svc.check_cameras(s)
         assert len(results) == 1
         assert results[0].status == Status.OK
@@ -197,7 +199,8 @@ class TestNetworkDiagnosticsService:
 
     def test_unreachable_camera_warning(self, tmp_path):
         s = _settings(tmp_path, {"cameras": [_cam("platform", "192.168.1.11")]})
-        svc = NetworkDiagnosticsService(probe_fn=_make_probe({"192.168.1.11": False}))
+        svc = NetworkDiagnosticsService(
+            probe_fn=_make_probe({"192.168.1.11": False}), app_running_fn=lambda: False)
         results = svc.check_cameras(s)
         assert results[0].status == Status.WARNING
         assert "unreachable" in results[0].message
@@ -207,10 +210,13 @@ class TestNetworkDiagnosticsService:
             _cam("platform", "192.168.1.11", "81"),
             _cam("comments", "192.168.1.12", "82", "comments"),
         ]})
-        svc = NetworkDiagnosticsService(probe_fn=_make_probe({
-            "192.168.1.11": True,
-            "192.168.1.12": False,
-        }))
+        svc = NetworkDiagnosticsService(
+            probe_fn=_make_probe({
+                "192.168.1.11": True,
+                "192.168.1.12": False,
+            }),
+            app_running_fn=lambda: False,
+        )
         results = svc.check_cameras(s)
         assert len(results) == 2
         statuses = {r.name: r.status for r in results}
@@ -257,6 +263,100 @@ class TestNetworkDiagnosticsService:
         result = svc.check_atem(s)
         assert result is not None
         assert result.status == Status.WARNING
+
+
+# ── Camera probe safety: never evict a live worker session ─────────────────
+
+class TestCameraProbeSafety:
+    """A diagnostic must not open a second VISCA session while the app may
+    own the camera's single control session (#144/#145 doctrine applied to
+    doctor and `khptz cameras`)."""
+
+    def test_probe_skipped_while_app_may_own_session(self, tmp_path):
+        s = _settings(tmp_path, {"cameras": [_cam("platform", "192.168.1.11")]})
+        calls = []
+
+        def probe(host, port):
+            calls.append(host)
+            return True
+
+        svc = NetworkDiagnosticsService(probe_fn=probe, app_running_fn=lambda: True)
+        results = svc.check_cameras(s)
+        assert calls == []
+        assert len(results) == 1
+        assert results[0].status == Status.OK
+        assert "probe not run" in results[0].message
+
+    def test_probe_runs_once_app_is_down(self, tmp_path):
+        s = _settings(tmp_path, {"cameras": [_cam("platform", "192.168.1.11")]})
+        calls = []
+
+        def probe(host, port):
+            calls.append(host)
+            return True
+
+        svc = NetworkDiagnosticsService(probe_fn=probe, app_running_fn=lambda: False)
+        results = svc.check_cameras(s)
+        assert calls == ["192.168.1.11"]
+        assert "reachable" in results[0].message
+
+    def test_empty_ip_still_fails_without_a_probe(self):
+        from types import SimpleNamespace
+        settings = SimpleNamespace(
+            cameras=[SimpleNamespace(id="platform", ip="  ")]
+        )
+        svc = NetworkDiagnosticsService(probe_fn=_make_probe({}), app_running_fn=lambda: True)
+        results = svc.check_cameras(settings)
+        assert results[0].status == Status.FAIL
+
+
+class TestAppMayBeRunning:
+    """The default app-running detector: doubt always means True."""
+
+    def test_system_unit_active_means_running(self, monkeypatch):
+        from application import network_diagnostics as nd
+        monkeypatch.setattr(nd, "_unit_state", lambda argv: "active")
+        assert nd.app_may_be_running() is True
+
+    def test_unknown_state_means_running(self, monkeypatch):
+        from application import network_diagnostics as nd
+        monkeypatch.setattr(nd, "_unit_state", lambda argv: None)
+        # No install-state file exists in the test environment, so gui_mode()
+        # falls back to "system" — and an unknown system-unit state is doubt.
+        assert nd.app_may_be_running() is True
+
+    def test_system_mode_unit_down_allows_probe(self, monkeypatch):
+        from application import network_diagnostics as nd
+        monkeypatch.setattr(nd, "_unit_state", lambda argv: "inactive")
+        assert nd.app_may_be_running() is False
+
+    def test_user_mode_gui_unit_active_means_running(self, monkeypatch):
+        from application import network_diagnostics as nd
+        import runtime.install_state as install_state
+        monkeypatch.setattr(nd, "_unit_state", lambda argv: "inactive")
+        monkeypatch.setattr(install_state, "gui_mode", lambda resolver=None: "user")
+        monkeypatch.setattr(
+            install_state, "state_value", lambda key, resolver=None: "khptz")
+        monkeypatch.setattr(nd, "_gui_unit_state_for", lambda user: "active")
+        assert nd.app_may_be_running() is True
+
+    def test_user_mode_all_units_down_allows_probe(self, monkeypatch):
+        from application import network_diagnostics as nd
+        import runtime.install_state as install_state
+        monkeypatch.setattr(nd, "_unit_state", lambda argv: "inactive")
+        monkeypatch.setattr(install_state, "gui_mode", lambda resolver=None: "user")
+        monkeypatch.setattr(
+            install_state, "state_value", lambda key, resolver=None: "khptz")
+        monkeypatch.setattr(nd, "_gui_unit_state_for", lambda user: "inactive")
+        assert nd.app_may_be_running() is False
+
+    def test_user_mode_unknown_wizard_user_means_running(self, monkeypatch):
+        from application import network_diagnostics as nd
+        import runtime.install_state as install_state
+        monkeypatch.setattr(nd, "_unit_state", lambda argv: "inactive")
+        monkeypatch.setattr(install_state, "gui_mode", lambda resolver=None: "user")
+        monkeypatch.setattr(install_state, "state_value", lambda key, resolver=None: "")
+        assert nd.app_may_be_running() is True
 
 
 # ── DiagnosticsService IP config check ───────────────────────────────────────
@@ -410,6 +510,7 @@ def _make_full_diag_service(
     net_svc = NetworkDiagnosticsService(
         probe_fn=_make_probe(probe_table or {}),
         local_ips_fn=_make_local_ips(*(local_ips or [])),
+        app_running_fn=lambda: False,
     )
     return DiagnosticsService(
         install_dir=install_dir,

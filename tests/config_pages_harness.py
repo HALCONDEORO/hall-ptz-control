@@ -44,8 +44,18 @@ def make_harness(*, sim_active: bool = False, session_active: bool = False,
 
     # Constructing a QWidget without a live QApplication aborts the process
     # (SIGABRT, not an exception). conftest's autouse fixture is best-effort, so
-    # build one here and hold the reference in a module global.
-    _QAPP = QApplication.instance() or QApplication(sys.argv)
+    # build one here and hold the reference in a module global. A bare
+    # QCoreApplication also makes instance() non-None while still aborting on
+    # any QWidget: skip loudly instead of killing the whole run.
+    instance = QApplication.instance()
+    if instance is not None and not isinstance(instance, QApplication):
+        import pytest
+
+        pytest.skip(
+            "proceso con QCoreApplication pelado (sin QApplication): "
+            "no se pueden construir QWidget aquí"
+        )
+    _QAPP = instance or QApplication(sys.argv)
 
     from ui.config_dialog import ConfigDialog
 

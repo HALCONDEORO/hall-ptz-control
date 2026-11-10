@@ -1689,7 +1689,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._supervisor.stop()
         if self.session_active:
             logger.info("[SHUTDOWN] ending active session on app close")
-            self._session.shutdown("app_close")
+            self._session.shutdown(
+                "app_close", power_off=(intent == ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS),
+            )
         logger.info("[SHUTDOWN] stopping event bus")
         self._bus.stop()
         if intent == ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS:

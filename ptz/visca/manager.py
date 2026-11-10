@@ -51,6 +51,8 @@ class CameraManager:
         self._workers_lock = threading.RLock()
         self._workers: dict[str, CameraWorker] = {}
         self._closed = False
+        self._retiring_workers: dict[str, CameraWorker] = {}
+        self._retirement_inflight: set[str] = set()
 
         # Cache de zoom: None = sin valor local, necesita query de red.
         # Clave: cam_key (1 o 2). Valor: último porcentaje enviado a la cámara.
@@ -98,7 +100,7 @@ class CameraManager:
         # para no bloquear worker() durante el cierre.
         with self._workers_lock:
             self._closed = True
-            workers = list(self._workers.values())
+            workers = list(self._workers.values()) + list(self._retiring_workers.values())
             self._workers.clear()
         for w in workers:
             w.stop()
@@ -121,8 +123,24 @@ class CameraManager:
             # changed. Preserve it while the other slot still uses that IP.
             old_worker = (self._workers.pop(old_ip, None)
                           if old_ip not in (self._cam1_ip, self._cam2_ip) else None)
+            if old_worker is not None:
+                self._retiring_workers[old_ip] = old_worker
+                self._retirement_inflight.add(old_ip)
         if old_worker is not None:
-            old_worker.stop()
+            try:
+                old_worker.stop()
+            finally:
+                with self._workers_lock:
+                    self._retirement_inflight.discard(old_ip)
+            # If the role returned to its old endpoint while stop waited,
+            # reopen only after its previous worker has actually terminated.
+            with self._workers_lock:
+                returned_to_old = not self._closed and old_ip in (self._cam1_ip, self._cam2_ip)
+            if returned_to_old:
+                try:
+                    self.worker(old_ip)
+                except ValueError:
+                    pass  # A newer update may retire it after the snapshot.
         # Eagerly create the worker for the new IP so it connects (and wires its
         # status signals via on_worker_ready) right away, instead of waiting for
         # the next camera command. Without this the connection LED stayed red
@@ -173,6 +191,11 @@ class CameraManager:
         with self._workers_lock:
             if self._closed or not ip or ip not in (self._cam1_ip, self._cam2_ip):
                 raise ValueError(f"Camera endpoint is not active: {ip!r}")
+            retired = self._retiring_workers.get(ip)
+            if retired is not None:
+                if ip in self._retirement_inflight or retired._thread.is_alive():
+                    raise ValueError(f"Camera endpoint is still retiring: {ip!r}")
+                del self._retiring_workers[ip]
             w = self._workers.get(ip)
             created = w is None
             if created:
@@ -196,6 +219,8 @@ class CameraManager:
             if not ip:
                 return True  # An unconfigured camera needs no recovery.
             worker = self._workers.get(ip)
+            if worker is None and ip in self._retiring_workers:
+                return False
             return bool(worker is None or (worker._thread.is_alive()
                         and worker.progress_age() < max_progress_age))
 
@@ -211,6 +236,12 @@ class CameraManager:
             if not ip:
                 return True
             worker = self._workers.get(ip)
+            if worker is None and ip in self._retiring_workers:
+                try:
+                    self.worker(ip)
+                except ValueError:
+                    return False
+                return True
             return True if worker is None else worker.restart()
 
     def check_power_response(self, key: int, timeout: float = 2.0) -> Optional[bool]:

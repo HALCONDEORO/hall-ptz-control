@@ -293,4 +293,7 @@ class Controller:
 
     def _on_session_end(self, event: Event) -> None:
         reason = event.payload.get("reason", "manual")
-        self._session.end(reason=reason)
+        if event.payload.get("power_off", True):
+            self._session.end(reason=reason)
+        else:
+            self._session.end(reason=reason, power_off=False)
