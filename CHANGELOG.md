@@ -24,10 +24,20 @@ this release is not pilot-ready until those checks are recorded.
   after repeated presses.
 - A stale session standby cannot power off a replacement session's cameras.
 - Wizard camera role ordering and exact camera details on the review page.
+- A completed pan STOP is no longer resent, and a second STOP no longer closes
+  the session. Pan and zoom STOP frames are delivered as one atomic batch, and a
+  STOP with a stopped bus no longer leaves motion requests blocked.
+- Camera workers are created only for registered, non-empty IPs, are rejected
+  after a terminal stop-all, and Exit and power off sends standby before the
+  worker is retired. Startup and zoom/AE skip cameras with an empty IP.
+- Repeating the same camera IP after a failed runtime repoint retries it.
+- QMessageBox buttons are sized to show their full text.
 
 ### Changed
 
 - Touch-sized vertical scrollbars and setup password visibility controls.
+- The start-up "Turn on the cameras now?" prompt is touch-sized and does not block
+  the interface.
 - Runtime endpoint overrides are included in backup/restore. An application-only
   downgrade to 1.1.0 does not apply these overrides; preserve configuration and
   runtime data together before updating.
