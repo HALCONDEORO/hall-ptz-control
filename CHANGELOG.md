@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - Test setup preloads real Qt and shared UI modules so later tests do not
   inherit partial stubs installed during collection.
+- Demo reset refuses service-install production data paths before creating
+  or overwriting files, including nested directories.
 - The shutdown intent dialog is extracted from the main window with
   focused regression tests, keeping its existing choices and behavior.
 - Startup loads the saved ATEM address from effective settings before the
