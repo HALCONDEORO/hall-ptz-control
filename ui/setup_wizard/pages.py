@@ -426,7 +426,14 @@ class ReviewPage(_BasePage):
         issues = svc.validate(self.answers)
         plan = svc.plan(self.answers)
         lines = [f"• {a.kind}: {a.detail}" for a in plan.artifacts]
-        self._summary.setText("Will be created:\n" + "\n".join(lines))
+        camera_lines = [
+            f"Camera {index}: {cam.name} [{cam.role}] | {cam.ip} | VISCA {cam.visca_id}"
+            for index, cam in enumerate(self.answers.cameras, start=1)
+        ]
+        hardware = (f"ATEM: enabled | {self.answers.atem_ip}"
+                    if self.answers.atem_enabled else "ATEM: disabled")
+        details = "Confirm devices:\n" + "\n".join(camera_lines + [hardware])
+        self._summary.setText(details + "\n\nWill be created:\n" + "\n".join(lines))
         if issues:
             self._issues.setText(
                 "Fix before installing:\n"
