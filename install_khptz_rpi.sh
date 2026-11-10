@@ -308,8 +308,11 @@ info "Usuario del escritorio: ${WIZARD_USER} (uid ${WIZARD_UID}, home ${WIZARD_H
 
 step "Comprobando la sesion de escritorio"
 
+# Exact match on the State value: an unanchored `grep -q "active"` also
+# matches "State=inactive", reporting a logged-out user as an active session
+# and suppressing the warning below exactly when it is needed.
 if command -v loginctl >/dev/null 2>&1 \
-   && loginctl show-user "${WIZARD_USER}" --property=State 2>/dev/null | grep -q "active"; then
+   && loginctl show-user "${WIZARD_USER}" --property=State 2>/dev/null | grep -q '^State=active$'; then
     info "${WIZARD_USER} has an active session"
 else
     warn "${WIZARD_USER} has no active desktop session yet."
