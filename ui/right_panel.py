@@ -394,11 +394,12 @@ class RightPanel:
         mw._zoom_feedback = False
         def _zoom_value_changed(value):
             mw.ZoomValueLabel.setText(f"{value}%")
-            if not mw._zoom_feedback and self._motion_widget.isEnabled():
+            if not mw._zoom_feedback:
                 record_activity = getattr(mw, '_record_activity', None)
                 if callable(record_activity):
                     record_activity()
-                mw._zoom_timer.start()
+                if self._motion_widget.isEnabled():
+                    mw._zoom_timer.start()
 
         mw.ZoomSlider.valueChanged.connect(_zoom_value_changed)
 
