@@ -191,7 +191,9 @@ class CameraWorker:
                 dq = self._queue.queue
                 for i in range(len(dq) - 1, -1, -1):
                     c = dq[i]
-                    if c is not None and c.coalesce and CameraWorker._classify_payload(c.payload) == cmd_type:
+                    if (c is not None and c.coalesce
+                            and c.payload[:1] == cmd.payload[:1]
+                            and CameraWorker._classify_payload(c.payload) == cmd_type):
                         dq[i] = cmd
                         logger.debug("%s cam=%s type=%s queued (coalesced)",
                                      cmd.cmd_id, self.ip, cmd_type)
