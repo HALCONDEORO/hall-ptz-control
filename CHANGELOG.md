@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Startup loads the saved ATEM address from effective settings before the
+  monitor starts, instead of requiring it to be entered again in Settings.
 - test_config_validators prefers real PyQt5 modules over leaving stubs in
   sys.modules, which poisoned later real-widget tests in the same process.
 - Role elevation overlay now applies the progressive lockout: the lockout
