@@ -56,6 +56,7 @@ class ATEMMonitor(QThread):
     hardware_simulator en lugar de conectar al hardware real.
     """
 
+    program_verified   = pyqtSignal(int)     # first valid poll per connection/recovery
     program_changed    = pyqtSignal(int)     # input de programa actual al cambiar
     state_changed      = pyqtSignal(object)  # ATEMState
     input_names_ready  = pyqtSignal(dict)    # {input_id: name} tras conectar al ATEM real
@@ -236,17 +237,24 @@ class ATEMMonitor(QThread):
 
     def _poll_loop(self, atem) -> None:
         prev_input = None
+        verified = False
         while not self.isInterruptionRequested():
             try:
                 cur = source_number(atem.programInput[0].videoSource)
+                if cur < 0:
+                    raise ValueError("ATEM program input must not be negative")
                 if self._state == ATEMState.ERROR:
                     logger.info("ATEM: poll recovered from ERROR — marking CONNECTED")
                     self._emit_state(ATEMState.CONNECTED)
+                if not verified:
+                    self.program_verified.emit(cur)
+                    verified = True
                 if cur != prev_input:
                     self.program_changed.emit(cur)
                     self._safe_store_update(program_input=cur)
                 prev_input = cur
             except Exception:
+                verified = False
                 logger.exception("ATEM poll cycle failed")
                 if self._state != ATEMState.ERROR:
                     self._emit_state(ATEMState.ERROR, last_error="poll cycle failed")

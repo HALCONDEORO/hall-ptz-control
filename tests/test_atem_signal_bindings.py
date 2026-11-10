@@ -43,13 +43,14 @@ def _stub(monitor, *, panel_has_update: bool):
         _pip_nudge_svc=NS(on_pip_changed="nudge_pip"),
         _atem_panel=NS(update_input_names="panel_names", on_program_changed="panel_prog") if panel_has_update else NS(),
         _cache_atem_program="cache",
+        _on_atem_program_verified="verified",
         _on_atem_state_changed="on_state",
         _on_pip_state_changed="on_pip",
     )
 
 
 def _monitor():
-    return NS(program_changed="P", state_changed="S", input_names_ready="I", pip_changed="Z")
+    return NS(program_verified="V", program_changed="P", state_changed="S", input_names_ready="I", pip_changed="Z")
 
 
 def test_pip_nudge_binding_is_included():
@@ -67,8 +68,8 @@ def test_binding_count_with_and_without_panel_update():
     mon = _monitor()
     with_update = MainWindow._atem_monitor_signal_bindings(_stub(mon, panel_has_update=True), mon)
     without_update = MainWindow._atem_monitor_signal_bindings(_stub(mon, panel_has_update=False), mon)
-    assert len(with_update) == 11   # +1: program_changed → atem_panel.on_program_changed
-    assert len(without_update) == 9
+    assert len(with_update) == 12   # includes program_verified and optional panel callbacks
+    assert len(without_update) == 10
 
 
 def test_every_binding_is_signal_slot_pair():
@@ -76,9 +77,17 @@ def test_every_binding_is_signal_slot_pair():
     mon = _monitor()
     self_ = _stub(mon, panel_has_update=True)
     bindings = MainWindow._atem_monitor_signal_bindings(self_, mon)
-    known_signals = {mon.program_changed, mon.state_changed, mon.input_names_ready, mon.pip_changed}
+    known_signals = {mon.program_verified, mon.program_changed, mon.state_changed, mon.input_names_ready, mon.pip_changed}
     for signal, slot in bindings:
         assert signal in known_signals
         assert slot is not None
     # No duplicate (signal, slot) pairs — a duplicate would double-connect.
     assert len(bindings) == len(set(bindings))
+
+
+def test_verification_binding_is_included_once():
+    MainWindow = _load_main_window()
+    mon = _monitor()
+    self_ = _stub(mon, panel_has_update=True)
+    bindings = MainWindow._atem_monitor_signal_bindings(self_, mon)
+    assert bindings.count((mon.program_verified, self_._on_atem_program_verified)) == 1

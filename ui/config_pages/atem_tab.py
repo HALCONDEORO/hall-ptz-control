@@ -395,9 +395,18 @@ def build_atem_tab(dialog, atem_layout, mw, is_on, sim_active, panel_layout):
 
         btn_open_panel.clicked.connect(_on_open_atem_panel)
         layout.addWidget(btn_open_panel, 0, Qt.AlignRight)
+        from ui.atem_visibility import bind_operational_visibility
+        bind_operational_visibility(mw, btn_open_panel)
+        bind_operational_visibility(mw, _sep2)
 
     # ── Automatización ATEM ───────────────────────────────────────────────
-    layout = panel_layout(_atem_col2_l, 'ATEM Automation')
+    automation_widget = QWidget()
+    automation_layout = QVBoxLayout(automation_widget)
+    automation_layout.setContentsMargins(0, 0, 0, 0)
+    _atem_col2_l.addWidget(automation_widget)
+    layout = panel_layout(automation_layout, 'ATEM Automation')
     build_atem_automation_section(dialog, layout, mw)
+    from ui.atem_visibility import bind_operational_visibility
+    bind_operational_visibility(mw, automation_widget)
 
     atem_layout.addStretch()

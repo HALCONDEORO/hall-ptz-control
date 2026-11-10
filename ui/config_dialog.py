@@ -452,6 +452,9 @@ class ConfigDialog(QDialog):
             cell_layout.addWidget(cap, alignment=Qt.AlignHCenter)
 
             ind_row.addWidget(cell_w, stretch=1)
+            if label_text == 'ATEM':
+                from ui.atem_visibility import bind_operational_visibility
+                bind_operational_visibility(mw, cell_w)
 
         layout.addLayout(ind_row)
 
@@ -526,9 +529,13 @@ class ConfigDialog(QDialog):
             runner.result.connect(
                 lambda idx, ok: self._set_led(test_indicators[idx], 'green' if ok else 'red')
             )
-            runner.complete.connect(
-                lambda: threading.Thread(target=_test_atem_connection, daemon=True).start()
-            )
+            def finish_camera_tests():
+                if mw.atem_operational():
+                    threading.Thread(target=_test_atem_connection, daemon=True).start()
+                else:
+                    btn_run_test.setEnabled(True)
+                    btn_run_test.setText('Run Test')
+            runner.complete.connect(finish_camera_tests)
             runner.start()
 
         btn_run_test.clicked.connect(_on_test_clicked)

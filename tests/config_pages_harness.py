@@ -157,10 +157,14 @@ def make_harness(*, sim_active: bool = False, session_active: bool = False,
             self._camera_svc = _CameraServiceDouble()
             self.restarts = 0
             self.panel_toggles = 0
+            self.atem_ready = True
             self.second_platform_visibility: list[bool] = []
 
         def _do_restart_atem_monitor(self):
             self.restarts += 1
+
+        def atem_operational(self):
+            return self.atem_ready
 
         def _toggle_atem_panel(self):
             self.panel_toggles += 1
