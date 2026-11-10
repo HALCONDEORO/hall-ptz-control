@@ -1,15 +1,24 @@
-"""Reversing a fade must continue from the pixels already on screen."""
-import pytest
-from PyQt5.QtGui import QColor, QPalette
-from PyQt5.QtWidgets import QApplication, QWidget
-from ui.auditorium_overlay import AuditoriumOverlay
+"""Run pixel checks in a fresh interpreter, safe under pytest --forked."""
+import os
+from pathlib import Path
+import subprocess
+import sys
 
-_APP = QApplication.instance() or QApplication([])
+import pytest
 
 
 @pytest.mark.parametrize('initial,target', [('call', 'set'), ('set', 'call')])
 @pytest.mark.parametrize('ticks', [1, 7, 13])
 def test_reversing_fade_preserves_pixels(initial, target, ticks):
+    script = r'''
+import sys
+from PyQt5.QtGui import QColor, QPalette
+from PyQt5.QtWidgets import QApplication, QWidget
+from ui.auditorium_overlay import AuditoriumOverlay
+
+_APP = QApplication([])
+initial, target, ticks = sys.argv[1], sys.argv[2], int(sys.argv[3])
+def check():
     parent = QWidget()
     parent.resize(600, 400)
     palette = parent.palette()
@@ -45,3 +54,13 @@ def test_reversing_fade_preserves_pixels(initial, target, ticks):
         assert not overlay._timer.isActive()
     finally:
         parent.close()
+
+check()
+'''
+    result = subprocess.run(
+        [sys.executable, '-c', script, initial, target, str(ticks)],
+        cwd=Path(__file__).resolve().parents[1],
+        env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
