@@ -82,12 +82,12 @@ started, or calling it twice, must not raise an exception (see
 
 ### Camera unavailable
 
-- Cause: one or more cameras do not respond within the bounded startup timeout
-  (`CAMERA_STARTUP_TIMEOUT_SECONDS = 10` in `ui/splash_screen.py`).
+- Cause: one or more cameras do not respond during startup. Each camera
+  connects in the background and is bounded by the VISCA socket timeout.
 - Result: UI enters **Warning / Degraded** state.
 - Required action: show which camera is missing; offer `Find missing camera`;
   allow `Start with warnings` via explicit operator choice.
-- The splash timeout must not freeze the screen (bounded thread join).
+- The splash must not freeze the screen while a camera connects.
 
 ### Demo profile active
 
