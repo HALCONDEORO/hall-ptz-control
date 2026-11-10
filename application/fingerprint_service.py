@@ -46,6 +46,8 @@ def _safe_json_hash(path: Path) -> str:
     """
     try:
         raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return "invalid"
     except OSError:
         return "missing"
     try:
@@ -220,6 +222,8 @@ class FingerprintService:
                     # YAML parsed as text: apply text-level redaction, then hash
                     redacted = _guard.redact_text(raw)
                     return hashlib.sha256(redacted.encode("utf-8")).hexdigest()
+                except UnicodeDecodeError:
+                    return "invalid"
                 except OSError:
                     return "missing"
         return "missing"
