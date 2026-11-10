@@ -1,5 +1,4 @@
 """A restored JSON must not recover pre-restore data from a stale .bak."""
-from pathlib import Path
 import pytest
 from application.backup_service import BackupService
 from application.restore_service import RestoreService
