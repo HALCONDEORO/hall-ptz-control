@@ -17,6 +17,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- The config/layout fingerprint no longer aborts with UnicodeDecodeError on
+  invalid-encoding files; it reports "invalid" and keeps the identity
+  computable.
 - cleanup_legacy_rpi_autostart.sh now passes the bare unit name to
   systemctl (the inherited IFS broke column splitting, so legacy services
   silently survived the migration while the report claimed they were disabled).
