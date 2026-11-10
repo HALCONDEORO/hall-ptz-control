@@ -124,13 +124,11 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
     with _overlay_transaction(path):
         base = load_config(config_path)
         def _discard_corrupt_overlay(exc: Exception) -> dict:
-            # Overlay corrupto o inválido (SD de la Pi): load_effective_config
-            # ya cae al YAML base en este caso; aquí hay que desbloquear el
-            # parcheo en vez de fallar en cada cambio de endpoint. Se preserva
-            # el fichero para diagnóstico (convención .corrupt.<ts> de
-            # json_io) y se parte de un overlay vacío.
+            # Loading already ignores an unusable overlay and falls back to
+            # base YAML. Preserve the file for diagnosis using the json_io
+            # .corrupt.<timestamp> convention, then start from an empty overlay.
             logger.warning(
-                'Runtime camera overrides unusable (%s) — preserving and starting fresh',
+                'Runtime camera overrides unusable (%s) - preserving and starting fresh',
                 exc,
             )
             try:
@@ -148,9 +146,9 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
             try:
                 raw = _read(path)
             except ValueError as exc:
-                # ValueError cubre JSONDecodeError y UnicodeDecodeError. Un
-                # OSError (permisos, E/S) sigue propagando: descartar ante un
-                # error transitorio de lectura podría perder overrides válidos.
+                # ValueError covers JSONDecodeError and UnicodeDecodeError.
+                # Propagate OSError: a transient read failure must not discard
+                # otherwise valid overrides.
                 raw = _discard_corrupt_overlay(exc)
         # Camera IDs belong to the current base configuration. A repaired or
         # renamed base may retire IDs; do not make every future save fail on
@@ -162,14 +160,10 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
                 logger.warning('Discarding %d retired camera override entries', len(orphaned))
                 raw['cameras'] = {key: value for key, value in raw['cameras'].items()
                                   if key in known_ids}
-        # Valida el overlay existente (versión, campos permitidos, IPs sin
-        # conflicto) antes de aplicar los valores nuevos. Un overlay que no
-        # valida ya estaba siendo ignorado por load_effective_config (cae al
-        # YAML base), así que conservarlo no protege nada y bloquea TODOS los
-        # cambios de endpoint en caliente: se preserva a .corrupt.<ts> para
-        # diagnóstico y se parte de un overlay vacío. Los valores nuevos se
-        # validan de nuevo en el _merge final de abajo, que sigue pudiendo
-        # lanzar (p.ej. IP duplicada) sin borrar nada.
+        # Validate the existing overlay before applying new values. Loading
+        # already ignores invalid overlays, so preserve one for diagnosis and
+        # start fresh. The final merge still validates new values and may reject
+        # conflicts without erasing them.
         if path.exists():
             try:
                 _merge(base, raw)

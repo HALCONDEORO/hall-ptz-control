@@ -363,16 +363,7 @@ def test_shared_overlay_lock_mode_and_inode_survive_updates(paths):
 
 
 def test_patch_recovers_from_corrupt_overlay(paths):
-    """Un overlay corrupto no debe bloquear los cambios de endpoint en caliente.
-
-    load_effective_config tolera un camera_overrides.json corrupto cayendo al
-    YAML base, pero patch_runtime_config relanza JSONDecodeError al releerlo:
-    cada cambio de IP/VISCA desde Settings falla (el caller lo loguea como
-    "Failed to persist") hasta que alguien borra el fichero a mano — en una Pi
-    con SD, la corrupción es un caso real, no teórico. El parcheo debe
-    recuperarse igual que la carga: preservar el fichero para diagnóstico y
-    continuar desde un overlay vacío.
-    """
+    """Preserve corrupt overlays and keep endpoint updates available."""
     config, overlay = paths
     overlay.parent.mkdir(parents=True)
     overlay.write_text('{ no json', encoding='utf-8')
@@ -382,13 +373,13 @@ def test_patch_recovers_from_corrupt_overlay(paths):
     settings = load_effective_config(config, overlay)
     assert settings.cameras[1].ip == '192.0.2.22'
     assert settings.cameras[0].ip == '192.0.2.11'
-    # El fichero corrupto se preserva para diagnóstico, no se pierde.
+    # Keep the corrupt file for diagnosis.
     assert list(overlay.parent.glob('camera_overrides.corrupt.*.json'))
 
 
 @pytest.mark.parametrize('raw', ['[1,2]', '{"schema_version":2}', '{"cameras":[]}'])
 def test_patch_recovers_from_structurally_invalid_overlay(paths, raw):
-    """JSON parseable pero inválido (versión/tipo) también bloqueaba el parcheo."""
+    """Parseable but invalid JSON must not block endpoint updates."""
     config, overlay = paths
     overlay.parent.mkdir(parents=True)
     overlay.write_text(raw, encoding='utf-8')
