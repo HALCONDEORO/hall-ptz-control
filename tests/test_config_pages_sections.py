@@ -664,6 +664,14 @@ class TestPresetValidationStopping:
         dialog.destroyed.emit()
         assert preset_env["runners"][0].cancelled == 1
 
+    @pytest.mark.parametrize("finish", ["accept", "reject"])
+    def test_hiding_finished_dialog_stops_runner_before_destruction(self, preset_env, message_box, finish):
+        dialog, mw, layout = build_presets()
+        button_named(layout, "Test All Presets").click()
+        from PyQt5.QtWidgets import QDialog
+        getattr(QDialog, finish)(dialog)  # bypass harness feedback-only override
+        assert preset_env["runners"][0].cancelled == 1
+
     def test_closing_without_a_run_is_harmless(self, preset_env, message_box):
         dialog, mw, layout = build_presets()
         dialog.destroyed.emit()          # must not raise
