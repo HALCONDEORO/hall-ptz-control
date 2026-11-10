@@ -199,8 +199,9 @@ class CameraManager:
         """True si hay worker para esa IP y está conectado. NO crea workers."""
         if not ip:
             return False
-        with self._workers_lock:
-            w = self._workers.get(ip)
+        # One reference lookup is a transport snapshot, not a lifecycle
+        # operation. Never wait for restart's bounded join on the GUI thread.
+        w = self._workers.get(ip)
         return bool(w is not None and w.is_connected)
 
     @staticmethod
