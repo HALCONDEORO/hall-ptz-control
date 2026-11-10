@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- test_config_validators prefers real PyQt5 modules over leaving stubs in
+  sys.modules, which poisoned later real-widget tests in the same process.
 - Role elevation overlay now applies the progressive lockout: the lockout
   state is shared between both overlay instances, so failed attempts cannot
   be retried without limit.
