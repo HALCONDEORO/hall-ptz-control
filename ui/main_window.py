@@ -343,6 +343,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._splash_overlay._start_initialization()
 
     def _on_startup_done(self):
+        # The splash completion may already be queued when close begins.
+        if getattr(self, '_shutting_down', False):
+            return
         self._splash_overlay.hide()
         self._normal_work_active = True
         self._refresh_zoom()

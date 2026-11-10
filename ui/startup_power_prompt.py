@@ -10,7 +10,8 @@ def maybe_prompt_power_on(self) -> None:
     No se muestra si ya hay sesión activa o si no hay ninguna cámara con IP
     válida configurada (no habría nada que encender).
     """
-    if getattr(self, 'session_active', False):
+    if (getattr(self, '_shutting_down', False)
+            or getattr(self, 'session_active', False)):
         return
     from config import CAM1, CAM2, is_valid_ip
     if not (is_valid_ip(CAM1.ip) or is_valid_ip(CAM2.ip)):
@@ -38,7 +39,9 @@ def maybe_prompt_power_on(self) -> None:
 
     def finished(_result):
         self._startup_power_prompt = None
-        if box.clickedButton() is yes_btn and not getattr(self, 'session_active', False):
+        if (box.clickedButton() is yes_btn
+                and not getattr(self, '_shutting_down', False)
+                and not getattr(self, 'session_active', False)):
             # Reuse the session button path: background power I/O and
             # delayed Home are owned by its existing controller/service.
             self._session.ToggleSession()
