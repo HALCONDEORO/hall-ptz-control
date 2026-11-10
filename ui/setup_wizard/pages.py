@@ -14,13 +14,15 @@ collect input and display results; they never write files or touch hardware.
 
 from __future__ import annotations
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtGui import QIcon, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
     QFrame,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -345,16 +347,16 @@ class PasswordsPage(_BasePage):
         entry_form = QFormLayout(entry_box)
         self.entry = self._pw_field()
         self.entry_confirm = self._pw_field()
-        entry_form.addRow("Password", self.entry)
-        entry_form.addRow("Confirm", self.entry_confirm)
+        entry_form.addRow("Password", self._visibility_row(self.entry, "operator password"))
+        entry_form.addRow("Confirm", self._visibility_row(self.entry_confirm, "operator password confirmation"))
         lay.addWidget(entry_box)
 
         admin_box = QGroupBox("Administrator")
         admin_form = QFormLayout(admin_box)
         self.admin = self._pw_field()
         self.admin_confirm = self._pw_field()
-        admin_form.addRow("Password", self.admin)
-        admin_form.addRow("Confirm", self.admin_confirm)
+        admin_form.addRow("Password", self._visibility_row(self.admin, "administrator password"))
+        admin_form.addRow("Confirm", self._visibility_row(self.admin_confirm, "administrator password confirmation"))
         lay.addWidget(admin_box)
 
         self._error = QLabel("")
@@ -368,6 +370,56 @@ class PasswordsPage(_BasePage):
         f = QLineEdit()
         f.setEchoMode(QLineEdit.Password)
         return f
+
+    def _visibility_row(self, field: QLineEdit, label: str) -> QWidget:
+        row = QWidget()
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        button = QPushButton()
+        button.setCheckable(True)
+        button.setFocusPolicy(Qt.StrongFocus)
+        button.setMinimumSize(44, 44)
+        button.setIconSize(QSize(24, 24))
+        field.setAccessibleName(label.capitalize())
+
+        def update(visible: bool) -> None:
+            field.setEchoMode(QLineEdit.Normal if visible else QLineEdit.Password)
+            action = ("Hide " if visible else "Show ") + label
+            button.setAccessibleName(action)
+            button.setToolTip(action)
+            # Paint the eye ourselves: no font glyph or platform icon dependency.
+            pixmap = QPixmap(24, 24)
+            pixmap.fill(Qt.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(QPen(button.palette().buttonText().color(), 2))
+            painter.drawEllipse(2, 6, 20, 12)
+            painter.drawEllipse(9, 9, 6, 6)
+            if visible:
+                painter.drawLine(3, 3, 21, 21)
+            painter.end()
+            button.setIcon(QIcon(pixmap))
+
+        button.toggled.connect(update)
+        update(False)
+        if not hasattr(self, "visibility_buttons"):
+            self.visibility_buttons = []
+        self.visibility_buttons.append(button)
+        layout.addWidget(field, 1)
+        layout.addWidget(button)
+        return row
+
+    def _mask_passwords(self) -> None:
+        for button in self.visibility_buttons:
+            button.setChecked(False)
+
+    def initializePage(self) -> None:
+        self._mask_passwords()
+        super().initializePage()
+
+    def hideEvent(self, event) -> None:
+        self._mask_passwords()
+        super().hideEvent(event)
 
     def collect(self) -> None:
         self.answers.entry_password = self.entry.text()
