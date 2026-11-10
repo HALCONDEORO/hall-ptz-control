@@ -1428,8 +1428,16 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         old_monitor = self._atem_monitor
         if old_monitor is None:
-            # FakeATEM / no-ATEM path — nothing to stop or replace.
             self._atem_restart_pending = False
+            # No monitor yet: the restart path doubles as the start path when
+            # an ATEM is configured at runtime (first-time setup from
+            # Settings, Scan/Reconnect buttons). Demo/sim is excluded — the
+            # FakeATEM owns the surface and replacing it here would orphan
+            # the demo panel's reference.
+            if self._fake_atem is None and self._atem_is_configured():
+                self._atem_dispatcher.mark_reconnecting()
+                self._start_atem_monitor()
+                logger.info("ATEMMonitor arrancado tras configuración en caliente")
             return
 
         self._disconnect_atem_monitor_signals(old_monitor)
