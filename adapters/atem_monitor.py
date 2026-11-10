@@ -43,6 +43,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Consecutive poll failures that mean "dead session", not a hiccup: 30 cycles
+#: at the 0.1 s poll cadence is about three seconds of solid failure, long
+#: enough that a network micro-outage never costs the session. On reaching
+#: it the poll loop returns so the monitor thread can end and be restarted.
+_MAX_CONSECUTIVE_POLL_FAILURES = 30
+
 
 class ATEMMonitor(QThread):
     """
@@ -239,6 +245,7 @@ class ATEMMonitor(QThread):
     def _poll_loop(self, atem) -> None:
         prev_input = None
         verified = False
+        consecutive_failures = 0
         while not self.isInterruptionRequested():
             try:
                 # PyATEMMax keeps the last programInput after the UDP link
@@ -251,6 +258,7 @@ class ATEMMonitor(QThread):
                 cur = source_number(atem.programInput[0].videoSource)
                 if cur < 0:
                     raise ValueError("ATEM program input must not be negative")
+                consecutive_failures = 0
                 if self._state == ATEMState.ERROR:
                     logger.info("ATEM: poll recovered from ERROR — marking CONNECTED")
                     self._emit_state(ATEMState.CONNECTED)
@@ -263,6 +271,7 @@ class ATEMMonitor(QThread):
                 prev_input = cur
             except Exception:
                 verified = False
+                consecutive_failures += 1
                 if isinstance(sys.exc_info()[1], ConnectionError):
                     logger.warning("ATEM poll: link lost, waiting for PyATEMMax to reconnect")
                     err = "link lost"
@@ -271,6 +280,18 @@ class ATEMMonitor(QThread):
                     err = "poll cycle failed"
                 if self._state != ATEMState.ERROR:
                     self._emit_state(ATEMState.ERROR, last_error=err)
+                if consecutive_failures >= _MAX_CONSECUTIVE_POLL_FAILURES:
+                    # The session is dead, not hiccuping. Returning here lets
+                    # _run_with_retry close the client and end the thread in
+                    # ERROR state, so the supervisor can start a fresh monitor
+                    # with a clean session. Spinning on a dead session kept
+                    # the thread "healthy" and the ATEM down until an app
+                    # restart, logging a traceback 10 times a second.
+                    logger.warning(
+                        "ATEM: %d consecutive poll failures — dropping the session to reconnect",
+                        consecutive_failures,
+                    )
+                    return
             self._poll_pip(atem)
             time.sleep(0.1)
 

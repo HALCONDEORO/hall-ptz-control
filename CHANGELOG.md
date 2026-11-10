@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- ATEM monitoring ends a session after thirty consecutive poll failures so
+  the supervisor can reconnect, including when the link drops with cached input.
 - ATEM polling detects a dropped link instead of continuing to report
   cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
