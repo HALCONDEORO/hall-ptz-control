@@ -39,7 +39,7 @@ import socket
 import threading
 from typing import Optional
 
-from PyQt5.QtCore import Qt, QSize, QTimer, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, QObject
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QScrollArea, QWidget, QTabWidget,
@@ -508,23 +508,28 @@ class ConfigDialog(QDialog):
                 ('backlight_toggle', 5),   # Backlight ON
             ]
 
-            def _after_visca():
-                threading.Thread(target=_test_atem_connection, daemon=True).start()
+            from ui.camera_diagnostic_runner import CameraDiagnosticRunner
 
-            def _run_with_atem(step):
-                if step >= len(test_cmds):
-                    QTimer.singleShot(100, _after_visca)
-                    return
-                method_name, idx = test_cmds[step]
-                if port is not None:
-                    result = getattr(port, method_name)(cam_id)
-                    ok = getattr(result, 'ok', False)
-                else:
-                    ok = False
-                self._set_led(test_indicators[idx], 'green' if ok else 'red')
-                QTimer.singleShot(500, lambda: _run_with_atem(step + 1))
+            generation = mw._session._session_generation
 
-            QTimer.singleShot(100, lambda: _run_with_atem(0))
+            def _same_session():
+                return (not getattr(mw, '_shutting_down', False)
+                        and mw._session._session_generation == generation)
+
+            runner = CameraDiagnosticRunner(
+                self, port, cam_id, test_cmds, is_current=_same_session,
+            )
+            runner.interrupted.connect(
+                lambda: (btn_run_test.setEnabled(True), btn_run_test.setText('Run Test'))
+            )
+            self._camera_diagnostic_runner = runner
+            runner.result.connect(
+                lambda idx, ok: self._set_led(test_indicators[idx], 'green' if ok else 'red')
+            )
+            runner.complete.connect(
+                lambda: threading.Thread(target=_test_atem_connection, daemon=True).start()
+            )
+            runner.start()
 
         btn_run_test.clicked.connect(_on_test_clicked)
 

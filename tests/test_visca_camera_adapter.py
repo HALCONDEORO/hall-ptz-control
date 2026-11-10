@@ -425,3 +425,13 @@ class TestUpdateCameraIp:
         adapter = ViscaCameraAdapter(_StubManager(), cam_configs=None)
         adapter.update_camera_ip(1, "192.168.1.55")  # should be a silent no-op
 
+
+@pytest.mark.parametrize('operation', ['recall_preset', 'save_preset'])
+@pytest.mark.parametrize('preset', [None, 'invalid'])
+def test_invalid_preset_logs_without_formatting_error(operation, preset, caplog):
+    adapter, manager = _make_adapter()
+    with caplog.at_level('WARNING', logger='adapters.visca_camera_adapter'):
+        result = getattr(adapter, operation)('cam1', preset)
+    assert not result.ok
+    assert manager.workers == {}
+    assert 'not in PRESET_MAP' in caplog.text

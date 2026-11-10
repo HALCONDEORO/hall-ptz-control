@@ -353,19 +353,37 @@ class RightPanel:
         mw._zoom_timer.setSingleShot(True)
         mw._zoom_timer.setInterval(150)
 
+        from ui.zoom_dispatch import ZoomDispatcher
+
+        def _current_zoom_session():
+            if getattr(mw, '_shutting_down', False) or not mw.session_active:
+                return None
+            return mw._session._session_generation
+
+        self._zoom_dispatcher = ZoomDispatcher(_current_zoom_session, block)
+
         def _send_zoom_absolute():
             port = getattr(mw, '_camera_port', None)
             if port is None:
                 return
             cam_id = "cam1" if mw.Cam1.isChecked() else "cam2"
-            port.zoom_absolute(cam_id, mw.ZoomSlider.value())
+            self._zoom_dispatcher.submit(port, cam_id, mw.ZoomSlider.value())
 
         mw._zoom_timer.timeout.connect(_send_zoom_absolute)
         mw._zoom_feedback = False
-        mw.ZoomSlider.valueChanged.connect(
-            lambda v: (mw.ZoomValueLabel.setText(f"{v}%"),
-                       None if mw._zoom_feedback else mw._zoom_timer.start()))
+        def _zoom_value_changed(value):
+            mw.ZoomValueLabel.setText(f"{value}%")
+            if not mw._zoom_feedback:
+                record_activity = getattr(mw, '_record_activity', None)
+                if callable(record_activity):
+                    record_activity()
+                mw._zoom_timer.start()
 
+        mw.ZoomSlider.valueChanged.connect(_zoom_value_changed)
+
+        # An unsent slider intent belongs to the previous camera selection.
+        mw.Cam1.clicked.connect(mw._zoom_timer.stop)
+        mw.Cam2.clicked.connect(mw._zoom_timer.stop)
         mw.Cam1.clicked.connect(mw._refresh_zoom)
         mw.Cam2.clicked.connect(mw._refresh_zoom)
 
@@ -409,6 +427,9 @@ class RightPanel:
             pulsar STOP durante la espera. Sin resultado visual dependiente:
             el feedback de foco llega por el polling de estado.
             """
+            record_activity = getattr(mw, '_record_activity', None)
+            if callable(record_activity):
+                record_activity()
             threading.Thread(
                 target=fn, args=args, daemon=True, name="CameraCmdOffUI",
             ).start()

@@ -50,6 +50,7 @@ from core.events import EventType               # noqa: E402
 def _make_ctrl(session_active: bool = False) -> tuple[SessionController, MagicMock]:
     window = MagicMock()
     window.session_active = session_active
+    window._shutting_down = False
     ctrl = SessionController(window)
     return ctrl, window
 
