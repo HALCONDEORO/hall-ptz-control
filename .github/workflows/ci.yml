@@ -62,12 +62,6 @@ jobs:
           tests/test_setup_wizard_rpi_pages.py
           tests/test_sim_debug_panel.py
           tests/test_digital_joystick.py
-          tests/test_config_pages_session_tab.py
-          tests/test_config_pages_data_tab.py
-          tests/test_config_pages_test_tab.py
-          tests/test_config_pages_access_tab.py
-          tests/test_config_pages_cameras_tab.py
-          tests/test_config_pages_atem_tab.py
-          tests/test_config_pages_sections.py
+          tests/test_config_pages_*.py
           tests/test_main_window_smoke.py
 

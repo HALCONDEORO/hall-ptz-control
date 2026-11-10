@@ -241,7 +241,7 @@ class Controller:
             if self._commit_motion(event, update):
                 self._invalidate_zoom(cam)
         else:
-            logger.warning("chairman_assigned: fallo al hacer recall preset %d", preset)
+            logger.warning("chairman_assigned: fallo al hacer recall preset %r", preset)
 
     def _on_preset_save_requested(self, event: Event) -> None:
         if self._no_session("preset_save_requested", event.payload):

@@ -68,6 +68,9 @@ class ScreenOffDialog(QDialog):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
+        # accept/reject (including Escape/buttons) hide without closeEvent.
+        # Parent-owned dialogs can outlive exec_(), so stop every finish path.
+        self.finished.connect(self._timer.stop)
         self._timer.start(1000)
 
     # ── Internal ──────────────────────────────────────────────────────────────

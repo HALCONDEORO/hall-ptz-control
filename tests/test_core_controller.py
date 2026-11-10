@@ -477,3 +477,15 @@ def test_move_command_result_controls_state_commit():
             h.emit(EventType.CAMERA_MOVE, camera=1, pan_speed=5, tilt_speed=4)
             expected = (5, 4) if accepted else (0, 0)
             assert (h.state.cam1.pan_speed, h.state.cam1.tilt_speed) == expected
+
+def test_chairman_missing_preset_logs_without_formatting_error(caplog):
+    from core.events import Event
+
+    with _Harness() as h:
+        h.presets.map['Missing'] = None
+        h.camera.recall_ok = False
+        with caplog.at_level('WARNING', logger='core.controller'):
+            h.controller._on_chairman_assigned(
+                Event(EventType.CHAIRMAN_ASSIGNED, {'name': 'Missing'})
+            )
+        assert 'fallo al hacer recall preset' in caplog.text

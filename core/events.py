@@ -189,8 +189,10 @@ class AsyncEventBus:
 
     def emit(self, event_type: EventType, **payload: Any) -> None:
         event = Event(type=event_type, payload=payload)
+        # Serialize admission with the shutdown sentinel. Preserve first-start
+        # buffering, but never carry post-stop commands into a later run.
         # Preparation only captures/retires epochs. No port calls or user handlers.
-        with self._emergency_condition:
+        with self._lifecycle_lock, self._emergency_condition:
             if self._safety_prepare is not None:
                 key = self._safety_prepare(event)
                 if event_type is EventType.CAMERA_STOP:
@@ -201,6 +203,9 @@ class AsyncEventBus:
                     self._emergency[key] = event
                     self._emergency_condition.notify()
                     return
+            if self._stop_requested:
+                logger.debug("Discarding event after stop: %s", event_type)
+                return
             self._queue.put(event)
 
     def register_motion_safety(self, prepare, stop_handler, cancel_handler=None) -> None:

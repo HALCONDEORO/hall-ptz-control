@@ -143,7 +143,7 @@ class ViscaCameraAdapter:
     def recall_preset(self, camera_id: str, preset: int) -> CommandResult:
         preset_hex = PRESET_MAP.get(preset)
         if not preset_hex:
-            logger.warning("recall_preset: slot %d not in PRESET_MAP", preset)
+            logger.warning("recall_preset: slot %r not in PRESET_MAP", preset)
             return self._result("recall_preset", camera_id, False, None)
         ip, cam_id_hex = self._cam_info(camera_id)
         t0 = time.monotonic()
@@ -153,7 +153,7 @@ class ViscaCameraAdapter:
     def save_preset(self, camera_id: str, preset: int) -> CommandResult:
         preset_hex = PRESET_MAP.get(preset)
         if not preset_hex:
-            logger.warning("save_preset: slot %d not in PRESET_MAP", preset)
+            logger.warning("save_preset: slot %r not in PRESET_MAP", preset)
             return self._result("save_preset", camera_id, False, None)
         ip, cam_id_hex = self._cam_info(camera_id)
         t0 = time.monotonic()

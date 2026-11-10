@@ -16,7 +16,11 @@ logger = logging.getLogger(__name__)
 
 # BCM pin number for the physical screen power button.
 # Override via environment variable: KHPTZ_GPIO_SCREEN_BTN_PIN=<pin>
-GPIO_SCREEN_BUTTON_PIN: int = int(os.getenv("KHPTZ_GPIO_SCREEN_BTN_PIN", "17"))
+try:
+    GPIO_SCREEN_BUTTON_PIN: int = int(os.getenv("KHPTZ_GPIO_SCREEN_BTN_PIN", "17"))
+except ValueError:
+    logger.warning("Invalid KHPTZ_GPIO_SCREEN_BTN_PIN; using default BCM pin 17")
+    GPIO_SCREEN_BUTTON_PIN = 17
 
 # Minimum seconds between two button-press events (debounce)
 _DEBOUNCE_SECS = 0.5
