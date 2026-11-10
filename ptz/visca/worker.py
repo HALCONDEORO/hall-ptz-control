@@ -436,13 +436,15 @@ class CameraWorker:
         """
         Detiene el worker de forma limpia: interrumpe la lectura en vuelo,
         cierra el socket y espera a que el thread termine.
-        Idempotente: no hace nada si el thread ya está muerto.
+        Idempotente: cierra la sesión incluso si el thread ya está muerto.
         """
-        if not self._thread.is_alive():
-            return
         self._shutdown.set()
         self._interrupt.set()
         self._close_socket()
+        # Thread death is not transport cleanup. An unexpected exit may leave
+        # its socket alive; retirement must release it and close admission.
+        if not self._thread.is_alive():
+            return
         if not getattr(self, "_sentinel_pending", False):
             # Un solo sentinel por episodio de parada: si el hilo no llega a
             # consumirlo (join fallido), un restart posterior lo drena antes
