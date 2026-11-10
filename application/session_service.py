@@ -207,8 +207,8 @@ class SessionService:
         for cam_id in self._camera_ids:
             self._port.home(cam_id)
 
-    def end(self, reason: str = "manual") -> None:
-        """Envía Standby a todas las cámaras."""
+    def end(self, reason: str = "manual", *, power_off: bool = True) -> None:
+        """End session bookkeeping; power off unless the operator keeps cameras on."""
         # _active=False primero: cancela un arranque aún en curso (el hilo de
         # power_on no envía los encendidos que queden). Los standby, al igual
         # que los power_on, son confirmados y pueden bloquear segundos por
@@ -222,7 +222,8 @@ class SessionService:
                 # Poll cancellation is cleanup, not a gate for standby or for
                 # clearing the session's runtime state.
                 logger.exception("SessionService: cancel_polls raised for %s", cam_id)
-        self._standby_thread = self._standby_all_async()
+        if power_off:
+            self._standby_thread = self._standby_all_async()
         self._sync_active(False)
         self._chairman = None
         self._sync_chairman(None)
