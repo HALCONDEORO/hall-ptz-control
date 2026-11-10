@@ -91,9 +91,12 @@ def _fsync_dir(dirpath: Path) -> None:
         os.close(fd)
 
 
-def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None) -> None:
+def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None,
+                       preserve_metadata: bool = False) -> None:
     """Write *data* to *dest* atomically (tmp + fsync + os.replace).
 
+    With preserve_metadata, keep an existing file's owner/group and mode;
+    fail before replacement if ownership cannot be retained.
     Creates parent directories as needed. The temp file is created privately
     (0600) and fsync'd before the rename; the parent directory is fsync'd after.
     If *mode* is given, it is applied to the file before the rename. If the
@@ -101,6 +104,9 @@ def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None) ->
     re-raised so the existing *dest* is never corrupted.
     """
     dest.parent.mkdir(parents=True, exist_ok=True)
+    previous = dest.stat() if preserve_metadata and dest.exists() else None
+    if previous is not None and mode is None:
+        mode = stat.S_IMODE(previous.st_mode)
     # No explicit mode: follow the directory's own intent. Callers that need a
     # specific mode (secrets pass 0o600) are honoured exactly as before.
     if mode is None:
@@ -115,6 +121,12 @@ def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None) ->
             written = 0
             while written < len(mv):
                 written += os.write(fd, mv[written:])
+            if previous is not None:
+                created = os.fstat(fd)
+                if (created.st_uid, created.st_gid) != (previous.st_uid, previous.st_gid):
+                    os.fchown(fd, previous.st_uid, previous.st_gid)
+                # Restore must fail before replacement if access cannot be kept.
+                os.fchmod(fd, mode)
             if mode is not None:
                 try:
                     os.fchmod(fd, mode)
