@@ -1,15 +1,17 @@
 # Notice
 
-KH PTZ Control, formerly KHPTZ Controls, is open-source software owned by
-MACD Adaptive Limited and published under the MIT License (see [LICENSE](LICENSE)).
+KH PTZ Control is open-source software. Its original code is published under the
+MIT License; the copyright holder and full terms are in [LICENSE](LICENSE).
+Keep that notice with copies of the code.
 
-Anyone may use, copy, modify and distribute it, including Kingdom Halls running their own
-installations.
+Third-party components retain their own licences. In particular, the open-source
+PyQt5 GUI dependency and optional PyATEMMax dependency have GPL terms. The MIT
+label does not cover the whole installed dependency set, and simply making a
+repository public is not a complete distribution-compliance check. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) before sharing an installed
+system or image. No licence or copyright ownership is changed by this notice.
 
-Third-party components keep their own licences; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-In particular, the GUI uses PyQt5/Qt under the GNU GPL v3: anyone redistributing an installed
-system must also honour that licence (source availability satisfies it for normal use).
-
-Installations store site-specific data (camera IPs, schedules and, optionally, operator or
-seat names) locally on the site's own Raspberry Pi. That data is each site's responsibility
-and is never part of this repository. See [docs/PRIVACY_NOTES.md](docs/PRIVACY_NOTES.md).
+Installations can store camera addresses, schedules and optional seat names on
+the site's own Raspberry Pi. Keep site data out of source repositories and
+reusable images. Review exports, backups and support bundles before sharing them;
+see [docs/PRIVACY_NOTES.md](docs/PRIVACY_NOTES.md).

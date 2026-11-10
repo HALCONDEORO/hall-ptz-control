@@ -76,16 +76,12 @@ for _module in PyQt5 yaml; do
 done
 
 # The installer must refuse rather than leave that discovery to the operator.
-# Shadowing python3 with a wrapper that fails only on `import yaml` reproduces
-# a Pi without python3-yaml without uninstalling anything.
-cat > /usr/local/bin/python3-noyaml <<'STUB'
-#!/bin/sh
-case "$*" in *"import yaml"*) exit 1 ;; esac
-exec /usr/bin/python3 "$@"
-STUB
-chmod 0755 /usr/local/bin/python3-noyaml
-cp /usr/local/bin/python3-noyaml /usr/local/bin/python3
-if bash "${INSTALLER}" --check >/tmp/noyaml.out 2>&1; then
+# The product interpreter is fixed at /usr/bin/python3, so PATH shadowing
+# must no longer affect readiness. A temporary import-path fixture makes yaml
+# unavailable to that real interpreter without replacing system executables.
+NOYAML_DIR="$(mktemp -d)"
+printf 'raise ImportError("simulated missing yaml")\n' > "${NOYAML_DIR}/yaml.py"
+if PYTHONPATH="${NOYAML_DIR}" bash "${INSTALLER}" --check >/tmp/noyaml.out 2>&1; then
     bad "readiness passed without PyYAML — the install would fail on first use"
 else
     if grep -q "python3-yaml" /tmp/noyaml.out; then
@@ -95,7 +91,7 @@ else
         tail -5 /tmp/noyaml.out
     fi
 fi
-rm -f /usr/local/bin/python3 /usr/local/bin/python3-noyaml
+rm -rf -- "${NOYAML_DIR}"
 
 echo
 echo "==> Service identity"

@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 class RoleElevationOverlay(QWidget):
     """
-    Overlay inline que pide contraseña para subir el rol a Técnico.
+    Overlay inline que pide contraseña para subir el rol a Admin.
 
     Se coloca como hijo de MainWindow, cubre toda la ventana con un fondo
     semitransparente y muestra un card centrado con campo de contraseña.
@@ -76,7 +76,7 @@ class RoleElevationOverlay(QWidget):
         vbox.setSpacing(12)
 
         # Título
-        lbl_title = QLabel("Administrator Mode")
+        lbl_title = QLabel("Admin Mode")
         lbl_title.setFont(QFont("Inter Tight", 18, QFont.Bold))
         lbl_title.setStyleSheet("color: #1A3318; background: transparent;")
         lbl_title.setAlignment(Qt.AlignCenter)
@@ -189,7 +189,7 @@ class RoleElevationOverlay(QWidget):
         self._card.move(x, max(y, 60))
 
     def _try_login(self) -> None:
-        # Technician elevation requires the ADMINISTRATOR password. On pre-split
+        # Admin elevation requires the ADMINISTRATOR password. On pre-split
         # installs (no admin.enc yet) verify_admin falls back to the entry
         # password, so existing single-password sites keep working.
         from application.authentication import verify_admin

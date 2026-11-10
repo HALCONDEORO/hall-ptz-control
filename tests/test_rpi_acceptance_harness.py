@@ -149,3 +149,36 @@ class TestRuntimePathPermissions:
                 and "say " not in line
             ]
             assert not active, f"permission section would run '{mutating}': {active}"
+
+
+class TestDesktopSessionTypeIsAccepted:
+    """Acceptance is the final on-site gate. The GUI units force
+    QT_QPA_PLATFORM=xcb, and Bookworm defaults to Wayland, so a hall can
+    pass every other check on a desktop that can never show the GUI. The
+    harness must inspect the ACTIVE session and fail on Wayland with the
+    raspi-config remedy."""
+
+    def test_active_session_type_is_inspected(self, text):
+        assert "--property=Type" in text
+        assert "--property=Active" in text
+
+    def test_wayland_is_a_failure_with_the_fix(self, text):
+        wayland_branch = text.index("is Wayland")
+        assert "raspi-config" in text[wayland_branch:wayland_branch + 200]
+
+    def test_x11_is_a_pass_and_unknown_is_a_skip(self, text):
+        assert 'x11)' in text
+        assert 'pass "active desktop session is X11' in text
+        assert 'skip "no active graphical session to inspect' in text
+
+    def test_desktop_user_resolution_order(self, text):
+        """Without SUDO_USER (a plain terminal run) the session check used to
+        skip outright. The resolver must prefer explicit state over ambient
+        environment: --wizard-user flag, then KHPTZ_WIZARD_USER from the
+        install-state file, then SUDO_USER, then the invoking non-root
+        user."""
+        flag = text.index('_accept_desktop_user "${WIZARD_USER_ARG}"')
+        state = text.index('_state_wizard_user=')
+        sudo = text.index('_accept_desktop_user "${SUDO_USER:-}"')
+        invoking = text.index('_accept_desktop_user "$(id -un)"')
+        assert flag < state < sudo < invoking

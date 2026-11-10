@@ -52,14 +52,20 @@ class PresetVerificationService:
             return {}
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                logger.warning("Ignoring verifications: expected an object, got %s",
+                               type(raw).__name__)
+                return {}
             records: Dict[str, PresetVerification] = {}
             for key, data in raw.items():
                 try:
+                    if not isinstance(data, dict):
+                        raise ValueError("expected a verification object")
                     records[key] = PresetVerification.from_dict(data)
-                except (KeyError, ValueError) as exc:
+                except (KeyError, ValueError, TypeError, OverflowError) as exc:
                     logger.warning("Skipping corrupt verification record %r: %s", key, exc)
             return records
-        except (json.JSONDecodeError, OSError) as exc:
+        except (json.JSONDecodeError, UnicodeError, OSError) as exc:
             logger.warning("Could not load verifications: %s", exc)
             return {}
 
@@ -86,7 +92,9 @@ class PresetVerificationService:
         """
         records = self.load_all()
         key = _key(seat_id, camera_id)
-        rec = records.get(key) or PresetVerification(
+        # Each explicit verification describes the target supplied now, not
+        # the preset or identity retained by an older/imported record.
+        rec = PresetVerification(
             seat_id=seat_id,
             camera_id=camera_id,
             preset=preset,

@@ -99,6 +99,7 @@ class ViscaCommand:
     cmd_id:     str                           = field(default_factory=_next_cmd_id)
     on_success: Optional[Callable[[], None]] = None
     on_failure: Optional[Callable[[], None]] = None
+    response: bytes                          = field(default=b"", repr=False, compare=False)
 
 
 class CameraWorkerSignals(QObject):
@@ -174,6 +175,8 @@ class CameraWorker:
         tipo en la cola (move / zoom_drive), evitando acumular comandos de
         joystick obsoletos. La búsqueda es O(n) pero la cola es de 20 items.
         """
+        if self._shutdown.is_set():
+            return False
         cmd.queued_at = time.monotonic()
         if cmd.coalesce:
             cmd_type = CameraWorker._classify_payload(cmd.payload)
@@ -197,13 +200,17 @@ class CameraWorker:
                            self.ip, cmd.payload.hex())
             return False
 
-    def send_priority(self, cmd: ViscaCommand):
+    def send_priority(self, cmd: ViscaCommand) -> bool:
         """
         Vacía la cola de comandos pendientes y coloca cmd en primer lugar.
 
         También activa _interrupt para que _read_visca_response() aborte
         cualquier espera en vuelo, reduciendo la latencia del STOP al mínimo.
         """
+        # Preserve emergency STOPs during a failed restart so the successor
+        # can send them. Ordinary HOME/motion must not survive shutdown.
+        if self._shutdown.is_set() and not self._is_stop_payload(cmd.payload):
+            return False
         cmd.queued_at = time.monotonic()
         cmd.priority = True
         # Señalizar el interrupt ANTES de drenar para que el worker no lea
@@ -247,7 +254,7 @@ class CameraWorker:
                             "queue full of pending STOPs",
                             cmd.cmd_id, self.ip,
                         )
-                        return
+                        return False
                     # STOP contra STOP: se descarta el STOP más viejo —
                     # NUNCA el sentinel de apagado ni el propio entrante.
                     idx = next((i for i, c in enumerate(q) if c is not None), None)
@@ -256,7 +263,7 @@ class CameraWorker:
                             "%s cam=%s STOP dropped: shutdown in progress",
                             cmd.cmd_id, self.ip,
                         )
-                        return
+                        return False
                     del q[idx]
             q.append(cmd)
             self._queue.not_empty.notify()
@@ -272,6 +279,7 @@ class CameraWorker:
         logger.debug("%s cam=%s type=%s queued (priority)",
                      cmd.cmd_id, self.ip,
                      CameraWorker._classify_payload(cmd.payload))
+        return True
 
     def heartbeat_age(self) -> float:
         """Segundos transcurridos desde la última iteración del bucle; útil para diagnóstico."""
@@ -324,6 +332,18 @@ class CameraWorker:
             logger.warning("%s cam=%s send_confirmed: timeout %.1fs", cmd.cmd_id, self.ip, timeout)
             return False
         return box.get("ok", False)
+
+    def send_inquiry(self, cmd: ViscaCommand, timeout: float) -> bytes:
+        """Read an inquiry through the same serialized session as commands.
+
+        Queue rejection, interruption, camera error or timeout return no data.
+        send_confirmed owns cancellation and deadlines, so expired inquiries
+        cannot run later or publish a late observation.
+        """
+        cmd.response = b""
+        if self.send_confirmed(cmd, timeout):
+            return cmd.response
+        return b""
 
     def stop(self) -> None:
         """
@@ -901,6 +921,7 @@ class CameraWorker:
                         self._close_socket()
                         break  # _succeeded permanece False
 
+                    cmd.response = response
                     _succeeded = True
                     self._consecutive_no_response = 0
                     break

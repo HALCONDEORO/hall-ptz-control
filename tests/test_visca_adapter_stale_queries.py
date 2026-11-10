@@ -109,3 +109,81 @@ def test_live_config_generation_discards_round_trip_result(rig, monkeypatch, kin
     pending.pop(0)()
     callback.assert_not_called()
     assert manager.get_zoom("192.0.2.1") is None
+
+
+@pytest.mark.parametrize("kind", ["zoom", "ae"])
+def test_cancelled_deferred_query_never_reads_or_publishes(rig, kind):
+    adapter, manager, pending = rig
+    callback = Mock()
+    if kind == "zoom":
+        adapter.refresh_zoom_display(1, callback)
+    else:
+        adapter.async_refresh_ae_mode(1, callback)
+    adapter.cancel_polls("cam1")
+    pending.pop(0)()
+    callback.assert_not_called()
+    query = adapter._query_zoom if kind == "zoom" else adapter._query_ae_and_exp_comp
+    query.assert_not_called()
+    assert manager.get_zoom("192.0.2.1") is None
+
+
+@pytest.mark.parametrize("kind", ["zoom", "ae"])
+def test_cancelled_running_query_cannot_publish_result(rig, kind):
+    adapter, manager, pending = rig
+    callback = Mock()
+
+    def complete_after_session_end(*args):
+        adapter.cancel_polls("cam1")
+        return 8192 if kind == "zoom" else ("manual", 3)
+
+    if kind == "zoom":
+        adapter._query_zoom.side_effect = complete_after_session_end
+        adapter.refresh_zoom_display(1, callback)
+    else:
+        adapter._query_ae_and_exp_comp.side_effect = complete_after_session_end
+        adapter.async_refresh_ae_mode(1, callback)
+    pending.pop(0)()
+    callback.assert_not_called()
+    assert manager.get_zoom("192.0.2.1") is None
+    assert manager.ae_mode[1] == "auto"
+    assert manager.exposure_level[1] == 0
+
+
+@pytest.mark.parametrize("kind", ["zoom", "ae"])
+def test_cancelling_other_camera_keeps_current_observation(rig, kind):
+    adapter, manager, pending = rig
+    callback = Mock()
+    if kind == "zoom":
+        adapter.refresh_zoom_display(1, callback)
+    else:
+        adapter.async_refresh_ae_mode(1, callback)
+    adapter.cancel_polls("cam2")
+    pending.pop(0)()
+    callback.assert_called_once()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "ae"])
+def test_new_explicit_refresh_after_cancellation_still_works(rig, kind):
+    adapter, manager, pending = rig
+    adapter.cancel_polls("cam1")
+    callback = Mock()
+    if kind == "zoom":
+        adapter.refresh_zoom_display(1, callback)
+    else:
+        adapter.async_refresh_ae_mode(1, callback)
+    pending.pop(0)()
+    callback.assert_called_once()
+
+
+@pytest.mark.parametrize("kind", ["zoom", "ae"])
+def test_cancelled_deferred_query_releases_endpoint_lease(rig, kind):
+    adapter, manager, pending = rig
+    callback = Mock()
+    refresh = adapter.refresh_zoom_display if kind == "zoom" else adapter.async_refresh_ae_mode
+    refresh(1, callback)
+    adapter.cancel_polls("cam1")
+    pending.pop(0)()
+    refresh(1, callback)
+    assert len(pending) == 1
+    pending.pop(0)()
+    callback.assert_called_once()

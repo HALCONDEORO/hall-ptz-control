@@ -1,0 +1,26 @@
+{
+  "record_kind": "compatibility-evidence-only-not-runtime-config",
+  "status": "unverified",
+  "manufacturer": null,
+  "model": null,
+  "firmware": null,
+  "transport": null,
+  "port": null,
+  "framing": null,
+  "visca_id": null,
+  "pan_speed_range": null,
+  "tilt_speed_range": null,
+  "zoom_speed_range": null,
+  "preset_range": null,
+  "ack_completion_policy": null,
+  "timeout_retry_policy": null,
+  "checks": {
+    "stop_priority": "not-tested",
+    "cancel_pending_motion": "not-tested",
+    "reconnect_without_motion": "not-tested",
+    "preset_recall": "not-tested",
+    "standby": "not-tested"
+  },
+  "hardware_evidence": [],
+  "independent_review": null
+}

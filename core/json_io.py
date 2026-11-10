@@ -91,6 +91,26 @@ def load_json(path: Path | str, default: Any = None) -> Any:
         return recovered
 
 
+def _fsync_dir(dirpath: Path) -> None:
+    """Best-effort fsync of *dirpath* so the os.replace rename is durable.
+
+    Mirrors core.atomic_write._fsync_dir: the temp file is fsync'd before the
+    rename, but without also fsync'ing the directory a power loss can drop the
+    directory entry itself and the saved file vanishes. No-op where opening a
+    directory for fsync is unsupported (e.g. Windows).
+    """
+    try:
+        fd = os.open(str(dirpath), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 def _apply_group_access(tmp_path: str, directory: Path) -> None:
     """Let the file's group reach it when its directory says the group may.
 
@@ -122,10 +142,11 @@ def _apply_group_access(tmp_path: str, directory: Path) -> None:
         logger.debug("No se pudo ajustar el acceso de grupo en %s: %s", tmp_path, exc)
 
 
-def save_json(path: Path | str, data: Any, indent: int = 2) -> bool:
+def save_json(path: Path | str, data: Any, indent: int = 2, *, create_backup: bool = True) -> bool:
     """
     Escribe `data` en `path` de forma atómica (temp-file + os.replace) con backup
     y bloqueo por archivo. Si el archivo ya existe, crea `.bak` antes de reemplazarlo.
+    Use create_backup=False when restoring a good backup over a corrupt primary.
     Devuelve True si tuvo éxito.
     """
     p = Path(path)
@@ -136,7 +157,7 @@ def save_json(path: Path | str, data: Any, indent: int = 2) -> bool:
             dir_ = p.parent
             dir_.mkdir(parents=True, exist_ok=True)
 
-            if p.exists():
+            if create_backup and p.exists():
                 bak = p.with_suffix('.bak')
                 try:
                     shutil.copy2(p, bak)
@@ -154,6 +175,7 @@ def save_json(path: Path | str, data: Any, indent: int = 2) -> bool:
                         pass
                 _apply_group_access(tmp, dir_)
                 os.replace(tmp, p)
+                _fsync_dir(dir_)
             except Exception:
                 try:
                     os.unlink(tmp)

@@ -258,7 +258,10 @@ def check_camera(ip: str, cam_id: str, timeout: int = SOCKET_TIMEOUT) -> bool:
             sock.settimeout(timeout)
             sock.connect((ip, VISCA_PORT))
             sock.sendall(binascii.unhexlify(cam_id + "090400FF"))
-            sock.recv(1024)
+            reply = sock.recv(1024)
+        if not reply:
+            logger.warning("check_camera %s: peer closed without a response", ip)
+            return False
         return True
     except (socket.timeout, socket.error, OSError, binascii.Error) as exc:
         logger.warning("check_camera %s: %s", ip, exc)

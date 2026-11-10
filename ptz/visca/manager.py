@@ -101,6 +101,7 @@ class CameraManager:
 
     def update_camera_ip(self, cam_key: int, new_ip: str) -> None:
         """Update the IP for camera cam_key (1 or 2) and retire the old TCP worker."""
+        self._validate_camera_key(cam_key)
         with self._workers_lock:
             old_ip = self._cam1_ip if cam_key == 1 else self._cam2_ip
             with self._inflight_lock:
@@ -129,8 +130,7 @@ class CameraManager:
         self.ae_mode[key] = "auto"
 
     def update_camera_visca_id(self, key: int, new_id: str) -> None:
-        if key not in (1, 2):
-            raise ValueError("Unknown camera key")
+        self._validate_camera_key(key)
         with self._workers_lock, self._inflight_lock:
             old_id = self.cam_id_for_key(key)
             if key == 1:
@@ -176,17 +176,25 @@ class CameraManager:
             w = self._workers.get(ip)
         return bool(w is not None and w.is_connected)
 
+    @staticmethod
+    def _validate_camera_key(key: int) -> None:
+        if type(key) is not int or key not in (1, 2):
+            raise ValueError("Unknown camera key: expected integer 1 or 2")
+
     def worker_by_key(self, key: int) -> CameraWorker:
         """Devuelve el worker por clave entera (1 o 2) sin necesidad de la IP global."""
+        self._validate_camera_key(key)
         ip = self._cam1_ip if key == 1 else self._cam2_ip
         return self.worker(ip)
 
     def ip_for_key(self, key: int) -> str:
         """Devuelve la IP configurada para la clave de cámara 1 o 2."""
+        self._validate_camera_key(key)
         return self._cam1_ip if key == 1 else self._cam2_ip
 
     def cam_id_for_key(self, key: int) -> str:
         """Devuelve el VISCA ID (p.ej. '81') configurado para la clave de cámara 1 o 2."""
+        self._validate_camera_key(key)
         return self._cam1_id if key == 1 else self._cam2_id
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -206,6 +214,18 @@ class CameraManager:
             if ip not in (self._cam1_ip, self._cam2_ip):
                 return
             self._zoom_cache[self.cam_key(ip)] = pct
+
+    def set_backlight(self, ip: str, enabled: bool) -> None:
+        """Publish confirmed backlight state for a still-configured endpoint."""
+        with self._inflight_lock:
+            if ip in (self._cam1_ip, self._cam2_ip):
+                self.backlight_on[self.cam_key(ip)] = enabled
+
+    def set_focus_mode(self, ip: str, mode: str) -> None:
+        """Store confirmed focus mode only for a still-configured endpoint."""
+        with self._inflight_lock:
+            if ip in (self._cam1_ip, self._cam2_ip):
+                self.focus_mode[self.cam_key(ip)] = mode
 
     def invalidate_zoom(self, ip: str):
         """

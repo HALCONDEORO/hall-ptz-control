@@ -23,19 +23,22 @@ def zoom(data: bytes) -> Optional[int]:
     Extrae el valor 0–0x4000 de una respuesta VISCA zoom inquiry.
     Escanea el buffer para manejar ACK + Completion en el mismo paquete TCP.
     Formato Completion: 9x 50 0p 0q 0r 0s FF
-    Devuelve None si los nibbles de payload son inválidos.
+    Devuelve None si los nibbles o el rango de zoom son inválidos.
     """
     frame = inquiry_frame(data, payload_len=4)
     if frame is None:
         return None
     if not _valid_nibble_bytes(frame, [2, 3, 4, 5]):
         return None
-    return (
+    raw = (
         (frame[2] & 0xF) << 12
         | (frame[3] & 0xF) << 8
         | (frame[4] & 0xF) << 4
         | (frame[5] & 0xF)
     )
+    # The product's zoom commands and percentage UI use 0..ZOOM_MAX.
+    # Reject corrupt/unsupported observations, rather than inventing feedback.
+    return raw if raw <= ZOOM_MAX else None
 
 
 def zoom_to_pct(raw: int) -> int:
@@ -101,19 +104,21 @@ def inquiry_frame(data: bytes, payload_len: int) -> Optional[bytes]:
     return _find_completion_frame(data, response_byte=0x50, payload_len=payload_len)
 
 
-def ae_mode(frame: bytes) -> str:
+def _is_exact_inquiry(frame: bytes, payload_len: int) -> bool:
+    return (len(frame) == payload_len + 3 and (frame[0] & 0xF0) == 0x90
+            and frame[1] == 0x50 and frame[-1] == 0xFF)
+
+
+def ae_mode(frame: bytes) -> Optional[str]:
+    """Return a supported AE mode, or None for malformed/unknown observations.
+
+    Full auto, shutter priority and iris priority share the UI's auto controls.
+    Unknown vendor modes must not silently overwrite a known manual/bright mode.
     """
-    Extrae el modo AE de un frame de respuesta CAM_AE_ModeInq.
-    Devuelve 'manual', 'bright' o 'auto' (fallback seguro).
-    """
-    if len(frame) < 3:
-        return 'auto'
-    pp = frame[2]
-    if pp == 0x03:
-        return 'manual'
-    if pp == 0x0D:
-        return 'bright'
-    return 'auto'
+    if not _is_exact_inquiry(frame, 1):
+        return None
+    return {0x00: "auto", 0x03: "manual", 0x0A: "auto",
+            0x0B: "auto", 0x0D: "bright"}.get(frame[2])
 
 
 def exp_comp_level(frame: bytes) -> Optional[int]:
@@ -122,7 +127,7 @@ def exp_comp_level(frame: bytes) -> Optional[int]:
     El valor VISCA (0–14) se mapea a -7..+7.
     Devuelve None si los nibbles de payload son inválidos.
     """
-    if len(frame) < 6:
+    if not _is_exact_inquiry(frame, 4):
         return None
     if not _valid_nibble_bytes(frame, [2, 3, 4, 5]):
         return None

@@ -151,3 +151,36 @@ def test_unreadable_admin_parent_denies(monkeypatch):
         secret_manager, "decrypt_secret", Mock(side_effect=PermissionError("parent inaccessible"))
     )
     assert not auth.verify_admin("fixture")
+
+
+def test_shell_rollback_tracks_protected_admin_and_restores_it(tmp_path):
+    """Exercise the real shell snapshot/restore functions on disposable paths."""
+    import subprocess
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    source = (root / "scripts/provision_with_rpi_integration.sh").read_text()
+    targets = source.split("ROLLBACK_TARGETS=(", 1)[1].split(")", 1)[0]
+    assert '"/etc/khptz/secrets/admin.enc"' in targets
+    assert '"/var/lib/khptz/admin.enc"' not in targets
+    functions = source.split("snapshot_state() {", 1)[1].split(
+        "# Report an applied-but-unhealthy install.", 1
+    )[0]
+    admin = tmp_path / "secrets" / "admin.enc"
+    admin.parent.mkdir(mode=0o750)
+    admin.write_bytes(b"synthetic original")
+    admin.chmod(0o600)
+    runner = '''set -euo pipefail
+install() { mkdir -p -- "${ROLLBACK_DIR}"; }
+systemctl() { :; }
+ROLLBACK_DIR="$1/backup"
+ROLLBACK_TARGETS=("$1/secrets/admin.enc")
+snapshot_taken=false
+snapshot_state() {''' + functions + '''
+snapshot_state
+printf 'synthetic replacement' > "${ROLLBACK_TARGETS[0]}"
+restore_snapshot
+'''
+    subprocess.run(["bash", "-c", runner, "fixture", str(tmp_path)], check=True)
+    assert admin.read_bytes() == b"synthetic original"
+    assert admin.stat().st_mode & 0o777 == 0o600

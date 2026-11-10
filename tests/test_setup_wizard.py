@@ -413,3 +413,199 @@ class TestEndToEndApply:
         loaded = load_config(resolver.config_dir / "config.yaml")
         assert len(loaded.cameras) == 2
         assert secret_manager.decrypt_secret(secret_manager.SECRET_ADMIN) == "admin-pass"
+
+
+class TestDonePageRuntimeClaims:
+    def test_completion_text_requires_runtime_checks(self, wizard):
+        from PyQt5.QtWidgets import QLabel
+
+        page = _page(wizard, "DonePage")
+        text = " ".join(label.text() for label in page.findChildren(QLabel))
+        assert "Configuration applied" in page.subTitle()
+        assert "Installed and running" not in page.subTitle()
+        assert "The room is ready." not in text
+        assert "does not confirm" in text
+        for command in ("khptz verify-install", "khptz status", "khptz doctor"):
+            assert command in text
+
+
+class TestInstallingPageCloseLifecycle:
+    """Closing the GUI is not cancellation of the privileged provisioner."""
+
+    @pytest.mark.parametrize("finish", ["reject", "accept", "close"])
+    def test_closing_wizard_stops_polling_without_resubmitting(self, _qapp, finish):
+        from ui.setup_wizard import SetupWizard
+
+        class PendingHandoff(_FakeHandoff):
+            def __init__(self):
+                super().__init__()
+                self.begins = 0
+                self.polls = 0
+
+            def begin(self, answers):
+                self.begins += 1
+
+            def poll(self):
+                self.polls += 1
+                return None
+
+        handoff = PendingHandoff()
+        wizard = SetupWizard(handoff=handoff)
+        wizard.show()
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        assert page._timer.isActive()
+        getattr(wizard, finish)()
+        assert not page._timer.isActive()
+        assert handoff.begins == 1
+        assert handoff.polls == 0
+        assert not page.isComplete()
+        # Nothing in closing pretends to cancel/undo the root-side operation.
+        assert page._result is None
+
+    def test_pending_page_warns_that_closing_does_not_cancel_application(self, _qapp):
+        from PyQt5.QtWidgets import QLabel
+        from ui.setup_wizard import SetupWizard
+
+        wizard = SetupWizard(handoff=_FakeHandoff())
+        page = _page(wizard, "InstallingPage")
+        text = "\n".join(label.text() for label in page.findChildren(QLabel))
+        assert "Closing this window does not cancel" in text
+        assert "do not start another attempt" in text
+
+    def test_reentering_after_failure_resets_previous_result_and_rearms_timer(self, _qapp):
+        from application.provision_handoff import HandoffResult
+        from ui.setup_wizard import SetupWizard
+
+        handoff = _FakeHandoff(result=HandoffResult(ok=False, error="synthetic failure"))
+        wizard = SetupWizard(handoff=handoff)
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        page._poll_once()
+        assert not page._timer.isActive()
+        assert not page.isComplete()
+        assert "synthetic failure" in page._status.text()
+        page.cleanupPage()
+        handoff._result = None
+        page.initializePage()
+        assert page._result is None
+        assert not page._done
+        assert not page.isComplete()
+        assert page._timer.isActive()
+        assert "synthetic failure" not in page._status.text()
+        wizard.reject()
+
+
+class TestInstallingTimeoutGuidance:
+    def test_timeout_stops_polling_but_does_not_unlock_next(self, wizard):
+        from application.provision_handoff import HandoffResult
+
+        class TimedOut:
+            poll_interval_s = 60
+            starts = 0
+
+            def begin(self, answers):
+                self.starts += 1
+
+            def poll(self):
+                return HandoffResult(ok=False, timed_out=True)
+
+        fake = TimedOut()
+        from PyQt5.QtWidgets import QWizard
+
+        wizard.handoff = fake
+        page = _page(wizard, "InstallingPage")
+        pid = next(i for i in wizard.pageIds() if wizard.page(i) is page)
+        wizard.setStartId(pid)
+        wizard.show()
+        page._poll_once()
+        assert not page._timer.isActive()
+        assert not page.isComplete()
+        assert page._result.timed_out
+        assert "do not retry or restart blindly" in page._status.text()
+        assert not wizard.button(QWizard.NextButton).isEnabled()
+        wizard.button(QWizard.NextButton).click()
+        assert wizard.currentId() == pid
+        assert fake.starts == 1
+        wizard.reject()
+
+
+class TestWizardDisabledButtonAppearance:
+    @pytest.mark.parametrize("size", [(800, 480), (1280, 720)])
+    def test_default_next_has_disabled_fill_and_cannot_advance(self, wizard, _qapp, size):
+        from PyQt5.QtWidgets import QWizard
+        from application.provision_handoff import HandoffResult
+
+        class Pending:
+            poll_interval_s = 60
+
+            def begin(self, answers):
+                pass
+
+            def poll(self):
+                return None
+
+        wizard.handoff = Pending()
+        page = _page(wizard, "InstallingPage")
+        pid = next(i for i in wizard.pageIds() if wizard.page(i) is page)
+        wizard.setStartId(pid)
+        wizard.setFixedSize(*size)
+        wizard.show()
+        _qapp.processEvents()
+        button = wizard.button(QWizard.NextButton)
+        button.setDefault(True)
+        _qapp.processEvents()
+        assert button.isDefault()
+        assert not button.isEnabled()
+        # Sample away from the text and rounded corners. QSS palette values
+        # alone do not prove what Qt actually painted for a default button.
+        image = button.grab().toImage()
+        assert image.pixelColor(12, image.height() // 2).name() == "#f0f1ef"
+        button.click()
+        assert wizard.currentId() == pid
+        page._apply_result(HandoffResult(ok=True))
+        _qapp.processEvents()
+        assert button.isEnabled()
+        image = button.grab().toImage()
+        fill = image.pixelColor(12, image.height() // 2)
+        assert fill.green() > fill.red() + 10
+        assert fill.name() != "#f0f1ef"
+        page._timer.stop()
+        wizard.reject()
+
+
+class TestWizardEnglishConsistency:
+    @pytest.mark.parametrize("locale_name", ["es_ES", "fr_FR"])
+    def test_buttons_stay_english_under_other_desktop_locales(self, _qapp, locale_name):
+        from PyQt5.QtCore import QLocale
+        from PyQt5.QtWidgets import QWizard
+        from ui.setup_wizard import SetupWizard
+
+        previous = QLocale()
+        try:
+            QLocale.setDefault(QLocale(locale_name))
+            wizard = SetupWizard(handoff=_FakeHandoff())
+            expected = {QWizard.BackButton: "< Back", QWizard.NextButton: "Next >",
+                        QWizard.CommitButton: "Apply", QWizard.FinishButton: "Finish",
+                        QWizard.CancelButton: "Cancel", QWizard.HelpButton: "Help"}
+            for button, text in expected.items():
+                assert wizard.buttonText(button) == text
+            wizard.reject()
+        finally:
+            QLocale.setDefault(previous)
+
+    def test_pending_and_timeout_safety_messages_are_english(self, wizard):
+        from PyQt5.QtWidgets import QLabel
+        from application.provision_handoff import HandoffResult
+
+        page = _page(wizard, "InstallingPage")
+        labels = " ".join(label.text() for label in page.findChildren(QLabel))
+        assert page.title() == "Installing"
+        assert "Closing this window does not cancel changes" in labels
+        assert "do not start another attempt until" in labels
+        timeout = HandoffResult(ok=False, timed_out=True).summary()
+        assert "The system may still be applying changes" in timeout
+        assert "technician" in timeout
+        assert "do not retry or restart blindly" in timeout
+        for old_text in ("Cerrar esta ventana", "No se ha recibido", "no reintentes"):
+            assert old_text not in labels + timeout

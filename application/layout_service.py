@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 from domain.room_layout import RoomLayout, SeatLayout, SCHEMA_VERSION
@@ -118,7 +119,7 @@ class LayoutService:
             if layout is not None:
                 logger.warning("Recovered from .bak — re-saving as primary file")
                 self._recovery_used = True
-                self.save(layout)
+                self.save(layout, create_backup=False)
                 self._layout = layout
                 return layout
 
@@ -135,12 +136,12 @@ class LayoutService:
         """True if the last load() fell back to .bak or default regeneration."""
         return self._recovery_used
 
-    def save(self, layout: RoomLayout) -> bool:
+    def save(self, layout: RoomLayout, *, create_backup: bool = True) -> bool:
         """Validate and persist layout atomically. Returns True on success."""
         self._validate(layout)
         from core.json_io import save_json
         data = self._serialize(layout)
-        ok = save_json(self._path, data)
+        ok = save_json(self._path, data, create_backup=create_backup)
         if ok:
             self._layout = layout
         return ok
@@ -166,7 +167,7 @@ class LayoutService:
         return offscreen_seats(self._layout)
 
     def update_seat_position(self, seat_id: str, x: int, y: int) -> bool:
-        """Update one seat's position in memory and persist. Returns False if seat not found."""
+        """Persist a new position. Return False if the seat is missing or saving fails."""
         if self._layout is None:
             raise LayoutError("Layout not loaded — call load() first")
         seat = self._layout.seat_by_id(seat_id)
@@ -174,14 +175,10 @@ class LayoutService:
             return False
         for i, s in enumerate(self._layout.seats):
             if s.id == seat_id:
-                self._layout.seats[i] = SeatLayout(
-                    id=s.id, label=s.label, preset=s.preset,
-                    camera_role=s.camera_role, x=x, y=y,
-                    row=s.row, column=s.column, type=s.type,
-                    visible=s.visible, locked=s.locked, calibrated=s.calibrated,
-                )
-                self.save(self._layout)
-                return True
+                seats = list(self._layout.seats)
+                seats[i] = replace(s, x=x, y=y)
+                # Do not expose an unsaved position through the live layout.
+                return self.save(replace(self._layout, seats=seats))
         return False
 
     # ── Internal: load pipeline ───────────────────────────────────────────────
@@ -195,7 +192,9 @@ class LayoutService:
 
         try:
             return self._deserialize_with_migration(raw)
-        except LayoutError as exc:
+        except (ValueError, TypeError, OverflowError) as exc:
+            # LayoutError is a ValueError. Numeric conversions and malformed
+            # collections must use the same backup/default recovery path.
             logger.exception("Invalid layout in %s: %s", path.name, exc)
             return None
 

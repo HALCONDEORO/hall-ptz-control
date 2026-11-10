@@ -19,7 +19,7 @@ import re
 import socket
 from pathlib import Path
 
-from core.atomic_write import write_text_atomic
+from core.atomic_write import write_bytes_atomic, write_text_atomic
 
 _logger = logging.getLogger(__name__)
 
@@ -126,7 +126,9 @@ def _migrate_enc_file(legacy_paths: list[Path] | None = None) -> None:
         try:
             if src.exists() and src.resolve() != _ENC_FILE.resolve():
                 _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-                _ENC_FILE.write_bytes(src.read_bytes())
+                # Keep the private file mode even in a shared data directory.
+                # Publish the complete file before removing its legacy copy.
+                write_bytes_atomic(_ENC_FILE, src.read_bytes(), mode=0o600)
                 src.unlink(missing_ok=True)
                 _logger.info("password.enc migrado de %s -> %s", src, _ENC_FILE)
                 return

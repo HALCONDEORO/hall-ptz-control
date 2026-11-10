@@ -27,6 +27,7 @@ class JoystickAdapter:
     def __init__(self, bus: AsyncEventBus, active_camera_fn) -> None:
         self._bus = bus
         self._get_active_camera = active_camera_fn
+        self._moving_camera = None
 
     def handlers(self) -> dict:
         """Devuelve el dict de handlers para connect_joystick()."""
@@ -42,15 +43,23 @@ class JoystickAdapter:
         }
 
     def stop(self) -> None:
+        # A camera-selection change must not redirect the release STOP away
+        # from the camera that received the last movement command.
+        camera = self._moving_camera
+        self._moving_camera = None
         self._bus.emit(
             EventType.CAMERA_STOP,
-            camera=self._get_active_camera(),
+            camera=camera if camera is not None else self._get_active_camera(),
         )
 
     def _move(self, pan: int, tilt: int) -> None:
+        camera = self._get_active_camera()
+        if self._moving_camera is not None and self._moving_camera != camera:
+            self.stop()
+        self._moving_camera = camera
         self._bus.emit(
             EventType.CAMERA_MOVE,
-            camera=self._get_active_camera(),
+            camera=camera,
             pan_speed=pan,
             tilt_speed=tilt,
         )

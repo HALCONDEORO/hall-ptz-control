@@ -302,3 +302,24 @@ def test_export_then_import_round_trip(tmp_path):
     assert result.imported is True
     restored = json.loads(layout_path.read_text())
     assert restored["seats"][0]["id"] == "1"
+
+
+@pytest.mark.parametrize("error", [PermissionError("backup permission denied"), OSError("disk full")])
+def test_import_preserves_current_layout_when_backup_fails(tmp_path, monkeypatch, error):
+    layout_path = tmp_path / "room_layout.json"
+    current = _valid_layout()
+    current["room_name"] = "Original custom room"
+    _write(layout_path, current)
+    original_bytes = layout_path.read_bytes()
+    src = tmp_path / "replacement.json"
+    _write(src, _valid_layout())
+
+    def backup_fails(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr("application.layout_export_import.shutil.copy2", backup_fails)
+    result = _svc(layout_path).import_layout(src)
+
+    assert result.imported is False
+    assert "back up" in result.reason.lower()
+    assert layout_path.read_bytes() == original_bytes

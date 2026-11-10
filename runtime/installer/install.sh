@@ -34,6 +34,7 @@ set -euo pipefail
 DEV_MODE=false
 INSTALL_ATEM=false
 CHECK_MODE=false
+SHOW_CHECK_NEXT_ACTION=true
 WIZARD_USER=""
 # Which process owns the GUI (#885).
 #   system — khptz-control.service runs it as the 'khptz' system user, bridged to
@@ -48,8 +49,10 @@ while [[ $# -gt 0 ]]; do
         --dev)   DEV_MODE=true; shift ;;
         --atem)  INSTALL_ATEM=true; shift ;;
         --check) CHECK_MODE=true; shift ;;
+        --no-check-next-action) SHOW_CHECK_NEXT_ACTION=false; shift ;;
         --wizard-user)
-            [[ $# -ge 2 ]] || { echo "--wizard-user requires a value" >&2; exit 1; }
+            [[ $# -ge 2 && -n "$2" && "$2" != -* ]] \
+                || { echo "--wizard-user requires a username (e.g. --wizard-user pi)" >&2; exit 1; }
             WIZARD_USER="$2"; shift 2 ;;
         --gui-mode)
             [[ $# -ge 2 ]] || { echo "--gui-mode requires a value" >&2; exit 1; }
@@ -68,6 +71,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --dev            Developer install — current user, /home/USER/khptz layout"
             echo "  --atem           Install ATEM optional dependencies (requires pip3)"
             echo "  --check          Dry-run: validate Pi readiness without writing any files"
+            echo "  --no-check-next-action  With --check: caller supplies the next action"
             echo "  --wizard-user U  Desktop user that owns the setup-wizard provisioning"
             echo "                   channel (/run/khptz). Defaults to \$SUDO_USER."
             echo "  --gui-mode M     system (default) = GUI runs as the khptz service user;"
@@ -80,6 +84,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "${SHOW_CHECK_NEXT_ACTION}" == "false" && "${CHECK_MODE}" != "true" ]]; then
+    echo "--no-check-next-action requires --check" >&2
+    exit 1
+fi
 
 # The setup wizard runs in the desktop session as this user; it owns the
 # /run/khptz provisioning channel. Default to the human who invoked sudo.
@@ -103,6 +112,13 @@ fi
 
 # Administrator credentials never share the GUI-writable runtime directory.
 ADMIN_SECRET_DIR="${CONFIG_DIR}/secrets"
+# Product launchers use this exact interpreter, regardless of sudo's PATH.
+# Dev remains explicitly PATH-based, matching its existing launcher contract.
+if [[ "${DEV_MODE}" == "true" ]]; then
+    PYTHON_BIN="python3"
+else
+    PYTHON_BIN="/usr/bin/python3"
+fi
 
 SERVICE_NAME="khptz-control"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -129,6 +145,11 @@ _restart_stopped_service_on_abort() {
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
 
+# Remedy for any missing repo file: the checkout on the install media is
+# incomplete (partial copy to the pendrive/SD clone). Named once so every
+# template-missing message gives the same concrete next step on site.
+INCOMPLETE_CHECKOUT_REMEDY="the repository checkout is incomplete — re-clone it (or restore the missing file from a clean clone) and re-run"
+
 require_command() {
     local cmd="$1"
     local apt_hint="${2:-}"
@@ -142,11 +163,11 @@ require_command() {
 }
 
 require_pyqt5() {
-    if ! python3 -c "import PyQt5" 2>/dev/null; then
+    if ! "${PYTHON_BIN}" -c "import PyQt5" 2>/dev/null; then
         error "PyQt5 not available — install with: sudo apt install -y python3-pyqt5 python3-pyqt5.qtsvg"
     fi
-    if ! python3 -c "from PyQt5 import QtSvg" 2>/dev/null; then
-        warn "PyQt5.QtSvg not available — SVG icons may not render. Install with: sudo apt install -y python3-pyqt5.qtsvg"
+    if ! "${PYTHON_BIN}" -c "from PyQt5 import QtSvg" 2>/dev/null; then
+        error "PyQt5.QtSvg not available — required by the GUI. Install with: sudo apt install -y python3-pyqt5.qtsvg"
     fi
 }
 
@@ -159,7 +180,7 @@ require_pyqt5() {
 require_python_module() {
     local module="$1"
     local apt_hint="$2"
-    if ! python3 -c "import ${module}" 2>/dev/null; then
+    if ! "${PYTHON_BIN}" -c "import ${module}" 2>/dev/null; then
         error "Required Python module not available: ${module} — install with: sudo apt install -y ${apt_hint}"
     fi
 }
@@ -169,13 +190,17 @@ require_python_module() {
 info "Checking prerequisites..."
 [[ "$(id -u)" -eq 0 ]] || error "This script must be run as root (use sudo)"
 
-require_command python3  python3
+require_command "${PYTHON_BIN}" python3
 require_command git      git
 require_command rsync    rsync
 require_command systemctl
 
+# Optional ATEM installs use pip even in product mode. Check it before the
+# read-only readiness exit and before creating users or directories.
 if [[ "${DEV_MODE}" == "true" ]]; then
     require_command pip3 python3-pip
+elif [[ "${INSTALL_ATEM}" == "true" ]]; then
+    require_python_module pip python3-pip
 fi
 
 if [[ "${DEV_MODE}" == "false" && "${CHECK_MODE}" == "false" ]] \
@@ -186,7 +211,7 @@ fi
 require_pyqt5
 require_python_module yaml python3-yaml
 
-PYTHON_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+PYTHON_VERSION="$("${PYTHON_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
 info "Python version: ${PYTHON_VERSION}"
 info "Install mode  : $([[ ${DEV_MODE} == true ]] && echo 'developer' || echo 'product')"
 info "App user      : ${APP_USER}"
@@ -215,14 +240,18 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     _chk_pass "Architecture: $(uname -m)"
 
     # Python version
-    _py_major="$(python3 -c 'import sys; print(sys.version_info.major)')"
-    _py_minor="$(python3 -c 'import sys; print(sys.version_info.minor)')"
+    _py_major="$("${PYTHON_BIN}" -c 'import sys; print(sys.version_info.major)')"
+    _py_minor="$("${PYTHON_BIN}" -c 'import sys; print(sys.version_info.minor)')"
+    # Two supported targets: 3.9.2 (Bullseye legacy) and 3.11 (Bookworm
+    # installation target, container-rehearsed). See docs/RPI_RUNTIME_BASELINE.md.
     if [[ "${_py_major}" -eq 3 && "${_py_minor}" -eq 9 ]]; then
-        _chk_pass "Python ${PYTHON_VERSION} (3.9.x — supported target is 3.9.2)"
+        _chk_pass "Python ${PYTHON_VERSION} (3.9.x — supported legacy target: Bullseye 3.9.2)"
+    elif [[ "${_py_major}" -eq 3 && "${_py_minor}" -eq 11 ]]; then
+        _chk_pass "Python ${PYTHON_VERSION} (3.11 — supported installation target: Bookworm; physical validation pending)"
     elif [[ "${_py_major}" -eq 3 && "${_py_minor}" -gt 9 ]]; then
-        _chk_warn "Python ${PYTHON_VERSION} (3.10+ is NOT validated; supported target is 3.9.2 on Raspberry Pi OS Bullseye)"
+        _chk_warn "Python ${PYTHON_VERSION} (NOT a validated target; supported targets are 3.9.2 on Bullseye and 3.11 on Bookworm)"
     else
-        _chk_fail "Python ${PYTHON_VERSION} is too old (supported target is 3.9.2; 3.9 minimum)"
+        _chk_fail "Python ${PYTHON_VERSION} is too old (3.9 minimum; supported targets are 3.9.2 on Bullseye and 3.11 on Bookworm)"
     fi
 
     # Service template
@@ -230,7 +259,7 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     if [[ -f "${SERVICE_TEMPLATE}" ]]; then
         _chk_pass "Systemd service template: ${SERVICE_TEMPLATE}"
     else
-        _chk_fail "Systemd service template missing: ${SERVICE_TEMPLATE}"
+        _chk_fail "Systemd service template missing: ${SERVICE_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
     fi
 
     # Config template
@@ -262,6 +291,58 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
         _chk_warn "DISPLAY not set — Qt app needs a display session at runtime"
     fi
 
+    # Desktop session type (product installs only). Both GUI launchers force
+    # QT_QPA_PLATFORM=xcb on DISPLAY=:0, so they need an X11 session. Bookworm
+    # and Trixie boot to Wayland (wayfire/labwc) by default; there the screen
+    # stays dark even when every other check passes. docs/INSTALL_RPI.md
+    # requires switching to X11 before installing — enforce it at the gate
+    # rather than discovering it at the first boot on site.
+    if [[ "${DEV_MODE}" != "true" ]]; then
+        # Select the desktop user's ACTIVE graphical session, never just the
+        # first one listed: a background session of the other type (leftover
+        # Wayland next to the X11 desktop, or vice versa) must not mask the
+        # session that actually drives the touchscreen. Active=yes wins;
+        # otherwise fall back to a graphical session in State=active (covers a
+        # locked screen); anything else is uninspectable here.
+        _session_type=""
+        _state_type=""
+        if command -v loginctl >/dev/null 2>&1 && [[ -n "${WIZARD_USER}" ]]; then
+            for _sid in $(loginctl list-sessions --no-legend 2>/dev/null \
+                          | awk -v u="${WIZARD_USER}" '$3 == u { print $1 }' || true); do
+                _type="$(loginctl show-session "${_sid}" --property=Type --value 2>/dev/null || true)"
+                [[ "${_type}" == "x11" || "${_type}" == "wayland" ]] || continue
+                if [[ "$(loginctl show-session "${_sid}" --property=Active --value 2>/dev/null || true)" == "yes" ]]; then
+                    _session_type="${_type}"
+                    break
+                fi
+                if [[ -z "${_state_type}" ]] \
+                   && [[ "$(loginctl show-session "${_sid}" --property=State --value 2>/dev/null || true)" == "active" ]]; then
+                    _state_type="${_type}"
+                fi
+            done
+            [[ -n "${_session_type}" ]] || _session_type="${_state_type}"
+        fi
+        case "${_session_type}" in
+            x11)
+                _chk_pass "Desktop session: X11 (required by the GUI units)" ;;
+            wayland)
+                _chk_fail "Desktop session: Wayland — the GUI units require X11 (QT_QPA_PLATFORM=xcb). Switch with 'sudo raspi-config' -> Advanced Options -> Wayland -> X11, reboot into the desktop and re-run --check." ;;
+            *)
+                # Uninspectable (fresh boot, SSH, no graphical session yet).
+                # Warn by default: only an OS that provably predates Bookworm
+                # defaults to X11. A WARN never blocks the gate, but it puts
+                # the raspi-config step in front of the installer on exactly
+                # the machines where the first boot would stay dark.
+                _os_major="${VERSION_ID:-}"
+                _os_major="${_os_major%%.*}"
+                if [[ "${_os_major}" =~ ^[0-9]+$ ]] && [[ "${_os_major}" -lt 12 ]]; then
+                    _chk_pass "No active desktop session to inspect (this OS defaults to X11)"
+                else
+                    _chk_warn "No active desktop session to inspect; Bookworm/Trixie boot to Wayland by default and the GUI units require X11. Confirm 'sudo raspi-config' -> Advanced Options -> Wayland -> X11 before installing."
+                fi ;;
+        esac
+    fi
+
     # Scoped display authorisation (system GUI mode only).
     #
     # In system mode the GUI runs as 'khptz' and reaches the desktop user's X
@@ -287,7 +368,9 @@ if [[ "${CHECK_MODE}" == "true" ]]; then
     info "=== Summary ==="
     if [[ ${_check_fails} -eq 0 ]]; then
         info "All required checks passed. Ready to install."
-        info "Run without --check to proceed: sudo ./runtime/installer/install.sh"
+        if [[ "${SHOW_CHECK_NEXT_ACTION}" == "true" ]]; then
+            info "Run without --check to proceed: sudo ./runtime/installer/install.sh"
+        fi
     else
         info "${_check_fails} blocking check(s) failed. Resolve before installing."
     fi
@@ -358,8 +441,8 @@ else
     info "  PyQt5 expected from: sudo apt install -y python3-pyqt5 python3-pyqt5.qtsvg"
     if grep -qE '^[[:space:]]*[^#[:space:]]' "${REPO_ROOT}/requirements-rpi.txt" 2>/dev/null; then
         info "Installing additional pip dependencies from requirements-rpi.txt..."
-        require_command pip3 python3-pip
-        pip3 install --quiet -r "${REPO_ROOT}/requirements-rpi.txt"
+        require_python_module pip python3-pip
+        "${PYTHON_BIN}" -m pip install --quiet -r "${REPO_ROOT}/requirements-rpi.txt"
     else
         info "  requirements-rpi.txt lists no pip requirements — nothing to install."
     fi
@@ -368,8 +451,12 @@ fi
 # ATEM support: install separately only when explicitly requested.
 if [[ "${INSTALL_ATEM:-false}" == "true" ]]; then
     info "Installing ATEM dependencies (--atem requested)..."
-    require_command pip3 python3-pip
-    pip3 install --quiet -r "${REPO_ROOT}/requirements-atem.txt"
+    if [[ "${DEV_MODE}" == "true" ]]; then
+        require_command pip3 python3-pip
+        pip3 install --quiet -r "${REPO_ROOT}/requirements-atem.txt"
+    else
+        "${PYTHON_BIN}" -m pip install --quiet -r "${REPO_ROOT}/requirements-atem.txt"
+    fi
 fi
 
 # ── Copy application files ────────────────────────────────────────────────────
@@ -438,7 +525,7 @@ if [[ ! -f "${CONFIG_TARGET}" ]]; then
         # Generate a unique installation ID for this install.
         # Never overwrite an existing ID — this block only runs when config is first created.
         INSTALL_YEAR="$(date +%Y)"
-        INSTALL_ID="$(python3 -c "
+        INSTALL_ID="$("${PYTHON_BIN}" -c "
 import sys; sys.path.insert(0, '${INSTALL_DIR}')
 from domain.installation_id import generate_installation_id
 print(generate_installation_id(${INSTALL_YEAR}))
@@ -531,6 +618,10 @@ LAUNCHER
 else
     cat > "${KHPTZ_LAUNCHER}" <<LAUNCHER
 #!/usr/bin/env bash
+export KHPTZ_CONFIG_DIR="${CONFIG_DIR}"
+export KHPTZ_DATA_DIR="${DATA_DIR}"
+export KHPTZ_LOG_DIR="${LOG_DIR}"
+export KHPTZ_BACKUP_DIR="${BACKUP_DIR}"
 cd "${INSTALL_DIR}" && exec python3 -m runtime.cli "\$@"
 LAUNCHER
 fi
@@ -541,13 +632,15 @@ info "khptz CLI installed at ${KHPTZ_LAUNCHER}"
 
 info "Installing systemd service..."
 SERVICE_TEMPLATE="${REPO_ROOT}/runtime/systemd/khptz-control.service"
-[[ -f "${SERVICE_TEMPLATE}" ]] || error "Service template not found: ${SERVICE_TEMPLATE}"
+[[ -f "${SERVICE_TEMPLATE}" ]] || error "Service template not found: ${SERVICE_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
 
 if [[ "${DEV_MODE}" == "false" ]]; then
     # Product mode: service template already uses fixed product paths
     cp "${SERVICE_TEMPLATE}" "${SERVICE_FILE}"
 else
     # Dev mode: patch paths and user for the developer install location.
+    # The checkout lives under /home, which ProtectHome=true hides entirely.
+    # Keep homes read-only except for the explicit runtime ReadWritePaths below.
     # Also strip ConditionPathExists=.../.provisioned — dev installs never run
     # the setup wizard or the provisioning channel (both gated to product mode
     # above), so that marker is never created and the gate would otherwise
@@ -555,10 +648,14 @@ else
     sed \
         -e "s|User=khptz|User=${APP_USER}|g" \
         -e "s|Group=khptz|Group=${APP_USER}|g" \
+        -e "s|ProtectHome=true|ProtectHome=read-only|g" \
         -e "s|WorkingDirectory=/opt/khptz|WorkingDirectory=${INSTALL_DIR}|g" \
         -e "s|ExecStart=/usr/bin/python3 /opt/khptz/main.py|ExecStart=/usr/bin/python3 ${INSTALL_DIR}/main.py|g" \
         -e "s|ReadWritePaths=.*|ReadWritePaths=${DATA_DIR} ${LOG_DIR} ${BACKUP_DIR}|g" \
         -e "s|Environment=KHPTZ_DATA_DIR=/var/lib/khptz|Environment=KHPTZ_DATA_DIR=${DATA_DIR}|g" \
+        -e "/^Environment=KHPTZ_DATA_DIR=/a Environment=KHPTZ_CONFIG_DIR=${CONFIG_DIR}" \
+        -e "/^Environment=KHPTZ_DATA_DIR=/a Environment=KHPTZ_LOG_DIR=${LOG_DIR}" \
+        -e "/^Environment=KHPTZ_DATA_DIR=/a Environment=KHPTZ_BACKUP_DIR=${BACKUP_DIR}" \
         -e "/^ConditionPathExists=\/etc\/khptz\/\.provisioned$/d" \
         "${SERVICE_TEMPLATE}" > "${SERVICE_FILE}"
 fi
@@ -596,8 +693,8 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     info "Installing setup-wizard provisioning channel..."
     PROVISION_SERVICE_TEMPLATE="${REPO_ROOT}/runtime/systemd/khptz-provision.service"
     PROVISION_PATH_TEMPLATE="${REPO_ROOT}/runtime/systemd/khptz-provision.path"
-    [[ -f "${PROVISION_SERVICE_TEMPLATE}" ]] || error "Provision service template not found: ${PROVISION_SERVICE_TEMPLATE}"
-    [[ -f "${PROVISION_PATH_TEMPLATE}" ]]    || error "Provision path template not found: ${PROVISION_PATH_TEMPLATE}"
+    [[ -f "${PROVISION_SERVICE_TEMPLATE}" ]] || error "Provision service template not found: ${PROVISION_SERVICE_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
+    [[ -f "${PROVISION_PATH_TEMPLATE}" ]]    || error "Provision path template not found: ${PROVISION_PATH_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
 
     cp "${PROVISION_SERVICE_TEMPLATE}" /etc/systemd/system/khptz-provision.service
     cp "${PROVISION_PATH_TEMPLATE}"    /etc/systemd/system/khptz-provision.path
@@ -614,8 +711,57 @@ if [[ "${DEV_MODE}" == "false" ]]; then
         # container), so create it before writing rather than failing the install.
         mkdir -p /etc/tmpfiles.d
         printf 'd /run/khptz 0750 %s root -\n' "${WIZARD_USER}" > /etc/tmpfiles.d/khptz.conf
-        systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf \
-            || warn "systemd-tmpfiles --create failed; /run/khptz will be created on next boot"
+
+        # Fallback for a failed systemd-tmpfiles --create of the provisioning
+        # channel directory. Never repairs by inference: an existing path is
+        # used only when it is a REAL directory (not a symlink) owned by
+        # <owner>:root with mode exactly 0750; anything else only gets a WARN.
+        # A missing directory is created restrictively and then verified.
+        # Exit 0 = usable now; exit 1 = channel unavailable this boot (the
+        # install continues either way). Without the directory the wizard
+        # cannot drop request.json and provisioning is dead for the whole
+        # first session, with only this install log to explain why.
+        _ensure_run_khptz() {
+            local dir="$1" owner="$2"
+            local mode o g
+
+            if [[ -L "${dir}" ]]; then
+                warn "${dir} is a symlink — refusing to use or modify it. Provisioning channel unavailable now; verify after reboot."
+                return 1
+            fi
+
+            if [[ -d "${dir}" ]]; then
+                mode="$(stat -c '%a' "${dir}" 2>/dev/null || true)"
+                o="$(stat -c '%U' "${dir}" 2>/dev/null || true)"
+                g="$(stat -c '%G' "${dir}" 2>/dev/null || true)"
+                if [[ "${mode}" == "750" && "${o}" == "${owner}" && "${g}" == "root" ]]; then
+                    info "${dir} already exists with the expected owner and mode — using it."
+                    return 0
+                fi
+                warn "${dir} exists with unexpected owner/group/mode (${o}:${g} ${mode}, expected ${owner}:root 750) — not changing it by inference. Provisioning channel unavailable now; verify after reboot."
+                return 1
+            fi
+
+            if ! install -d -m 0750 -o "${owner}" -g root "${dir}"; then
+                warn "Could not create ${dir}. Provisioning channel unavailable now; verify after reboot."
+                return 1
+            fi
+            # Verify what was just created: a partially-privileged or racing
+            # system must not leave a looser directory in place unnoticed.
+            mode="$(stat -c '%a' "${dir}" 2>/dev/null || true)"
+            o="$(stat -c '%U' "${dir}" 2>/dev/null || true)"
+            g="$(stat -c '%G' "${dir}" 2>/dev/null || true)"
+            if [[ "${mode}" == "750" && "${o}" == "${owner}" && "${g}" == "root" ]]; then
+                warn "systemd-tmpfiles --create failed; ${dir} created directly with the same owner and mode."
+                return 0
+            fi
+            warn "${dir} was created but does not match ${owner}:root 0750 (got ${o}:${g} ${mode}) — not trusting it. Provisioning channel unavailable now; verify after reboot."
+            return 1
+        }
+
+        if ! systemd-tmpfiles --create /etc/tmpfiles.d/khptz.conf; then
+            _ensure_run_khptz /run/khptz "${WIZARD_USER}" || true
+        fi
 
         systemctl daemon-reload
         systemctl enable khptz-provision.path 2>/dev/null || true
@@ -688,7 +834,7 @@ if [[ "${DEV_MODE}" == "false" ]]; then
             warn "Re-run with: sudo ./runtime/installer/install.sh --wizard-user <desktop-user>"
         fi
     else
-        warn "Setup launcher template missing: ${DESKTOP_TEMPLATE} or ${MENU_DESKTOP_TEMPLATE}"
+        warn "Setup launcher template missing: ${DESKTOP_TEMPLATE} or ${MENU_DESKTOP_TEMPLATE} — ${INCOMPLETE_CHECKOUT_REMEDY}"
     fi
 fi
 
@@ -714,7 +860,7 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     if [[ "${GUI_MODE}" == "user" ]]; then
         info "Installing the session-owned GUI (--gui-mode user)..."
         for _tpl in "${GUI_UNIT_TEMPLATE}" "${GUI_HELPER_TEMPLATE}" "${GUI_DESKTOP_TEMPLATE}"; do
-            [[ -f "${_tpl}" ]] || error "GUI template not found: ${_tpl}"
+            [[ -f "${_tpl}" ]] || error "GUI template not found: ${_tpl} — ${INCOMPLETE_CHECKOUT_REMEDY}"
         done
 
         install -d -m 755 /etc/systemd/user
@@ -831,7 +977,16 @@ else
     # rollback target. Empty on a first install — there is nothing to go back
     # to, and recording the ref we just installed would make `rollback.sh` a
     # no-op that looks like it worked.
-    PREVIOUS_REF="${PREV_INSTALLED_REF}"
+    if [[ "${PREV_INSTALLED_REF}" == "unknown" ]]; then
+        # The previous install came from a source that was not a git checkout
+        # (a tarball, a copied tree): "unknown" is a placeholder, not a ref.
+        # Recording it as the rollback target would make rollback.sh try to
+        # check out a ref literally named "unknown" and fail with git's
+        # pathspec error. Record no target instead.
+        PREVIOUS_REF=""
+    else
+        PREVIOUS_REF="${PREV_INSTALLED_REF}"
+    fi
 fi
 
 INSTALLED_VERSION="$(tr -d '[:space:]' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"

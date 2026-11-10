@@ -33,8 +33,10 @@ it, restoring a backup or importing a layout wrote files only their creator
 could read, which is how a session-owned GUI ends up with no presets after a
 recovery (#885).
 
-Concurrent writers use separate temporary files; the last rename wins.
-Read-modify-write callers still need a lock (or core.json_io.save_json).
+Overlapping writes use independent private temp files, so each replacement
+publishes only its own complete content. The last replacement wins. Callers
+still need a lock around read-modify-write transactions to prevent lost updates
+(or core.json_io.save_json which is lock-per-path).
 
 Raises OSError on failure — callers decide how to handle/log it.
 """
@@ -103,11 +105,9 @@ def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None) ->
     # specific mode (secrets pass 0o600) are honoured exactly as before.
     if mode is None:
         mode = group_shared_mode(dest.parent)
-    # mkstemp uses exclusive creation (O_EXCL) and private mode, so no
-    # pre-planted symlink is followed and concurrent writers never unlink or
-    # overwrite one another's temporary file. Keep it on the destination FS.
-    fd, tmp_name = tempfile.mkstemp(prefix=f".{dest.name}.", suffix=".tmp",
-                                   dir=str(dest.parent))
+    # A writer owns only its unique temporary file, never a legacy fixed-name
+    # orphan or another writer's file. mkstemp is exclusive and private (0600).
+    fd, tmp_name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".tmp", dir=dest.parent)
     tmp = Path(tmp_name)
     try:
         try:

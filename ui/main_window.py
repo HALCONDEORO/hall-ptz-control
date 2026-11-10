@@ -24,12 +24,13 @@ from __future__ import annotations
 import logging
 import os
 import time
+import weakref
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from domain.shutdown_intent import ShutdownIntent
 
-from PyQt5 import QtGui, QtCore
+from PyQt5 import QtGui, QtCore, sip
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtSvg import QSvgRenderer
@@ -141,6 +142,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         self.session_active  = False
         self._seat_pending: Optional[int] = None
+        self._seat_pending_camera: Optional[int] = None
         self._last_activity: float = time.time()
         self._pan_cap:        int = PAN_SPEED_MAX   # 24 — watchdog lo reduce en error move
         self._tilt_cap:       int = TILT_SPEED_MAX  # 20 — watchdog lo reduce en error move
@@ -231,15 +233,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             on_action=self._on_atem_action,
         )
         self._pip_nudge_svc = self._build_pip_nudge_service()
-        for _evt in (EventType.CAMERA_MOVE, EventType.CAMERA_ZOOM, EventType.SEAT_SELECTED):
-            self._bus.subscribe(_evt, lambda _e: self._record_activity())
-            self._bus.subscribe(_evt, lambda _e: self._atem_dispatcher.notify_manual_control())
-        # El nudge solo se cancela ante comandos que SUSTITUYEN el paneo en curso:
-        # un nuevo move (nueva velocidad de pan) o un recall de preset / sede
-        # (posición absoluta).  CAMERA_ZOOM no afecta al eje pan, así que cancelar
-        # dejaría el move() del nudge sin su stop_move() programado → deriva.
-        for _evt in (EventType.CAMERA_MOVE, EventType.SEAT_SELECTED):
-            self._bus.subscribe(_evt, lambda _e: self._pip_nudge_svc.cancel())
+        from ui.pip_nudge_wiring import wire_pip_nudge_activity
+        wire_pip_nudge_activity(self)
         self._bus.subscribe(EventType.PRESET_SAVE_REQUESTED, self._on_preset_save_requested_feedback)
         self._bus.subscribe(EventType.PRESET_SAVED, self._on_preset_saved_feedback)
         self._start_atem_monitor()
@@ -321,7 +316,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         # Determinar rol post-login:
         # • Login real (operador por cuenta atrás o admin) → el rol lo
         #   decide la credencial usada, expuesto en login_overlay.authenticated_role
-        #   (Operador→CAMERA_OPERATOR, Admin→SYSTEM_ADMIN).
+        #   (Operador→USER, Admin→ADMIN).
         # • Sim / sin login real → respeta el rol persistido en access_mode.json.
         # El flag legacy de 'restart as admin' solo se consume aquí; el modo de
         # login inicial ya lo decidió LoginScreen a partir de ese flag.
@@ -625,7 +620,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             seat_number = seat.preset
             x, y = seat.x, seat.y
             if seat.type == "special" or seat_number in (128, 129, 130, 131):
-                button = build_special_seat_button(seat_number, x, y, parent=self)
+                button = build_special_seat_button(seat_number, x, y, parent=self, label=seat.label)
                 button.init_preset_actions(
                     seat_number,
                     call_cb=self._call_preset_from_button,
@@ -1038,15 +1033,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         If the current role already has configuration access, open Settings
         directly. Otherwise show the password overlay; on the correct admin
-        password, elevate to Technician and then open Settings. Reuses the same
+        password, elevate to Admin and then open Settings. Reuses the same
         RoleElevationOverlay and ConfigDialog flow as the right-panel buttons —
         no separate admin path.
         """
-        _SETTINGS_ROLES = {
-            OperatingMode.TECHNICIAN,
-            OperatingMode.SYSTEM_ADMIN,
-            OperatingMode.ADMIN_INSTALLER,
-        }
+        _SETTINGS_ROLES = {OperatingMode.ADMIN}
         if self._access_mode_svc.mode in _SETTINGS_ROLES:
             self._open_config_dialog()
             return
@@ -1092,16 +1083,16 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._role_elevation_overlay.show_overlay()
 
     def _on_role_elevation_success(self):
-        """Callback tras contraseña correcta: sube a SYSTEM_ADMIN sin reiniciar."""
-        self._access_mode_svc.set_mode(OperatingMode.SYSTEM_ADMIN)
+        """Callback tras contraseña correcta: sube a ADMIN sin reiniciar."""
+        self._access_mode_svc.set_mode(OperatingMode.ADMIN)
         self._right_panel._update_mode_buttons()
-        logger.info("Rol cambiado a SYSTEM_ADMIN (overlay inline)")
+        logger.info("Rol cambiado a ADMIN (overlay inline)")
 
     def _exit_admin_mode(self):
-        """Baja el rol a CAMERA_OPERATOR inline — sin contraseña ni reinicio."""
-        self._access_mode_svc.set_mode(OperatingMode.CAMERA_OPERATOR)
+        """Baja el rol a USER inline — sin contraseña ni reinicio."""
+        self._access_mode_svc.set_mode(OperatingMode.USER)
         self._right_panel._update_mode_buttons()
-        logger.info("Rol cambiado a CAMERA_OPERATOR (inline)")
+        logger.info("Rol cambiado a USER (inline)")
 
     def _restart_as_admin(self):
         """Escribe el flag de admin y cierra la app para relanzarla con login.
@@ -1195,7 +1186,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         """Devuelve el modo operativo actual para la política CALL/SET.
 
         name_edit es un modo de trabajo temporal — bloquea acciones de cámara.
-        El rol (camera_operator, technician, etc.) viene del AccessModeService.
+        El rol (user/admin) viene del AccessModeService.
         """
         if self.BtnNames.isChecked():
             return OperatingMode.NAME_EDIT
@@ -1211,7 +1202,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         """Breve flash rojo sobre widget cuando una acción de preset es bloqueada."""
         orig = widget.styleSheet()
         widget.setStyleSheet(orig + " background-color: #7a1a1a;")
-        QTimer.singleShot(duration_ms, lambda: widget.setStyleSheet(orig))
+        widget_ref = weakref.ref(widget)
+
+        def restore_style():
+            target = widget_ref()
+            if target is not None and not sip.isdeleted(target):
+                target.setStyleSheet(orig)
+
+        QTimer.singleShot(duration_ms, restore_style)
 
     def _dispatch_preset_action(
         self,
@@ -1239,6 +1237,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         if result.error_code == "set_action":
             # SET: confirmar con el usuario y salvar preset (permanece en UI).
             if preset_number in PLATFORM_PRESETS:
+                session_generation = self._session._session_generation
                 reply = QMessageBox.question(
                     self,
                     "Save Camera Position",
@@ -1247,6 +1246,12 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
                     QMessageBox.No,
                 )
                 if reply == QMessageBox.Yes:
+                    # The modal event loop can process inactivity shutdown or
+                    # session restart while the confirmation is on screen.
+                    if (self._shutting_down or not self.session_active
+                            or self._session._session_generation != session_generation):
+                        logger.info("Preset save cancelled: session changed during confirmation")
+                        return
                     self._bus.emit(
                         EventType.PRESET_SAVE_SLOT,
                         camera=cam,
@@ -1304,6 +1309,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         if preset_number not in PLATFORM_PRESETS and not self.Cam2.isChecked():
             self.Cam2.click()
 
+        self._seat_pending_camera = 1 if self.Cam1.isChecked() else 2
         for n in self._visible_preset_set():
             btn = getattr(self, f"Seat{n}", None)
             if btn is None:
@@ -1334,7 +1340,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
     def _exit_seat_selection(self, save: bool) -> None:
         preset_number = self._seat_pending
+        pending_camera = self._seat_pending_camera
         self._seat_pending = None
+        self._seat_pending_camera = None
         self._btn_save_seat.hide()
         self._btn_cancel_seat.hide()
 
@@ -1349,7 +1357,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         if save and preset_number is not None:
             cam = 1 if self.Cam1.isChecked() else 2
-            self._bus.emit(EventType.PRESET_SAVE_SLOT, camera=cam, slot=preset_number)
+            if cam != pending_camera:
+                logger.warning("Seat preset save cancelled: camera changed during selection")
+                self._flash_blocked(self.Cam1 if cam == 1 else self.Cam2)
+                return
+            self._bus.emit(EventType.PRESET_SAVE_SLOT, camera=pending_camera, slot=preset_number)
             seat_btn = getattr(self, f"Seat{preset_number}", None)
             if seat_btn is not None and hasattr(seat_btn, 'show_saved'):
                 seat_btn.show_saved()
@@ -1610,10 +1622,18 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             accepted = dialog.exec_() == ScreenOffDialog.Accepted
             if accepted:
                 self._session.shutdown("screen_off")
-                QTimer.singleShot(1500, ScreenMonitor.sleep)
+                generation = self._session._session_generation
+                QTimer.singleShot(1500, lambda: self._sleep_screen_after_session_end(generation))
             # Rejected or X: screen stays on, session continues
         finally:
             self._screen_dialog_active = False
+
+    def _sleep_screen_after_session_end(self, generation: int) -> None:
+        """Discard delayed DPMS work if another session or app close began."""
+        if (self._shutting_down or self.session_active
+                or self._session._session_generation != generation):
+            return
+        ScreenMonitor.sleep()
 
     def _ask_shutdown_intent(self) -> "ShutdownIntent":
         """Show a shutdown dialog and return the operator's explicit choice.
@@ -1733,6 +1753,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
                 logger.exception("[SHUTDOWN] admin-restart launch failed: %s", exc)
             self._pending_admin_restart = None
 
+    @pyqtSlot()
     def _update_focus_ui(self):
         cam_key = 1 if self.Cam1.isChecked() else 2
         self._right_panel.set_focus_mode(self._cameras.focus_mode[cam_key])
@@ -1745,6 +1766,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         connected = self.Cam1._connected if self.Cam1.isChecked() else self.Cam2._connected
         self._right_panel.show_camera_controls(connected and self.session_active)
 
+    @pyqtSlot()
     def _update_backlight_ui(self):
         cam_key = 1 if self.Cam1.isChecked() else 2
         if self._cameras.backlight_on[cam_key]:

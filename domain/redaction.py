@@ -28,6 +28,7 @@ _SECRET_KEYS: frozenset[str] = frozenset({
     "credential",
     "credentials",
     "private_key",
+    "license_private_key",
     "privatekey",
     "signing_key",
     "licence_key",
@@ -61,7 +62,7 @@ _SSH_KEY_REDACTED = "<SSH_KEY_REDACTED>"
 _TOKEN_REDACTED = "<TOKEN_REDACTED>"
 
 
-def _is_secret_key(key: str) -> bool:
+def is_secret_key(key: str) -> bool:
     """Return True if the mapping key name matches a known secret pattern."""
     lower = key.lower()
     return any(secret in lower for secret in _SECRET_KEYS)
@@ -103,9 +104,11 @@ class RedactionGuard:
             f"Bearer {_TOKEN_REDACTED}",
             result,
         )
-        # password/token/secret assignments in text
+        # Consume complete quoted values, including spaces and escaped quotes.
+        # An unterminated quoted value is redacted through the end of its line.
         result = re.sub(
-            r"(?i)(\b(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\s*[:=]\s*)\S+",
+            r'''(?im)(\b(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\s*[:=]\s*)'''
+            r'''(?:"(?:\\.|[^"\\\r\n])*(?:"|$)|'(?:\\.|[^'\\\r\n])*(?:'|$)|\S+)''',
             r"\g<1>" + _REDACTED,
             result,
         )
@@ -124,7 +127,7 @@ class RedactionGuard:
         """
         result: dict[str, Any] = {}
         for key, value in data.items():
-            if _is_secret_key(str(key)):
+            if is_secret_key(str(key)):
                 result[key] = _REDACTED
             elif isinstance(value, Mapping):
                 result[key] = self.redact_mapping(value)

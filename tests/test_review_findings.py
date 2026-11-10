@@ -16,9 +16,11 @@ class _StubWorker:
 
     def send(self, cmd):
         self.sent.append(cmd)
+        return True
 
     def send_priority(self, cmd):
         self.priority.append(cmd)
+        return True
 
 
 class _StubManager:

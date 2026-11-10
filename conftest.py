@@ -76,6 +76,17 @@ import data_paths  # noqa: F401
 _LEAKY_STUB_MODULES = (
     "ui.widgets", "ui.platform_icons",
     "adapters.sim_mode", "application.camera_discovery",
+    # test_dialogs_session_guard.py injects bare `config` and `secret_manager`
+    # stubs at module level and never removes them; test_splash_startup_sequence
+    # .py injects a `config` stub whose teardown_module only runs after its
+    # TESTS - far too late to protect the COLLECTION of the next module. In a
+    # full-suite run an earlier file usually imported the real `config` first
+    # and the guards skipped stubbing, which is why this only bites subsets
+    # (pytest -k, a single file, a chunk): collection there aborts with e.g.
+    #   ImportError: cannot import name 'load_names_data' from 'config'
+    # (unknown location)
+    # Purging between module collections makes the suite subset-independent.
+    "config", "secret_manager",
 )
 
 

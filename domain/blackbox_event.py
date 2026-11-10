@@ -126,10 +126,7 @@ class BlackBoxEvent:
 
 # ── Redacted-field sentinel ───────────────────────────────────────────────────
 
-_SECRET_KEYS = frozenset({
-    "password", "token", "secret", "private_key",
-    "ssh_key", "license_private_key", "api_key", "credential",
-})
+
 
 
 def redact_event_dict(data: dict[str, Any]) -> dict[str, Any]:
@@ -141,20 +138,33 @@ def redact_event_dict(data: dict[str, Any]) -> dict[str, Any]:
       are replaced with '[REDACTED]'.
     - Nested dicts are always recursed into first; secret-key check applies to
       their leaf values, not to the container key itself.
+    - Lists and tuples are traversed recursively, including nested sequences.
+    - Non-secret strings use the shared free-text redaction policy.
     - Non-dict, non-string values that match a secret key are also redacted.
 
     This is a lightweight best-effort guard. Full redaction policy lives in
     domain/redaction.py and application/redaction_service.py.
     """
+    from domain.redaction import RedactionGuard, is_secret_key
+
+    guard = RedactionGuard()
+
+    def redact_value(value):
+        if isinstance(value, dict):
+            return redact_event_dict(value)
+        if isinstance(value, (list, tuple)):
+            return [redact_value(item) for item in value]
+        if isinstance(value, str):
+            return guard.redact_text(value)
+        return value
+
     result: dict[str, Any] = {}
     for key, value in data.items():
-        key_str = str(key).lower()
-        is_secret_key = key in _SECRET_KEYS or any(s in key_str for s in _SECRET_KEYS)
         if isinstance(value, dict):
-            # Always recurse into nested dicts regardless of key name
+            # Preserve the established container contract; redact its leaves.
             result[key] = redact_event_dict(value)
-        elif is_secret_key:
+        elif is_secret_key(str(key)):
             result[key] = "[REDACTED]"
         else:
-            result[key] = value
+            result[key] = redact_value(value)
     return result

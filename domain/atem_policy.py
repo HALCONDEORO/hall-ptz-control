@@ -12,12 +12,8 @@ from __future__ import annotations
 
 from domain.call_set_policy import OperatingMode
 
-# Live switching (CUT/AUTO) is an administrator-level action. Both the
-# maintainer role (TECHNICIAN) and the full Administrator role (SYSTEM_ADMIN)
-# are allowed; everyday operators are not.
-LIVE_SWITCH_ROLES: frozenset[OperatingMode] = frozenset(
-    {OperatingMode.TECHNICIAN, OperatingMode.SYSTEM_ADMIN}
-)
+# Only the administrator access role can switch live.
+LIVE_SWITCH_ROLES = frozenset({OperatingMode.ADMIN})
 
 
 def can_live_switch(role: OperatingMode) -> bool:

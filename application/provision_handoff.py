@@ -43,7 +43,8 @@ class HandoffResult:
     ``ok`` mirrors the privileged side's result. ``issues`` carries validation
     problems (field/message) when the answers were rejected; ``error`` carries an
     unexpected failure; ``timed_out`` means no result appeared before the
-    deadline (the wizard should let the operator retry).
+    deadline. This does not cancel the privileged operation or establish its
+    outcome; an operator must check that outcome before retrying.
     """
     ok: bool
     timed_out: bool = False
@@ -56,7 +57,11 @@ class HandoffResult:
         if self.ok:
             return "Setup complete — the room is installed and the service is enabled."
         if self.timed_out:
-            return "Setup did not finish in time. Check the device and try again."
+            return (
+                "No result was received in time. The system may still be applying changes. "
+                "Keep this message and ask the technician to check the result; "
+                "do not retry or restart blindly."
+            )
         if self.issues:
             joined = "; ".join(i.get("message", "") for i in self.issues)
             return f"Setup could not start: {joined}"
@@ -99,8 +104,9 @@ class ProvisionHandoff:
     def begin(self, answers: ProvisioningAnswers) -> None:
         """Write the request (0600) and arm the deadline. Clears any stale result.
 
-        Idempotent enough to retry: a fresh begin() overwrites the request and
-        removes a leftover result so poll() does not read a previous run's answer.
+        A fresh begin() overwrites the request and removes a leftover result.
+        This does not make retries safe while an earlier operation is active;
+        callers must establish its outcome before submitting another request.
         """
         try:
             self._result_path.unlink()
@@ -136,12 +142,27 @@ class ProvisionHandoff:
     def _read_result(self) -> HandoffResult:
         try:
             data = json.loads(self._result_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            # JSON validity is not a wire contract. In particular, "false" is
+            # truthy in Python and must never unlock the wizard's success path.
+            if not isinstance(data, dict) or type(data.get("ok")) is not bool:
+                raise ValueError("expected an object with a boolean ok field")
+            written = data.get("written", [])
+            issues = data.get("issues", [])
+            error = data.get("error", "")
+            if not isinstance(written, list) or any(
+                not isinstance(path, str) for path in written
+            ):
+                raise ValueError("expected written to be a list of paths")
+            if not isinstance(issues, list) or any(
+                not isinstance(issue, dict)
+                or not isinstance(issue.get("message", ""), str)
+                for issue in issues
+            ):
+                raise ValueError("expected issues to contain message objects")
+            if not isinstance(error, str):
+                raise ValueError("expected error to be text")
+        except (OSError, UnicodeError, ValueError) as exc:
             return HandoffResult(ok=False, error=f"unreadable result: {exc}")
-        if data.get("ok"):
-            return HandoffResult(ok=True, written=list(data.get("written", [])))
-        return HandoffResult(
-            ok=False,
-            error=str(data.get("error", "")),
-            issues=list(data.get("issues", [])),
-        )
+        if data["ok"]:
+            return HandoffResult(ok=True, written=written)
+        return HandoffResult(ok=False, error=error, issues=issues)

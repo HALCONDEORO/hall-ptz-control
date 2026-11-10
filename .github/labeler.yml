@@ -1,0 +1,7 @@
+# Use the repository's existing label. Labeling is informational, not a
+# review verdict, deployment approval or compatibility claim.
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'docs/**'

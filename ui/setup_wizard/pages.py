@@ -481,9 +481,20 @@ class InstallingPage(_BasePage):
         self._status.setWordWrap(True)
         self._status.setTextFormat(Qt.PlainText)
         lay.addWidget(self._status)
+        pending_notice = QLabel(
+            "Closing this window does not cancel changes the system is already applying. "
+            "If it closes or times out, do not start another attempt until "
+            "the technician has checked the result."
+        )
+        pending_notice.setWordWrap(True)
+        pending_notice.setTextFormat(Qt.PlainText)
+        lay.addWidget(pending_notice)
         lay.addStretch()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._poll_once)
+        # QWizard.reject/close need not invoke cleanupPage. Stop only UI polling;
+        # the privileged operation is independent and must not be deleted/retried.
+        wizard.finished.connect(self._timer.stop)
         self._result = None
         self._done = False
 
@@ -538,20 +549,23 @@ class InstallingPage(_BasePage):
 
 
 class DonePage(_BasePage):
-    """Final screen: independently verifies the install before declaring success."""
+    """Final screen: show file checks and the remaining runtime checks."""
 
     def __init__(self, wizard):
         super().__init__(wizard)
         self.setTitle("Done")
-        self.setSubTitle("Installed and running")
+        self.setSubTitle("Configuration applied - verify operation")
         lay = QVBoxLayout(self)
         self._verdict = QLabel("")
         self._verdict.setWordWrap(True)
         self._verdict.setTextFormat(Qt.PlainText)
         lay.addWidget(self._verdict)
         msg = QLabel(
-            "The room is ready. All local files are created and the service "
-            "starts on every reboot. Reconfigure later via the KHPTZ Setup icon."
+            "Local configuration has been applied. This screen does not confirm "
+            "that the app is running or that the room is ready. Before use, run "
+            "'khptz verify-install', 'khptz status' and 'khptz doctor', then "
+            "check the app and equipment in the room. Reconfigure later via "
+            "the KHPTZ Setup icon."
         )
         msg.setWordWrap(True)
         lay.addWidget(msg)

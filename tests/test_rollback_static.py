@@ -202,6 +202,21 @@ class TestShellRobustness:
         assert 'PREVIOUS_REF="${PREV_ROLLBACK_REF}"' in branch
 
 
+class TestUnknownRefIsNotARollbackTarget:
+    """An install from a non-git source records KHPTZ_INSTALLED_REF=unknown.
+    The next checkout-based install must not carry that placeholder into
+    KHPTZ_PREVIOUS_REF, or rollback.sh would try to check out a ref literally
+    named 'unknown' and fail with git's pathspec error."""
+
+    def test_unknown_previous_ref_records_no_target(self):
+        sh = _install_sh()
+        idx = sh.find('if [[ "${PREV_INSTALLED_REF}" == "${SOURCE_REF}" ]]')
+        assert idx != -1, "same-ref branch not found"
+        branch = sh[idx:sh.find("\nfi\n", idx)]
+        assert '"${PREV_INSTALLED_REF}" == "unknown"' in branch
+        assert 'PREVIOUS_REF=""' in branch
+
+
 # ── customer data / provisioning safety ──────────────────────────────────────
 
 class TestRollbackSafety:
@@ -257,16 +272,18 @@ class TestProductModePipGuard:
         sh = _install_sh()
         assert "grep -qE '^[[:space:]]*[^#[:space:]]'" in sh
 
-    def test_pip3_required_before_use_in_product_branch(self):
+    def test_product_interpreter_pip_required_before_use(self):
         sh = _install_sh()
         idx = sh.find("Installing additional pip dependencies from requirements-rpi.txt")
         assert idx != -1
         block = sh[idx:idx + 400]
-        require = block.find("require_command pip3 python3-pip")
-        use = block.find("pip3 install")
+        require = block.find("require_python_module pip python3-pip")
+        use = block.find('"${PYTHON_BIN}" -m pip install')
         assert require != -1 and require < use, (
-            "pip3 must be checked before it is used in the product-mode branch"
+            "pip must be checked through the product interpreter before use"
         )
+        selection = sh[sh.index('# Product launchers use'):sh.index('SERVICE_NAME=')]
+        assert 'else\n    PYTHON_BIN="/usr/bin/python3"' in selection
 
     def test_current_requirements_rpi_has_no_pip_requirements(self):
         """If this ever fails, product installs now genuinely need pip3 and
@@ -342,6 +359,37 @@ class TestGitRunsAsCheckoutOwner:
     def test_safe_directory_kept_as_fallback(self):
         body = _product_branch(_sh(), "git_src()", "state_value()")
         assert "safe.directory='*'" in body
+
+
+class TestOfflineFetchIsBestEffort:
+    """Customer appliances are often offline: an unreachable origin must not
+    abort the rollback when the target ref is already local."""
+
+    def test_fetch_failure_does_not_abort(self):
+        body = _product_branch(_sh(), "Step 3: Checking out", 'run git_src checkout')
+        assert "if ! run git_src fetch --tags origin" in body
+        assert "local refs" in body
+
+
+class TestCheckoutPositionNote:
+    """A product rollback moves the source checkout to the rolled-back ref and
+    leaves it there: the operator must be told, or the next install.sh run
+    from that checkout silently redeploys the rolled-back ref. The note must
+    not claim a detached HEAD (--to accepts branches) and must not print in
+    dry-run (nothing was checked out). Paths get printf %q quoting."""
+
+    def test_note_states_position_without_detached_claim(self):
+        sh = _sh()
+        assert "now sits at" in sh
+        assert "git -C %q checkout -" in sh
+        note = sh[sh.find("now sits at"):]
+        assert "detached HEAD" not in note.split("fi", 1)[0]
+
+    def test_note_suppressed_in_dry_run_and_dev_mode(self):
+        sh = _sh()
+        idx = sh.find("now sits at")
+        gate = sh[:idx].rfind('if [[')
+        assert '[[ "${DRY_RUN}" != "1" && "${DEV_MODE}" == "false" ]]' in sh[gate:idx]
 
 
 class TestUserModeSkipsSystemStart:

@@ -561,3 +561,66 @@ class TestPainting:
         widget.set_mode("comments")
         drag(widget, 0, -60)
         widget.paintEvent(QPaintEvent(QRect(0, 0, SIZE, SIZE)))
+
+
+class TestInterruptedGesture:
+    @pytest.mark.parametrize("event_name", ["Hide", "UngrabMouse", "WindowDeactivate"])
+    def test_interruption_stops_and_cancels_repeat(self, joystick, qapp, event_name):
+        from PyQt5.QtCore import QEvent
+        widget, handlers, stops = joystick()
+        drag(widget, 0, -60)
+        before = len(handlers.calls)
+        qapp.sendEvent(widget, QEvent(getattr(QEvent, event_name)))
+        widget._on_timer_tick()  # even an already-queued timeout must be harmless
+        assert stops == [1]
+        assert len(handlers.calls) == before
+        assert not widget._timer.isActive()
+        assert not widget._tracking
+        assert widget._cur_dir is None
+        assert widget._cur_sector is None
+        assert widget._knob_pos == widget._center
+        qapp.sendEvent(widget, QEvent(getattr(QEvent, event_name)))
+        assert stops == [1]  # overlapping lifecycle events must not repeat STOP
+
+    def test_disabling_during_drag_stops(self, joystick):
+        widget, handlers, stops = joystick()
+        drag(widget, 30, 40)
+        widget.setEnabled(False)
+        widget._on_timer_tick()
+        assert stops == [1]
+        assert len(handlers.calls) == 1
+        assert not widget._tracking
+        assert not widget._timer.isActive()
+
+    def test_parent_hide_stops_and_does_not_resume_on_show(self, joystick, qapp):
+        widget, handlers, stops = joystick()
+        parent = widget.parentWidget()
+        parent.show()
+        qapp.processEvents()
+        drag(widget, 0, 60)
+        parent.hide()
+        parent.show()
+        widget._on_timer_tick()
+        assert stops == [1]
+        assert len(handlers.calls) == 1
+        assert not widget._tracking
+        parent.hide()
+
+    def test_zoom_interruption_does_not_send_unrelated_pan_stop(self, joystick, qapp):
+        from PyQt5.QtCore import QEvent
+        widget, handlers, stops = joystick()
+        widget._ring_dragging = True
+        qapp.sendEvent(widget, QEvent(QEvent.WindowDeactivate))
+        assert not widget._ring_dragging
+        assert handlers.calls == []
+        assert stops == []
+
+    def test_fresh_drag_after_interruption_works(self, joystick, qapp):
+        from PyQt5.QtCore import QEvent
+        widget, handlers, stops = joystick()
+        drag(widget, 0, -60)
+        qapp.sendEvent(widget, QEvent(QEvent.UngrabMouse))
+        drag(widget, 0, 60)
+        assert handlers.directions == ["up", "down"]
+        assert widget._timer.isActive()
+        assert stops == [1]

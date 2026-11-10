@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -140,7 +141,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     layout = panel_layout(cameras_layout, 'Camera Discovery')
 
     # Micro description (matches design spec)
-    disc_desc = QLabel('Discover PTZ cameras on the local subnet via VISCA-over-IP broadcast.')
+    disc_desc = QLabel('Check the selected subnet with TCP and a read-only VISCA power inquiry. No movement.')
     disc_desc.setStyleSheet(
         f"font: 400 12px 'Inter Tight', 'Segoe UI'; color: {_C_MUTED}; background: transparent;"
     )
@@ -170,7 +171,21 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     disc_scroll.setWidget(disc_inner)
     layout.addWidget(disc_scroll)
 
-    btn_scan = dialog._btn('Scan Network', variant='primary', icon='search')
+    from application.camera_discovery import get_camera_subnet
+    from config import VISCA_PORT
+    scope_row = QHBoxLayout()
+    scope_row.addWidget(QLabel('Camera subnet (/24):'))
+    subnet_input = QLineEdit(get_camera_subnet())
+    subnet_input.setObjectName('cameraDiscoverySubnet')
+    subnet_input.setAccessibleName('Camera subnet, first three IPv4 octets')
+    subnet_input.setMaximumWidth(180)
+    scope_row.addWidget(subnet_input)
+    scope_row.addWidget(QLabel(f'TCP port {VISCA_PORT}'))
+    layout.addLayout(scope_row)
+    btn_scan = dialog._btn('Find and check cameras', variant='primary', icon='search')
+    btn_scan.setEnabled(not is_on and not sim_active)
+    btn_scan.setToolTip('Read-only power inquiry, no movement. Stop the session first. '
+                        'Unavailable in simulation to avoid contacting real devices.')
     layout.addWidget(btn_scan, 0, Qt.AlignRight)
 
     # ── Helpers de asignación ─────────────────────────────────────────
@@ -224,6 +239,10 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         result = svc.set_camera_ip(cam_num, ip) if svc is not None else None
         persisted = bool(result and result.ok and result.code == "OK")
 
+        if result is None or not result.ok:
+            dialog._toast('Camera address was not assigned. Check configuration and retry.', kind='warn')
+            return False
+
         # Reflect the new IP in the camera card immediately.
         lbl = dialog._cam_ip_labels.get(cam_num)
         if lbl:
@@ -244,20 +263,34 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
             threading.Thread(
                 target=_recheck_camera, args=(cam_num,), daemon=True
             ).start()
+        return True
 
     # Assign buttons keyed by role so assigning one IP resets the same-role
     # buttons on other discovered rows (only one IP per role).
     dialog._disc_buttons: dict = {1: [], 2: []}
 
     def _assign(ip: str, cam_num: int, this_btn):
+        if is_on or getattr(mw, 'session_active', False) or sim_active:
+            return
         role = 'Platform' if cam_num == 1 else 'Comments'
+        if not dialog._confirm_danger(
+            'Assign camera?',
+            f'Assign {ip} to {role}? This saves the address and reconnects the camera. '
+            'Discovery sends no movement commands. Verify the framing and STOP '
+            'manually before using this camera in a meeting.',
+            'Assign camera',
+        ):
+            return
+        if getattr(mw, 'session_active', False):
+            return
+        if not _apply_ip(ip, cam_num):
+            return
         for b in dialog._disc_buttons.get(cam_num, []):
             try:
-                b.setEnabled(True)
-                b.setText(f'→ {role}')
+                b.setEnabled(bool(b.property('recognised')))
+                b.setText(f'→ {role}' if b.property('recognised') else 'Not verified')
             except RuntimeError:
                 pass
-        _apply_ip(ip, cam_num)
         this_btn.setText(f'✓ {role}')
         this_btn.setEnabled(False)
 
@@ -271,11 +304,12 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         _clear_results()
         dialog._disc_buttons = {1: [], 2: []}
         if not found:
-            disc_status.setText('No VISCA devices found on the network.')
+            disc_status.setText('No accessible camera ports found in the selected subnet.')
             disc_scroll.setFixedHeight(0)
         else:
-            disc_status.setText(f'{len(found)} device(s) found on the network:')
-            for ip in found:
+            disc_status.setText(f'{len(found)} candidate(s): TCP access is not model compatibility.')
+            for candidate in found:
+                ip = candidate.ip
                 row_w = QWidget()
                 row_w.setStyleSheet(
                     f"background: {_C_FIELD_BG}; border-radius: 8px;"
@@ -285,7 +319,8 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
                 row_h.setContentsMargins(10, 4, 6, 4)
                 row_h.setSpacing(8)
 
-                lbl = QLabel(ip)
+                lbl = QLabel(ip + "\n" + candidate.status)
+                lbl.setWordWrap(True)
                 lbl.setStyleSheet(
                     "font: 600 13px 'Consolas', 'Segoe UI'; color: #111;"
                     " background: transparent;"
@@ -293,7 +328,9 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
                 row_h.addWidget(lbl)
                 row_h.addStretch()
 
-                btn_p = QPushButton('→ Platform')
+                btn_p = QPushButton('→ Platform' if candidate.recognised else 'Not verified')
+                btn_p.setProperty('recognised', candidate.recognised)
+                btn_p.setEnabled(candidate.recognised and not is_on and not sim_active)
                 btn_p.setFixedHeight(30)
                 btn_p.setFixedWidth(104)
                 btn_p.setStyleSheet(primary_button_qss(radius=7, font_px=12))
@@ -303,7 +340,9 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
                 row_h.addWidget(btn_p)
                 dialog._disc_buttons[1].append(btn_p)
 
-                btn_c = QPushButton('→ Comments')
+                btn_c = QPushButton('→ Comments' if candidate.recognised else 'Not verified')
+                btn_c.setProperty('recognised', candidate.recognised)
+                btn_c.setEnabled(candidate.recognised and not is_on and not sim_active)
                 btn_c.setFixedHeight(30)
                 btn_c.setFixedWidth(104)
                 btn_c.setStyleSheet(primary_button_qss(
@@ -319,10 +358,11 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
                 disc_layout.addWidget(row_w)
 
             # Altura: máx 4 filas visibles para no invadir el resto.
-            disc_scroll.setFixedHeight(min(len(found), 4) * 42)
+            disc_scroll.setFixedHeight(min(len(found), 4) * 60)
 
-        btn_scan.setEnabled(True)
-        btn_scan.setText('Scan Network')
+        btn_scan.setEnabled(not is_on and not sim_active)
+        subnet_input.setEnabled(not is_on and not sim_active)
+        btn_scan.setText('Find and check cameras')
 
     # ── Qt signal bridge: discover_cameras() runs in a worker thread ──
     # All UI updates must happen on the GUI thread. QTimer.singleShot()
@@ -337,28 +377,39 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     def _on_scan_finished(found):
         if not dialog.isVisible():
             return
-        _show_results(found)
+        _show_results(found or [])
+        if found is None:
+            disc_status.setText('Camera check failed. No addresses were assigned. Check the subnet and retry.')
 
     _scan_sig.finished.connect(_on_scan_finished)
 
-    def _run_scan():
-        from application.camera_discovery import discover_cameras
+    def _run_scan(subnet):
+        from application.camera_discovery_verification import discover_and_verify
         import logging as _logging
         _log = _logging.getLogger(__name__)
         try:
-            found = discover_cameras()
+            found = discover_and_verify(subnet)
         except Exception as exc:  # noqa: BLE001
             _log.error("Camera scan failed: %s", exc)
-            found = []
+            found = None
         _scan_sig.finished.emit(found)
 
     def _on_scan_clicked():
+        from application.camera_discovery_verification import validate_subnet
+        if is_on or getattr(mw, 'session_active', False) or sim_active:
+            return
+        try:
+            subnet = validate_subnet(subnet_input.text())
+        except ValueError:
+            disc_status.setText('Enter the first three IPv4 octets, e.g. 192.168.10.')
+            return
         _clear_results()
         disc_scroll.setFixedHeight(0)
-        disc_status.setText('Scanning network…')
+        disc_status.setText(f'Checking {subnet}.0/24. Read-only inquiry; no movement.')
+        subnet_input.setEnabled(False)
         btn_scan.setEnabled(False)
         btn_scan.setText('Scanning…')
-        threading.Thread(target=_run_scan, daemon=True).start()
+        threading.Thread(target=_run_scan, args=(subnet,), daemon=True).start()
 
     btn_scan.clicked.connect(_on_scan_clicked)
 

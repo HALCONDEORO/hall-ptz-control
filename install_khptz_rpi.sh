@@ -66,18 +66,52 @@ info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 step()  { echo; echo "==> $*"; }
 
+# Track the boundary where the child may start changing the appliance.
+# A failed install can be partial; never claim that it rolled back completely.
+INSTALL_STARTED=false
+FAILURE_REPORTED=false
+
 fatal() {
+    FAILURE_REPORTED=true
     echo >&2
-    echo "[FATAL] $*" >&2
+    echo "[ERROR] $*" >&2
     echo >&2
-    echo "Installation stopped. Nothing further was changed." >&2
+    if [[ "${INSTALL_STARTED}" == "true" ]]; then
+        echo "La instalacion se ha detenido y puede haber cambios parciales." >&2
+        echo "No borres archivos, no restaures y no repitas la instalacion a ciegas." >&2
+        echo "Siguiente paso: conserva esta salida y pide revision tecnica antes de continuar." >&2
+    else
+        echo "El wrapper no ha iniciado la instalacion." >&2
+        echo "Siguiente paso: corrige el problema indicado y repite la comprobacion --check." >&2
+    fi
     exit 30
 }
+
+# Only add context to an unexpected nonzero exit. Preserve its original code
+# and preceding stderr; never retry, restart, restore or remove anything here.
+_report_unexpected_exit() {
+    local rc=$?
+    trap - EXIT
+    if [[ "${rc}" -ne 0 && "${FAILURE_REPORTED}" != "true" ]]; then
+        echo >&2
+        echo "[ERROR] La operacion termino antes del resumen (codigo ${rc})." >&2
+        if [[ "${INSTALL_STARTED}" == "true" ]]; then
+            echo "Puede haber cambios parciales; no se garantiza un rollback completo." >&2
+            echo "Siguiente paso: conserva el primer error y pide revision antes de repetir, borrar o restaurar." >&2
+        else
+            echo "El wrapper no habia iniciado la instalacion." >&2
+            echo "Siguiente paso: conserva el primer error y revisa los requisitos antes de continuar." >&2
+        fi
+    fi
+    exit "${rc}"
+}
+trap _report_unexpected_exit EXIT
 
 # ── Arguments ─────────────────────────────────────────────────────────────────
 
 WIZARD_USER=""
 CHECK_ONLY=false
+GUIDE_ONLY=false
 ALLOW_DIRTY=false
 # Which launcher owns the GUI (#885). Mirrors install.sh's default so the
 # post-install verification below knows which unit to check.
@@ -104,6 +138,8 @@ while [[ $# -gt 0 ]]; do
             WIZARD_USER="$2"; shift 2 ;;
         --wizard-user=*)
             WIZARD_USER="${1#*=}"; shift ;;
+        --guide)
+            GUIDE_ONLY=true; shift ;;
         --check)
             CHECK_ONLY=true; shift ;;
         --allow-dirty)
@@ -138,9 +174,10 @@ Options:
   --wizard-user USER  Desktop user that owns the GUI and the setup wizard.
                       Defaults to \$SUDO_USER, then the active graphical seat.
   --atem              Install the optional ATEM dependencies.
+  --guide             Read-only platform guide; prints one next step, no probes.
   --check             Validate readiness only; write nothing.
-  --allow-dirty       Permit installing from a checkout with uncommitted
-                      changes (blocked by default for customer installs).
+  --allow-dirty       Permit an uncommitted or unidentified development source
+                      (blocked by default for customer installs).
   --gui-mode MODE     Which process owns the GUI:
                         system (default) — khptz-control.service runs it as the
                           'khptz' user, bridged to the display by the scoped
@@ -166,20 +203,31 @@ HELP
     esac
 done
 
+# The guide runs before root/readiness checks and cannot install anything.
+if [[ "${GUIDE_ONLY}" == "true" ]]; then
+    if [[ "${CHECK_ONLY}" == "true" || "${ALLOW_DIRTY}" == "true" || ${#PASSTHROUGH[@]} -gt 0 ]]; then
+        fatal "--guide accepts only --wizard-user; run --check separately."
+    fi
+    cd "${REPO_ROOT}"
+    exec /usr/bin/python3 -B -m runtime.install_guide --wizard-user "${WIZARD_USER}"
+fi
+
 # ── Preflight ─────────────────────────────────────────────────────────────────
 
-step "Checking how this script was started"
+step "Comprobando como se ha iniciado"
 
 if [[ "${EUID}" -ne 0 ]]; then
-    fatal "This installer must run as root. Use:
-    sudo bash ${SELF} --wizard-user ${SUDO_USER:-${USER:-pi}}"
+    printf -v _permission_check_cmd 'sudo bash %q --wizard-user %q --check' \
+        "${SELF}" "${WIZARD_USER:-${SUDO_USER:-${USER:-pi}}}"
+    fatal "Se necesitan permisos de administrador. Para comprobar SIN instalar, usa:
+    ${_permission_check_cmd}"
 fi
 
 [[ -f "${INSTALLER}" ]] || fatal "Could not find the installer at:
     ${INSTALLER}
   This script must stay inside the KHPTZ repository checkout."
 
-info "Repository root: ${REPO_ROOT}"
+info "Carpeta del programa: ${REPO_ROOT}"
 
 # Version/commit identity, so a support bundle can be tied to what was installed.
 VERSION="unknown"
@@ -199,13 +247,19 @@ if command -v git >/dev/null 2>&1 && _git rev-parse --short HEAD >/dev/null 2>&1
         COMMIT="${COMMIT}-dirty"
     fi
 fi
-info "Installing version ${VERSION} (commit ${COMMIT})"
+info "Version que se va a comprobar: ${VERSION} (commit ${COMMIT})"
 
 # Refuse to deploy an unidentified or modified checkout onto a customer
 # appliance unless the operator explicitly opts in. CLAUDE.md forbids
 # installing customer systems from arbitrary/uncommitted state; a -dirty commit
 # means the installed bytes match no reviewed revision, so a later support
 # bundle cannot be tied back to anything.
+if [[ "${COMMIT}" == "unknown" && "${ALLOW_DIRTY}" != "true" ]]; then
+    fatal "Cannot identify the source revision of this checkout.
+  Install from a git clone at an approved tag or commit, with git available.
+  For an intentional development snapshot only, re-run with --allow-dirty."
+fi
+
 if [[ "${COMMIT}" == *-dirty ]] && [[ "${ALLOW_DIRTY}" != "true" ]]; then
     fatal "This checkout has uncommitted changes (commit ${COMMIT}).
   A customer install must come from a clean, identifiable revision.
@@ -216,7 +270,7 @@ fi
 # The GUI, its X session and the setup wizard all belong to the logged-in
 # desktop user, not to root and not to the khptz service user.
 
-step "Identifying the desktop user"
+step "Buscando el usuario del escritorio"
 
 if [[ -z "${WIZARD_USER}" ]]; then
     WIZARD_USER="${SUDO_USER:-}"
@@ -245,14 +299,14 @@ WIZARD_HOME="$(getent passwd "${WIZARD_USER}" | cut -d: -f6)"
 WIZARD_UID="$(id -u "${WIZARD_USER}")"
 [[ -n "${WIZARD_HOME}" ]] || fatal "User '${WIZARD_USER}' has no home directory."
 
-info "Desktop user: ${WIZARD_USER} (uid ${WIZARD_UID}, home ${WIZARD_HOME})"
+info "Usuario del escritorio: ${WIZARD_USER} (uid ${WIZARD_UID}, home ${WIZARD_HOME})"
 
 # ── Display session ───────────────────────────────────────────────────────────
 # Informational only. Display access itself is granted by the wizard's
 # integration step (scripts/repair_rpi_runtime.sh), which installs a per-login
 # helper running `xhost +SI:localuser:khptz`. See the cleanup step below.
 
-step "Checking the display session"
+step "Comprobando la sesion de escritorio"
 
 if command -v loginctl >/dev/null 2>&1 \
    && loginctl show-user "${WIZARD_USER}" --property=State 2>/dev/null | grep -q "active"; then
@@ -264,31 +318,49 @@ fi
 
 # ── Readiness check ───────────────────────────────────────────────────────────
 
-step "Validating Raspberry Pi readiness"
+step "Comprobando requisitos, sin instalar"
 
 # --dev must reach the check too: it selects a different path layout
 # (/home/<user>/khptz instead of /opt/khptz) and requires pip3. Checking the
 # product layout and then installing the developer one validates the wrong
 # thing, and lets a check pass that the install then fails.
-_CHECK_ARGS=(--check)
+#
+# --wizard-user must reach the check as well: the readiness gate inspects the
+# desktop session of THAT user, and without it the installer falls back to
+# SUDO_USER alone. When the wrapper resolved the user from the graphical seat
+# (no usable SUDO_USER), an unforwarded check inspects nobody - the Wayland
+# gate goes blind (WARN instead of FAIL) on exactly the machine whose first
+# boot would stay dark.
+_CHECK_ARGS=(--check --no-check-next-action --wizard-user "${WIZARD_USER}")
+# Readiness must validate the selected display owner, not the system default.
+_CHECK_ARGS+=(--gui-mode "${GUI_MODE}")
 [[ "${DEV_MODE}" == "true" ]] && _CHECK_ARGS+=(--dev)
+# Optional dependencies must be checked for the requested install, too.
+for _arg in "${PASSTHROUGH[@]}"; do
+    [[ "${_arg}" != "--atem" ]] || _CHECK_ARGS+=(--atem)
+done
 
 if ! bash "${INSTALLER}" "${_CHECK_ARGS[@]}"; then
-    fatal "This Pi is not ready to install KHPTZ. Fix the FAIL items listed above and re-run."
+    fatal "La comprobacion no ha pasado. Corrige el primer FAIL o ERROR anterior; no instales todavia."
 fi
 
 if [[ "${CHECK_ONLY}" == "true" ]]; then
     echo
-    info "Check-only run complete. Nothing was installed."
+    info "Comprobacion terminada. No se ha instalado nada."
+    printf 'Siguiente paso: ejecutar la instalacion desde la revision aprobada: sudo bash %q --wizard-user %q' "${SELF}" "${WIZARD_USER}"
+    if [[ ${#PASSTHROUGH[@]} -gt 0 ]]; then printf ' %q' "${PASSTHROUGH[@]}"; fi
+    [[ "${ALLOW_DIRTY}" != "true" ]] || printf ' --allow-dirty'
+    printf '\n'
     exit 0
 fi
 
 # ── Install / repair ──────────────────────────────────────────────────────────
 
-step "Installing KHPTZ (safe to re-run)"
+step "Instalando KHPTZ: conserva esta salida si aparece un error"
+INSTALL_STARTED=true
 
 if ! bash "${INSTALLER}" --wizard-user "${WIZARD_USER}" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}; then
-    fatal "The installer did not complete. See the output above."
+    fatal "El instalador no ha terminado. Revisa el primer ERROR de la salida anterior."
 fi
 
 # ── Remove the superseded display drop-in ─────────────────────────────────────
@@ -308,7 +380,7 @@ fi
 # Removing it here means re-running this script repairs an already-affected
 # machine rather than only avoiding the problem on fresh installs (#883).
 
-step "Removing the superseded display drop-in"
+step "Revisando la integracion de pantalla anterior"
 
 if [[ -e "${DROPIN_FILE}" ]]; then
     rm -f -- "${DROPIN_FILE}"
@@ -332,7 +404,7 @@ info "Display access is granted per-login by the wizard integration step."
 # installer. Running as khptz also makes the check reflect what the service
 # actually sees.
 
-step "Running diagnostics"
+step "Comprobando la instalacion con el diagnostico"
 
 DOCTOR_RC=0
 if id khptz >/dev/null 2>&1 && command -v khptz >/dev/null 2>&1; then
@@ -358,10 +430,11 @@ fi
 #   - if it is already running, it is not stuck in a restart loop (the exact
 #     failure mode the first install hit before the display fix).
 
-step "Verifying the GUI is wired to start"
+step "Comprobando el arranque automatico de la pantalla"
 
 if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemctl not found — cannot confirm the GUI will start"
+    warn "This appliance needs Raspberry Pi OS with systemd; verify the image you flashed."
 elif [[ "${DEV_MODE}" == "true" ]]; then
     # A developer install deliberately ships no session-GUI assets and no
     # provisioning channel (install.sh gates both on product mode). Asserting
@@ -383,6 +456,7 @@ elif [[ "${GUI_MODE}" == "user" ]]; then
             info "present: ${_asset}"
         else
             warn "missing: ${_asset} — the session GUI will not start automatically."
+            warn "Re-run the installer; if it stays missing, the checkout is incomplete — re-clone the repository."
             [[ "${DOCTOR_RC}" -lt 20 ]] && DOCTOR_RC=20
         fi
     done
@@ -422,40 +496,34 @@ fi
 echo
 echo "======================================================================"
 case "${DOCTOR_RC}" in
-    0)
-        echo " SUCCESS — KHPTZ ${VERSION} is installed and healthy."
-        echo
-        echo " Next action:  reboot, then log in as ${WIZARD_USER}."
-        echo "               The touchscreen application starts automatically."
-        RC=0
-        ;;
-    10)
-        echo " SUCCESS — KHPTZ ${VERSION} is installed and operational."
-        echo " Deployment recommendations remain (listed above); none of them block use."
-        echo
-        echo " Next action:  reboot, then log in as ${WIZARD_USER}."
+    0|10)
+        echo " INSTALADO: el diagnostico no indica bloqueos."
+        if [[ "${DOCTOR_RC}" == "10" ]]; then
+            echo " Quedan recomendaciones no bloqueantes; conservalas para la entrega."
+        fi
+        echo " Siguiente paso: reinicia cuando sea seguro y entra en el escritorio como ${WIZARD_USER}."
+        echo " Comprueba pantalla, camaras y STOP con el tecnico antes de una reunion."
+        echo " Esta salida no certifica el equipo fisico."
         RC=0
         ;;
     20)
-        echo " INSTALLED — configuration is still required."
-        echo
-        echo " Next action:  run the setup wizard as the desktop user:"
-        echo "                 sudo -u ${WIZARD_USER} khptz setup --force"
-        echo "               Then re-run this script to confirm."
+        echo " INSTALADO, PENDIENTE: falta configurar o comprobar algun componente."
+        echo " Siguiente paso: revisa el primer problema pendiente indicado arriba."
+        echo " Si falta la configuracion inicial, abre una terminal del escritorio y ejecuta:"
+        echo "                 khptz setup"
+        echo " Si ya estaba configurado o el fallo es de arranque/permisos, pide revision tecnica."
+        echo " No uses --force ni reinstales como solucion generica."
         RC=20
         ;;
     *)
-        echo " FAILED — KHPTZ cannot run on this system yet."
-        echo
-        echo " Next action:  fix the items marked FAIL above, then re-run:"
-        echo "                 sudo bash ${SELF} --wizard-user ${WIZARD_USER}"
-        echo
-        echo " If you need help, collect diagnostics with:"
-        echo "                 khptz support-bundle"
+        echo " DETENIDO: el equipo no esta listo para usarse."
+        echo " Siguiente paso: conserva esta salida y pide revision del primer FAIL indicado arriba."
+        echo " No reinstales, borres datos ni restaures sin una copia verificada y un plan."
         RC=30
         ;;
 esac
 echo " Version ${VERSION} (commit ${COMMIT})"
 echo "======================================================================"
 
+FAILURE_REPORTED=true
 exit "${RC}"

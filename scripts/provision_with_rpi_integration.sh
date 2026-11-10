@@ -26,7 +26,7 @@ readonly RC_DIAGNOSTICS_FATAL=40
 ROLLBACK_TARGETS=(
     "/etc/khptz/config.yaml"
     "/var/lib/khptz/password.enc"
-    "/var/lib/khptz/admin.enc"
+    "/etc/khptz/secrets/admin.enc"
     "${PROVISIONED_MARKER}"
     "${INTEGRATION_MARKER}"
 )

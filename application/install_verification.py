@@ -21,7 +21,7 @@ class InstallVerdict:
 
     def summary(self) -> str:
         if self.ok:
-            text = "The room is installed and verified."
+            text = "Local installation file checks passed. Runtime operation is not verified."
             if self.advisories:
                 text += "\nAdvisories:\n" + "\n".join(
                     f"• {item}" for item in self.advisories

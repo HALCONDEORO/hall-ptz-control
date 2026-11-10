@@ -288,9 +288,13 @@ class TestParserAEMode:
     def test_bright(self):
         assert vparse.ae_mode(self._frame(0x0D)) == 'bright'
 
-    def test_unknown_is_auto(self):
-        assert vparse.ae_mode(self._frame(0x00)) == 'auto'
-        assert vparse.ae_mode(self._frame(0xFF)) == 'auto'
+    def test_auto_modes(self):
+        for value in (0x00, 0x0A, 0x0B):
+            assert vparse.ae_mode(self._frame(value)) == 'auto'
+
+    def test_unknown_is_not_invented_auto(self):
+        assert vparse.ae_mode(self._frame(0x7E)) is None
+        assert vparse.ae_mode(self._frame(0xFF)) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

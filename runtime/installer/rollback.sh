@@ -50,6 +50,16 @@ SERVICE_NAME="khptz-control"
 # ── Argument parsing ──────────────────────────────────────────────────────────
 
 while [[ $# -gt 0 ]]; do
+    # Do not consume the next option (notably --dry-run) as a path/ref.
+    # Reject malformed arguments before any backup or service operation.
+    case "$1" in
+        --user|--dir|--source|--to)
+            if [[ $# -lt 2 || -z "${2:-}" || "${2:-}" == -* ]]; then
+                echo "$1 requires a value (run with --help for usage)" >&2
+                exit 1
+            fi
+            ;;
+    esac
     case "$1" in
         --dev)     DEV_MODE=true;              shift ;;
         --user)    APP_USER_OVERRIDE="$2";     shift 2 ;;
@@ -165,6 +175,10 @@ else
         [[ -f "$STATE_FILE" ]] || fail \
             "No install state at $STATE_FILE — this install predates rollback support. Re-run install.sh from the source checkout first, or pass --source <checkout> --to <ref>."
         SOURCE_DIR="$(state_value KHPTZ_SOURCE_DIR)"
+    fi
+    # --source overrides only the checkout, not the installed GUI identity.
+    # Preserve these settings even when recovering from a replacement clone.
+    if [[ -f "$STATE_FILE" ]]; then
         WIZARD_USER="$(state_value KHPTZ_WIZARD_USER)"
         GUI_MODE="$(state_value KHPTZ_GUI_MODE)"
     fi
@@ -269,7 +283,15 @@ trap _restart_service_on_abort EXIT
 # ── Step 3: Revert code ───────────────────────────────────────────────────────
 
 log "Step 3: Checking out $TARGET_REF in $SOURCE_DIR"
-run git_src fetch --tags origin
+# Best-effort fetch: the appliance may be offline, and the rollback target is
+# normally already a local ref (it lived in this checkout when it was last
+# installed). An unreachable remote must not strand the operator on the
+# version they explicitly asked to leave. The checkout works from local
+# objects; only a never-fetched target would fail there, with git's own
+# error naming the missing ref.
+if ! run git_src fetch --tags origin; then
+    log "WARNING: could not fetch from origin (offline?) - continuing with local refs."
+fi
 run git_src checkout "$TARGET_REF"
 
 if [[ "${DEV_MODE}" == "false" ]]; then
@@ -380,3 +402,15 @@ echo "  4. Confirm the app launches and cameras connect."
 echo ""
 echo "Pre-rollback backup saved to: $BACKUP_DEST"
 echo ""
+if [[ "${DRY_RUN}" != "1" && "${DEV_MODE}" == "false" ]]; then
+    # Step 3 moved the source checkout to the rolled-back ref and leaves it
+    # there (a tag or commit id means a detached HEAD; a branch name stays a
+    # branch). Say where it sits either way: a later install.sh run from that
+    # checkout redeploys THAT ref again unless the operator returns to their
+    # update branch first. Skipped in dry-run: nothing was checked out.
+    printf 'Note: the source checkout now sits at %s\n' "${NEW_CURRENT}"
+    printf '      %q\n' "${SOURCE_DIR}"
+    printf '      Before the next update, return it to its branch:\n'
+    printf '        git -C %q checkout -\n' "${SOURCE_DIR}"
+    echo ""
+fi

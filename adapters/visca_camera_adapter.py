@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Callable
 
 from config import (
     PRESET_MAP, PAN_SPEED_MAX, TILT_SPEED_MAX, ZOOM_DRIVE_MAX,
-    VISCA_PORT, SOCKET_TIMEOUT, VISCA_READ_TIMEOUT, CAMERA_CONNECT_TIMEOUT,
+    VISCA_READ_TIMEOUT, CAMERA_CONNECT_TIMEOUT,
 )
 
 # Espera máxima de un comando confirmado: reconexión inmediata (3 intentos)
@@ -67,6 +67,7 @@ class ViscaCameraAdapter:
         self._display_query_lock = threading.RLock()
         self._endpoint_generations: dict[int, int] = {1: 0, 2: 0}
         self._backlight_on: dict[str, bool] = {}
+        self._backlight_toggle_locks = {1: threading.Lock(), 2: threading.Lock()}
         # Speed caps: watchdog in main_window reduces these on VISCA error (#740).
         self.pan_cap:        int = PAN_SPEED_MAX
         self.tilt_cap:       int = TILT_SPEED_MAX
@@ -150,10 +151,10 @@ class ViscaCameraAdapter:
         pan_abs  = 0 if pan_dir  == 0x03 else max(1, min(self.pan_cap,  abs(pan_speed)))
         tilt_abs = 0 if tilt_dir == 0x03 else max(1, min(self.tilt_cap, abs(tilt_speed)))
         ip, cam_id_hex = self._cam_info(camera_id)
-        self._send_queued(camera_id, ip, bytes.fromhex(
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(
             cam_id_hex + f"010601{pan_abs:02X}{tilt_abs:02X}{pan_dir:02X}{tilt_dir:02X}FF"
         ), coalesce=True)
-        return self._result("move", camera_id, True, None)
+        return self._queued_result("move", camera_id, queued)
 
     def stop_move(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -169,9 +170,9 @@ class ViscaCameraAdapter:
         # STOP always sends its own zoom-stop. Pan/tilt stop first, zoom stop
         # second; both priority. CameraWorker.send_priority keeps already
         # queued priority STOP frames, so this ordering is preserved.
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01060100000303FF"), priority=True)
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01040700FF"), priority=True)
-        return self._result("stop_move", camera_id, True, None)
+        pan_queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01060100000303FF"), priority=True)
+        zoom_queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "01040700FF"), priority=True)
+        return self._queued_result("stop_move", camera_id, pan_queued and zoom_queued)
 
     def zoom(self, camera_id: str, speed: int) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -183,8 +184,8 @@ class ViscaCameraAdapter:
             zoom_byte = 0x20 | min(0x7, self.zoom_drive_cap, abs(speed))
         else:
             zoom_byte = 0x30 | min(0x7, self.zoom_drive_cap, abs(speed))
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + f"010407{zoom_byte:02X}FF"), coalesce=True)
-        return self._result("zoom", camera_id, True, None)
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + f"010407{zoom_byte:02X}FF"), coalesce=True)
+        return self._queued_result("zoom", camera_id, queued)
 
     def power_on(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -200,20 +201,28 @@ class ViscaCameraAdapter:
 
     def home(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
-        self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "010604FF"), priority=True)
-        return self._result("home", camera_id, True, None)
+        queued = self._send_queued(camera_id, ip, bytes.fromhex(cam_id_hex + "010604FF"), priority=True)
+        return self._queued_result("home", camera_id, queued)
 
     def focus_auto(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
-        t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01043802FF")
-        return self._result("focus_auto", camera_id, ok, t0)
+        return self._set_focus_mode(camera_id, "auto", "01043802FF", "focus_auto")
 
     def focus_manual(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
+        return self._set_focus_mode(camera_id, "manual", "01043803FF", "focus_manual")
+
+    def _set_focus_mode(self, camera_id: str, mode: str,
+                        payload: str, command: str) -> CommandResult:
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            ip, cam_id_hex = self._cam_info(camera_id)
+            generation = self._endpoint_generations.get(idx, 0)
         t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01043803FF")
-        return self._result("focus_manual", camera_id, ok, t0)
+        ok = self._send_confirmed(ip, cam_id_hex, payload)
+        if ok:
+            with self._display_query_lock:
+                if self._display_query_is_current(idx, ip, cam_id_hex, generation):
+                    self._mgr.set_focus_mode(ip, mode)
+        return self._result(command, camera_id, ok, t0)
 
     def one_push_af(self, camera_id: str) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -222,27 +231,54 @@ class ViscaCameraAdapter:
         return self._result("one_push_af", camera_id, ok, t0)
 
     def brightness_up(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
-        t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01040D02FF")
-        return self._result("brightness_up", camera_id, ok, t0)
+        return self._adjust_brightness(camera_id, "02", "brightness_up")
 
     def brightness_down(self, camera_id: str) -> CommandResult:
-        ip, cam_id_hex = self._cam_info(camera_id)
+        return self._adjust_brightness(camera_id, "03", "brightness_down")
+
+    def _adjust_brightness(self, camera_id: str, step: str, command: str) -> CommandResult:
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            ip, cam_id_hex = self._cam_info(camera_id)
+            generation = self._endpoint_generations.get(idx, 0)
+            mode = self._mgr.ae_mode[idx]
         t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, "01040D03FF")
-        return self._result("brightness_down", camera_id, ok, t0)
+        if mode in ("manual", "bright"):
+            ok = self._send_confirmed(ip, cam_id_hex, f"01040D{step}FF")
+        elif mode == "auto":
+            # CAM_Bright is for manual/bright. Auto exposure uses ExpComp,
+            # and enabling it must succeed before issuing an adjustment.
+            ok = self._send_confirmed(ip, cam_id_hex, "01043E02FF")
+            if ok:
+                with self._display_query_lock:
+                    current = (self._display_query_is_current(
+                        idx, ip, cam_id_hex, generation
+                    ) and self._mgr.ae_mode[idx] == mode)
+                ok = current and self._send_confirmed(ip, cam_id_hex, f"01040E{step}FF")
+        else:
+            ok = False  # Unknown AE observations cannot select a safe opcode.
+        return self._result(command, camera_id, ok, t0)
 
     def backlight_toggle(self, camera_id: str) -> CommandResult:
-        current = self._backlight_on.get(camera_id, False)
-        new_state = not current
-        ip, cam_id_hex = self._cam_info(camera_id)
-        cmd_hex = "01043302FF" if new_state else "01043303FF"
-        t0 = time.monotonic()
-        ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
-        if ok:
-            self._backlight_on[camera_id] = new_state
-        return self._result("backlight_toggle", camera_id, ok, t0)
+        # Toggle is a read-confirm-write operation. Serialize it per camera,
+        # not with the display lock: STOP and endpoint updates must stay free.
+        with self._backlight_toggle_locks[self._index(camera_id)]:
+            with self._display_query_lock:
+                idx = self._index(camera_id)
+                generation = self._endpoint_generations.get(idx, 0)
+                ip, cam_id_hex = self._cam_info(camera_id)
+                new_state = not self._backlight_on.get(camera_id, False)
+            cmd_hex = "01043302FF" if new_state else "01043303FF"
+            t0 = time.monotonic()
+            ok = self._send_confirmed(ip, cam_id_hex, cmd_hex)
+            if ok:
+                with self._display_query_lock:
+                    # A delayed confirmation must not repopulate a retired endpoint's
+                    # toggle state, including an IP/id change that later changes back.
+                    if self._display_query_is_current(idx, ip, cam_id_hex, generation):
+                        self._backlight_on[camera_id] = new_state
+                        self._mgr.set_backlight(ip, new_state)
+            return self._result("backlight_toggle", camera_id, ok, t0)
 
     def zoom_absolute(self, camera_id: str, position: int) -> CommandResult:
         ip, cam_id_hex = self._cam_info(camera_id)
@@ -291,7 +327,15 @@ class ViscaCameraAdapter:
         return self._result("stop_all", "all", ok, None, message=msg)
 
     def cancel_polls(self, camera_id: str) -> CommandResult:
-        logger.debug("cancel_polls: no active polls to cancel for %s", camera_id)
+        """Retire pending display observations without sending camera commands.
+
+        A started transport read can still finish within its normal timeout,
+        but must not update caches/UI. Deferred reads are skipped altogether.
+        This does not physically stop movement or interrupt the worker session.
+        """
+        with self._display_query_lock:
+            idx = self._index(camera_id)
+            self._endpoint_generations[idx] = self._endpoint_generations.get(idx, 0) + 1
         return self._result("cancel_polls", camera_id, True, None)
 
     def get_status(self, camera_id: str) -> CameraStatus:
@@ -312,8 +356,11 @@ class ViscaCameraAdapter:
         )
 
     def invalidate_zoom(self, camera: int) -> None:
-        ip, _ = self._cam_info_by_index(camera)
-        self._mgr.invalidate_zoom(ip)
+        """Retire feedback captured before a confirmed preset recall."""
+        with self._display_query_lock:
+            ip, _ = self._cam_info_by_index(camera)
+            self._endpoint_generations[camera] = self._endpoint_generations.get(camera, 0) + 1
+            self._mgr.invalidate_zoom(ip)
 
     # ── UI-state synchronisation helpers (read queries) ───────────────────────
     # Called by the UI layer after startup and camera reconnection to sync
@@ -321,10 +368,10 @@ class ViscaCameraAdapter:
     def display_generation(self, camera_key: int) -> int:
         """Return the current display generation of a camera slot (1-based).
 
-        The generation changes on every ``update_camera_ip`` call. A caller that
-        hands a result to another thread (for example a queued Qt signal) can
-        capture the generation up front and compare it again on delivery: if it
-        changed, the camera was reconfigured in between and the result must be
+        The generation changes on endpoint updates, confirmed zoom and poll
+        cancellation. A caller handing a result to another thread (for example
+        a queued Qt signal) can capture the generation up front and compare it
+        again on delivery: if it changed, the observation was retired and must be
         dropped. Query threads already check this before publishing; this closes
         the gap for events that are queued after that check.
         """
@@ -358,6 +405,11 @@ class ViscaCameraAdapter:
 
         def _fetch() -> None:
             try:
+                with self._display_query_lock:
+                    if not self._display_query_is_current(
+                        camera_key, ip, cam_id_hex, generation
+                    ):
+                        return
                 val = self._query_zoom(ip, cam_id_hex)
                 if val is not None:
                     from ptz.visca.parser import zoom_to_pct  # noqa: PLC0415
@@ -394,6 +446,11 @@ class ViscaCameraAdapter:
 
         def _fetch() -> None:
             try:
+                with self._display_query_lock:
+                    if not self._display_query_is_current(
+                        camera_key, ip, cam_id_hex, generation
+                    ):
+                        return
                 ae_mode, exp_level = self._query_ae_and_exp_comp(ip, cam_id_hex)
                 if ae_mode is None:
                     return  # No valid observation: preserve the last known state.
@@ -458,6 +515,8 @@ class ViscaCameraAdapter:
         """
         from ptz.visca import ViscaCommand  # noqa: PLC0415
 
+        if not ip or not ip.strip():
+            return False
         try:
             payload = binascii.unhexlify(cam_id_hex + cmd_hex)
         except (binascii.Error, ValueError) as exc:
@@ -477,16 +536,17 @@ class ViscaCameraAdapter:
         payload: bytes,
         priority: bool = False,
         coalesce: bool = False,
-    ) -> None:
-        """Enqueue on the CameraWorker (non-blocking)."""
+    ) -> bool:
+        """Return queue admission, not camera execution confirmation."""
+        if not ip or not ip.strip():
+            return False
         from ptz.visca import ViscaCommand  # noqa: PLC0415
         idx = self._index(camera_id)
         worker = self._mgr.worker(ip)
         cmd = ViscaCommand(camera=idx, payload=payload, coalesce=coalesce)
         if priority:
-            worker.send_priority(cmd)
-        else:
-            worker.send(cmd)
+            return worker.send_priority(cmd)
+        return worker.send(cmd)
 
     # ── Private ───────────────────────────────────────────────────────────────
 
@@ -521,49 +581,49 @@ class ViscaCameraAdapter:
         """VISCA zoom inquiry → raw 0–0x4000, or None on error."""
         from ptz.visca import commands as vcmd  # noqa: PLC0415
         from ptz.visca import parser as vparse  # noqa: PLC0415
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(SOCKET_TIMEOUT)
-                s.connect((ip, VISCA_PORT))
-                s.sendall(vcmd.zoom_inquiry(cam_id_hex))
-                data = self._recv_visca_response(s)
-            return vparse.zoom(data)
-        except (socket.timeout, socket.error, OSError) as exc:
-            logger.exception("_query_zoom %s: %s", ip, exc)
-            return None
+        data = self._query_response(ip, cam_id_hex, vcmd.zoom_inquiry(cam_id_hex))
+        return vparse.zoom(data)
+
+    def _query_response(self, ip: str, cam_id_hex: str, payload: bytes) -> bytes:
+        """Serialize state reads with control on the camera's existing session."""
+        from ptz.visca import ViscaCommand
+
+        if not ip or not ip.strip():
+            return b""
+        idx = 2 if cam_id_hex.lower() == "82" else 1
+        return self._mgr.worker(ip).send_inquiry(
+            ViscaCommand(camera=idx, payload=payload),
+            timeout=CONFIRMED_CMD_TIMEOUT,
+        )
 
     def _query_ae_and_exp_comp(
         self, ip: str, cam_id_hex: str
     ) -> "tuple[str | None, int | None]":
-        """VISCA AE+ExpComp inquiry in a single TCP session.
+        """Read AE and exposure on the worker session, without parallel sockets."""
+        from ptz.visca import commands as vcmd
+        from ptz.visca import parser as vparse
 
-        Returns (ae_mode, exp_level) where ae_mode is 'auto'|'manual'|'bright'
-        or None when no valid mode frame was received,
-        and exp_level is -7..+7 mapped from 0-14, or None.
-        """
-        from ptz.visca import commands as vcmd  # noqa: PLC0415
-        from ptz.visca import parser as vparse  # noqa: PLC0415
-        ae_mode = None
-        exp_level: "int | None" = None
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(SOCKET_TIMEOUT)
-                s.connect((ip, VISCA_PORT))
-                s.sendall(vcmd.ae_mode_inquiry(cam_id_hex))
-                ae_data = self._recv_visca_response(s)
-                frame = vparse.inquiry_frame(ae_data, payload_len=1)
-                if frame is None:
-                    return None, None
-                ae_mode = vparse.ae_mode(frame)
-                if ae_mode not in ("manual", "bright"):
-                    s.sendall(vcmd.exp_comp_inquiry(cam_id_hex))
-                    ec_data = self._recv_visca_response(s)
-                    frame = vparse.inquiry_frame(ec_data, payload_len=4)
-                    if frame is not None:
-                        exp_level = vparse.exp_comp_level(frame)
-        except (socket.timeout, socket.error, OSError) as exc:
-            logger.warning("_query_ae_and_exp_comp %s: %s", ip, exc)
+        data = self._query_response(ip, cam_id_hex, vcmd.ae_mode_inquiry(cam_id_hex))
+        frame = vparse.inquiry_frame(data, payload_len=1)
+        if frame is None:
+            return None, None
+        ae_mode = vparse.ae_mode(frame)
+        if ae_mode is None:
+            return None, None
+        exp_level = None
+        if ae_mode not in ("manual", "bright"):
+            data = self._query_response(ip, cam_id_hex, vcmd.exp_comp_inquiry(cam_id_hex))
+            frame = vparse.inquiry_frame(data, payload_len=4)
+            if frame is not None:
+                exp_level = vparse.exp_comp_level(frame)
         return ae_mode, exp_level
+
+    def _queued_result(self, command: str, camera_id: str, queued: bool) -> CommandResult:
+        return self._result(
+            command, camera_id, queued, None,
+            message=("Queued; camera execution is not confirmed" if queued else
+                     "Command not queued: check camera configuration, connection and queue"),
+        )
 
     def _result(
         self,

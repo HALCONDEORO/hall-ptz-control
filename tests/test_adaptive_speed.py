@@ -123,6 +123,16 @@ class TestEvaluateSpeedError:
         assert nxt["last_reduction"] == 100.0
         assert nxt["window_start"] == 100.0
 
+    def test_first_error_right_after_boot_applies_reduction(self):
+        # Fresh state + monotonic below the cooldown (app autostarts on boot):
+        # last_reduction == 0.0 means "no reduction yet", so the first error
+        # must always count — it must not be swallowed by the cooldown gate.
+        nxt, d = evaluate_speed_error(fresh_channel_state(), 0.5, **_WD)
+        assert d.apply_reduction is True
+        assert d.schedule_recovery is True
+        assert nxt["retries"] == 1
+        assert nxt["last_reduction"] == 0.5
+
     def test_cooldown_blocks_rapid_second_error(self):
         state, _ = evaluate_speed_error(fresh_channel_state(), 100.0, **_WD)
         # 0.5s later — within the 1.5s cooldown

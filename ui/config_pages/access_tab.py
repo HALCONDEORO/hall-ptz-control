@@ -57,8 +57,8 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
 
     from PyQt5.QtWidgets import QSizePolicy as _QSP_seg
     # Solo dos roles visibles: Operador y Administrador (#roles-simplify).
-    btn_cam_op    = QPushButton('Operator')
-    btn_sys_admin = QPushButton('Administrator')
+    btn_cam_op    = QPushButton('User')
+    btn_sys_admin = QPushButton('Admin')
     # Equal-share, shrinkable segments (design: grid 1fr columns). A small
     # minimum width lets them fit the fixed dialog whatever the font.
     for _seg_btn in (btn_cam_op, btn_sys_admin):
@@ -79,25 +79,14 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
     )
     layout.addWidget(mode_note)
 
-    # Solo dos roles visibles. Los valores legacy/internos se agrupan en
-    # uno de los dos: operador (CALL/SET/PTZ/nombres) o administrador (todo).
-    _OPERATOR_ROLES = (
-        OperatingMode.CAMERA_OPERATOR,
-        OperatingMode.BASIC_OPERATOR,
-        OperatingMode.OPERATOR,
-    )
-    _ADMIN_ROLES = (
-        OperatingMode.SYSTEM_ADMIN,
-        OperatingMode.TECHNICIAN,
-        OperatingMode.ADMIN_INSTALLER,
-    )
+    # Legacy enum names are aliases of the two canonical access roles.
     _OPERATOR_NOTE = (
-        'Operator: daily room use. CALL presets, move cameras (PTZ), '
-        'move and edit seat names, and reconnect. '
+        'User: daily room use. CALL presets, SET with confirmation, '
+        'move cameras (PTZ), edit seat names, and reconnect. '
         'Settings are hidden on the main panel.'
     )
     _ADMIN_NOTE = (
-        'Administrator: full access — camera operation, layout editing, '
+        'Admin: full access - camera operation, layout editing, '
         'camera config, ATEM live switching, diagnostics, backup and reset. '
         'The ⚙ Settings button is visible on the main panel.'
     )
@@ -107,10 +96,10 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
             _mode_lbl.setText('No disponible')
             return
         current = _new_mode if _new_mode is not None else _svc.mode
-        is_admin = current in _ADMIN_ROLES
+        is_admin = current is OperatingMode.ADMIN
         is_operator = not is_admin
         _mode_lbl.setText(
-            f"Current role: {'Administrator' if is_admin else 'Operator'}"
+            f"Current role: {'Admin' if is_admin else 'User'}"
         )
         btn_cam_op.setStyleSheet(_SEG_ACTIVE if is_operator else _SEG_INACTIVE)
         btn_sys_admin.setStyleSheet(_SEG_ACTIVE if is_admin else _SEG_INACTIVE)
@@ -122,10 +111,18 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
         mw._right_panel._update_mode_buttons()
 
     def _set_cam_op():
-        _apply_mode(OperatingMode.CAMERA_OPERATOR)
+        _apply_mode(OperatingMode.USER)
+        # Demotion must not leave privileged settings accessible behind it.
+        dialog._try_close()
 
     def _set_sys_admin():
-        _apply_mode(OperatingMode.SYSTEM_ADMIN)
+        if _svc is None or _svc.mode is OperatingMode.ADMIN:
+            return
+        # Never grant admin merely because the configuration tab is open.
+        # Close the modal dialog so the existing password overlay can receive
+        # input; only its verified-success callback may change the role.
+        dialog._try_close()
+        mw._enter_admin_mode_inline()
 
     btn_cam_op.clicked.connect(_set_cam_op)
     btn_sys_admin.clicked.connect(_set_sys_admin)
@@ -166,7 +163,7 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
     )
 
     sched_desc = QLabel(
-        'When the access screen auto-unlocks for operators '
+        'When the access screen auto-unlocks for users '
         '(e.g. regular recording sessions). '
         'Admin always requires password entry.'
     )
@@ -189,7 +186,7 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
         accent=_C_BRAND_MID,
     )
 
-    auth_desc = QLabel('Change the operator unlock password or the administrator password.')
+    auth_desc = QLabel('Change the User unlock password or the Admin password.')
     auth_desc.setWordWrap(True)
     auth_desc.setStyleSheet(
         f"font: 400 12px 'Inter Tight', 'Segoe UI'; color: {_C_MUTED};"
@@ -197,17 +194,13 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
     )
     layout.addWidget(auth_desc)
 
-    btn_pwd = dialog._btn('Change Operator Password →', variant='ghost', icon='lock', width='row')
-    btn_pwd.ensurePolished()
-    btn_pwd.setMinimumWidth(btn_pwd.sizeHint().width())
+    btn_pwd = dialog._btn('User Password', variant='ghost', icon='lock')
     btn_pwd.setToolTip('Change the operator (entry) login password')
     btn_pwd.clicked.connect(lambda: (mw._dialogs.ChangePassword(), dialog._try_close()))
     layout.addWidget(btn_pwd, 0, Qt.AlignRight)
 
-    btn_admin_pwd = dialog._btn('Change Admin Password →', variant='ghost', icon='lock', width='row')
-    btn_admin_pwd.ensurePolished()
-    btn_admin_pwd.setMinimumWidth(btn_admin_pwd.sizeHint().width())
-    btn_admin_pwd.setToolTip('Change the administrator password (required for Technician mode)')
+    btn_admin_pwd = dialog._btn('Admin Password', variant='ghost', icon='lock')
+    btn_admin_pwd.setToolTip('Change the administrator password (required for Admin mode)')
     btn_admin_pwd.clicked.connect(lambda: (mw._dialogs.ChangeAdminPassword(), dialog._try_close()))
     layout.addWidget(btn_admin_pwd, 0, Qt.AlignRight)
     if not admin_password_change_available():

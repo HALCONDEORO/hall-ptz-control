@@ -201,12 +201,12 @@ class TestReportingContract:
         assert "rev-parse --short HEAD" in script_text
 
     def test_distinguishes_success_config_required_and_fatal(self, script_text):
-        assert "SUCCESS" in script_text
-        assert "INSTALLED" in script_text
-        assert "FAILED" in script_text
+        assert "INSTALADO:" in script_text
+        assert "PENDIENTE" in script_text
+        assert "DETENIDO" in script_text
 
     def test_prints_a_single_next_action(self, script_text):
-        assert "Next action:" in script_text
+        assert "Siguiente paso:" in script_text
 
     def test_branches_on_every_doctor_outcome_exit_code(self, script_text):
         """Must stay aligned with domain/doctor_outcome.py exit codes."""
@@ -216,7 +216,7 @@ class TestReportingContract:
         for outcome in (DoctorOutcome.PASS, DoctorOutcome.READY_WITH_ADVISORIES,
                         DoctorOutcome.CONFIG_REQUIRED):
             code = exit_code_for(outcome)
-            assert re.search(rf"^\s*{code}\)", case_block, re.MULTILINE), \
+            assert re.search(rf"^\s*(?:[0-9]+\|)*{code}(?:\|[0-9]+)*\)", case_block, re.MULTILINE), \
                 f"no branch for exit code {code} ({outcome.value})"
         # FAIL and anything unexpected share the catch-all branch.
         assert "*)" in case_block
@@ -247,9 +247,71 @@ class TestIdempotenceAndSafety:
     def test_readiness_check_uses_the_same_layout_as_the_install(self, script_text):
         """--dev selects /home/<user>/khptz instead of /opt/khptz and requires
         pip3, so the check must receive it as well."""
-        assert "_CHECK_ARGS=(--check)" in script_text
+        assert "_CHECK_ARGS=(--check --no-check-next-action --wizard-user" in script_text
         assert '_CHECK_ARGS+=(--dev)' in script_text
+
+    def test_readiness_check_receives_the_resolved_wizard_user(self, script_text):
+        """The readiness gate inspects the desktop session of the wizard user.
+        The wrapper resolves that user itself (flag > SUDO_USER > graphical
+        seat); if the check did not receive it, the installer would fall back
+        to SUDO_USER alone and inspect nobody when the seat fallback was what
+        worked - the Wayland gate would WARN instead of FAIL on exactly the
+        machine whose first boot would stay dark."""
+        wizard_resolution = script_text.index('step "Buscando el usuario del escritorio"')
+        check_args = script_text.index('_CHECK_ARGS=(--check')
+        assert wizard_resolution < check_args, (
+            "--wizard-user must be resolved before _CHECK_ARGS is built")
+        assert '--wizard-user "${WIZARD_USER}"' in script_text
 
     def test_never_deletes_customer_paths(self, script_text):
         assert "rm -rf /etc/khptz" not in script_text
         assert "rm -rf /var/lib/khptz" not in script_text
+
+
+@pytest.mark.skipif(shutil.which("bash") is None or sys.platform == "win32",
+                    reason="requires a native POSIX bash")
+@pytest.mark.parametrize("mode_args,expected", [
+    ([], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "system"]),
+    (["--gui-mode", "user"], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "user"]),
+    (["--gui-mode=user", "--dev"], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "user", "--dev"]),
+    (["--gui-mode", "user", "--atem"], ["--check", "--no-check-next-action", "--wizard-user", "desktop", "--gui-mode", "user", "--atem"]),
+])
+def test_readiness_forwards_selected_gui_mode(tmp_path, mode_args, expected):
+    """Run the real wrapper in check-only mode with an inert installer.
+
+    Replace only the root guard in this scratch copy so CI needs no root.
+    All host lookups are stubbed; the fake installer only records arguments.
+    """
+    import os
+
+    root_guard = 'if [[ "${EUID}" -ne 0 ]]; then'
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert text.count(root_guard) == 1
+    wrapper = tmp_path / SCRIPT.name
+    wrapper.write_text(text.replace(root_guard, 'if false; then'), encoding="utf-8")
+    installer = tmp_path / "runtime" / "installer" / "install.sh"
+    installer.parent.mkdir(parents=True)
+    installer.write_text('#!/bin/bash\nprintf "%s\\n" "$@" > "$RECORDED_ARGS"\n',
+                         encoding="utf-8")
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    host_commands = {
+        "id": '#!/bin/bash\nif [[ "$1" == "-u" ]]; then echo 1000; fi\nexit 0\n',
+        "getent": '#!/bin/bash\necho "desktop:x:1000:1000::/synthetic/home:/bin/bash"\n',
+        "git": '#!/bin/bash\nexit 1\n',
+        "loginctl": '#!/bin/bash\nexit 1\n',
+    }
+    for name, content in host_commands.items():
+        command = stubs / name
+        command.write_text(content, encoding="utf-8")
+        command.chmod(0o755)
+    recorded = tmp_path / "args.txt"
+    env = dict(os.environ, PATH=f"{stubs}:{os.environ['PATH']}",
+               RECORDED_ARGS=str(recorded))
+    result = subprocess.run(
+        ["bash", str(wrapper), "--allow-dirty", "--check", "--wizard-user", "desktop", *mode_args],
+        capture_output=True, text=True, env=env, cwd=str(tmp_path),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert recorded.read_text(encoding="utf-8").splitlines() == expected
+    assert "Comprobacion terminada" in result.stdout
