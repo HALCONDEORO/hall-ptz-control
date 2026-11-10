@@ -103,7 +103,9 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
     Explicit overlay_path supports tests and controlled non-product deployments.
     """
     path = overlay_path if overlay_path is not None else overlay_file()
-    if overlay_path is None and config_path.parent != Path('/etc/khptz') and not path.exists():
+    source_yaml = (RuntimePathResolver().running_from_source
+                   and config_path.parent.resolve() != Path('/etc/khptz').resolve())
+    if overlay_path is None and source_yaml and not path.exists():
         from config.writer import patch_config_yaml
         return patch_config_yaml(config_path, cam_index=cam_index, cam_ip=cam_ip,
                                  cam_visca_id=cam_visca_id, atem_ip=atem_ip,

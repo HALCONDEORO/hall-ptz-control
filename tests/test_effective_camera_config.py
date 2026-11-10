@@ -269,3 +269,42 @@ def test_repair_preserves_nudge_saved_only_in_runtime_overlay(paths, monkeypatch
     assert not overlay.exists()
     restored = load_config(config).atem.pip_nudge
     assert (restored.pan_speed, restored.duration_ms, restored.direction) == (2, 100, 'left')
+
+
+def test_installed_config_override_uses_runtime_overlay_not_readonly_yaml(paths, monkeypatch):
+    from runtime.path_resolver import RuntimePathResolver
+    from unittest.mock import PropertyMock
+    config, overlay = paths
+    monkeypatch.setenv('KHPTZ_DATA_DIR', str(overlay.parent))
+    monkeypatch.setenv('KHPTZ_CONFIG_DIR', str(config.parent))
+    original = config.read_bytes()
+    with patch.object(RuntimePathResolver, 'running_from_source', new_callable=PropertyMock, return_value=False):
+        with patch('config.writer.patch_config_yaml', side_effect=PermissionError('root-owned YAML')):
+            patch_runtime_config(config, cam_index=0, cam_ip='192.0.2.21')
+    assert config.read_bytes() == original
+    assert load_effective_config(config).cameras[0].ip == '192.0.2.21'
+
+
+def test_partial_old_restore_does_not_mix_restored_yaml_with_stale_overlay(paths, tmp_path, monkeypatch):
+    from application.backup_service import BackupService
+    from application.restore_service import RestoreService
+    config, overlay = paths
+    overlay.parent.mkdir()
+    names = overlay.parent / 'seat_names.json'
+    names.write_text('{"names":[],"seats":{}}')
+    common = dict(config_path=config, data_dir=overlay.parent, backup_dir=tmp_path / 'backups')
+    backup = BackupService(**common).create_backup()
+    assert 'seat_names.json' in backup.included
+    patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
+    service = RestoreService(**common)
+    atomic = service._atomic_write
+    def fail_names(data, dest):
+        if dest.name == 'seat_names.json':
+            raise PermissionError('test unrelated data failure')
+        return atomic(data, dest)
+    monkeypatch.setattr(service, '_atomic_write', fail_names)
+    result = service.restore(backup.path)
+    assert result.failed
+    assert 'config.yaml' in result.restored
+    assert not overlay.exists()
+    assert load_effective_config(config, overlay).cameras[0].ip == '192.0.2.11'
