@@ -172,3 +172,71 @@ def test_repair_prefills_current_effective_values(paths, monkeypatch):
     patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
     answers = ProvisioningService().load_existing_answers(RuntimePathResolver())
     assert answers.cameras[0].ip == '192.0.2.21'
+
+
+def test_concurrent_threads_preserve_both_updates(paths, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    import time
+    import config.effective as effective
+    config, overlay = paths
+    patch_runtime_config(config, overlay_path=overlay)
+    original_read = effective._read
+    start = threading.Barrier(2)
+
+    def slow_read(path):
+        raw = original_read(path)
+        time.sleep(0.04)  # force the old unlocked RMW race
+        return raw
+
+    monkeypatch.setattr(effective, '_read', slow_read)
+
+    def save(index):
+        start.wait(timeout=5)
+        patch_runtime_config(config, overlay_path=overlay, cam_index=index,
+                             cam_ip=f'192.0.2.{21 + index}')
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(save, (0, 1)))
+    saved = load_effective_config(config, overlay)
+    assert [cam.ip for cam in saved.cameras] == ['192.0.2.21', '192.0.2.22']
+
+
+def _process_save(config, overlay, index, start):
+    import time
+    import config.effective as effective
+    original_read = effective._read
+
+    def slow_read(path):
+        raw = original_read(path)
+        time.sleep(0.08)
+        return raw
+
+    effective._read = slow_read
+    assert start.wait(5)
+    patch_runtime_config(config, overlay_path=overlay, cam_index=index,
+                         cam_ip=f'192.0.2.{21 + index}')
+
+
+def test_concurrent_processes_preserve_both_updates(paths):
+    import multiprocessing
+    config, overlay = paths
+    patch_runtime_config(config, overlay_path=overlay)
+    context = multiprocessing.get_context('spawn')
+    start = context.Event()
+    workers = [context.Process(target=_process_save, args=(config, overlay, i, start))
+               for i in (0, 1)]
+    try:
+        for worker in workers:
+            worker.start()
+        start.set()
+        for worker in workers:
+            worker.join(10)
+            assert worker.exitcode == 0
+        saved = load_effective_config(config, overlay)
+        assert [cam.ip for cam in saved.cameras] == ['192.0.2.21', '192.0.2.22']
+    finally:
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(5)

@@ -5,9 +5,12 @@ changed by the running service; credentials, roles and feature flags never are.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import asdict
+import fcntl
 import json
 import logging
+import threading
 from pathlib import Path
 
 from config.loader import build_settings, load_config
@@ -16,6 +19,25 @@ from runtime.path_resolver import RuntimePathResolver
 
 OVERLAY_NAME = 'camera_overrides.json'
 logger = logging.getLogger(__name__)
+_path_locks: dict[Path, threading.Lock] = {}
+_path_locks_guard = threading.Lock()
+
+
+@contextmanager
+def _overlay_transaction(path: Path):
+    # Separate stable inode: the JSON itself is atomically replaced.
+    key = path.resolve()
+    with _path_locks_guard:
+        lock = _path_locks.setdefault(key, threading.Lock())
+    with lock:
+        key.parent.mkdir(parents=True, exist_ok=True)
+        with key.with_name(key.name + '.lock').open('a') as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
 
 
 def overlay_file() -> Path:
@@ -86,21 +108,22 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
         return patch_config_yaml(config_path, cam_index=cam_index, cam_ip=cam_ip,
                                  cam_visca_id=cam_visca_id, atem_ip=atem_ip,
                                  atem_pip_nudge=atem_pip_nudge)
-    base = load_config(config_path)
-    raw = _read(path) if path.exists() else {'schema_version': 1}
-    # Do not silently erase corrupt overrides while claiming an update succeeded.
-    _merge(base, raw)
-    if cam_ip is not None or cam_visca_id is not None:
-        if type(cam_index) is not int or not 0 <= cam_index < len(base.cameras):
-            raise ValueError('Unknown camera index')
-        entry = raw.setdefault('cameras', {}).setdefault(base.cameras[cam_index].id, {})
-        if cam_ip is not None:
-            entry['ip'] = cam_ip
-        if cam_visca_id is not None:
-            entry['visca_id'] = cam_visca_id
-    if atem_ip is not None:
-        raw.setdefault('atem', {})['ip'] = atem_ip
-    if atem_pip_nudge is not None:
-        raw.setdefault('atem', {}).setdefault('pip_nudge', {}).update(atem_pip_nudge)
-    _merge(base, raw)
-    write_text_atomic(path, json.dumps(raw, indent=2) + '\n')
+    with _overlay_transaction(path):
+        base = load_config(config_path)
+        raw = _read(path) if path.exists() else {'schema_version': 1}
+        # Do not silently erase corrupt overrides while claiming an update succeeded.
+        _merge(base, raw)
+        if cam_ip is not None or cam_visca_id is not None:
+            if type(cam_index) is not int or not 0 <= cam_index < len(base.cameras):
+                raise ValueError('Unknown camera index')
+            entry = raw.setdefault('cameras', {}).setdefault(base.cameras[cam_index].id, {})
+            if cam_ip is not None:
+                entry['ip'] = cam_ip
+            if cam_visca_id is not None:
+                entry['visca_id'] = cam_visca_id
+        if atem_ip is not None:
+            raw.setdefault('atem', {})['ip'] = atem_ip
+        if atem_pip_nudge is not None:
+            raw.setdefault('atem', {}).setdefault('pip_nudge', {}).update(atem_pip_nudge)
+        _merge(base, raw)
+        write_text_atomic(path, json.dumps(raw, indent=2) + '\n')
