@@ -8,6 +8,13 @@ This project uses a simple versioning approach while it is still in early produc
 - Minor version: new features or significant refactors.
 - Major version: breaking changes for installation, configuration or customer deployments.
 
+## Unreleased
+
+### Added
+
+- Offline camera and panel self-test (`python -m runtime.cli selftest --json`)
+  built on the scripted VISCA simulator, run in CI before the unit tests.
+
 ## 1.2.0 - 2026-11-10
 
 Supervised Raspberry Pi camera-test release. Physical acceptance is pending;

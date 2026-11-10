@@ -822,6 +822,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--json", action="store_true", default=False,
         help="Output structured JSON instead of human text",
     )
+    selftest_p = sub.add_parser("selftest", help="Run offline camera/panel regressions without real hardware")
+    selftest_p.add_argument("--json", action="store_true", help="Print machine-readable check results")
     sub.add_parser("status",  help="Print service readiness summary")
     sub.add_parser("uptime",  help="Show service or system uptime")
     sub.add_parser("cameras", help="List configured cameras and probe reachability")
@@ -961,7 +963,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def cmd_selftest(args):
+    from runtime.selftest import cmd_selftest as run
+    return run(args)
+
+
 _COMMANDS = {
+    "selftest": cmd_selftest,
     "version":         cmd_version,
     "status":          cmd_status,
     "uptime":          cmd_uptime,
