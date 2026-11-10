@@ -234,16 +234,6 @@ class TestPathResolution:
         assert "python3 -m runtime.cli" in text
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known gap: this validator predates --gui-mode user (#885) and is "
-           "not GUI-mode aware. On a session-owned install khptz-control is "
-           "deliberately disabled, so 'is not active' is reported as a FAILURE, "
-           "and every journal check reads an empty khptz-control journal and "
-           "reports OK. scripts/validate_rpi_acceptance.sh (#890) already "
-           "sources scripts/lib/install_state.sh; this one must too. Remove "
-           "this marker together with the fix.",
-)
 class TestGuiModeAwareness:
     def test_consults_the_shared_install_state_reader(self, text):
         assert "lib/install_state.sh" in text

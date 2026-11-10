@@ -43,7 +43,7 @@ def test_similarly_named_script_is_not_exempted():
 def test_actual_gui_count_block(count, verdict):
     text = SCRIPT.read_text()
     start = text.index('KHPTZ_PROCS=')
-    end = text.index('\n# khptz-control.service active.', start)
+    end = text.index('\n# The GUI unit must be active', start)
     rows = ''.join(f'{123 + n} /usr/bin/python3 /opt/khptz/main.py\n' for n in range(count))
     harness = """
 set -Eeuo pipefail
