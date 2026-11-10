@@ -20,6 +20,8 @@ This project uses a simple versioning approach while it is still in early produc
 - Role elevation overlay now applies the progressive lockout: the lockout
   state is shared between both overlay instances, so failed attempts cannot
   be retried without limit.
+- Splash TCP scan no longer flags healthy installs as failed (red TCP chip
+  on every startup since 8c8e8a6).
 - The config/layout fingerprint no longer aborts with UnicodeDecodeError on
   invalid-encoding files; it reports "invalid" and keeps the identity
   computable.
