@@ -27,6 +27,7 @@ from adapters.atem_values import source_number, video_sources
 
 
 import logging
+import sys
 import time
 from typing import TYPE_CHECKING
 
@@ -240,6 +241,13 @@ class ATEMMonitor(QThread):
         verified = False
         while not self.isInterruptionRequested():
             try:
+                # PyATEMMax keeps the last programInput after the UDP link
+                # drops (it only flips `connected` to False and retries by
+                # itself), so reading programInput never raises. Without this
+                # check the monitor stays CONNECTED on a stale value forever
+                # and the supervisor (thread-alive only) never notices.
+                if getattr(atem, "connected", True) is False:
+                    raise ConnectionError("ATEM link lost (switcher unreachable)")
                 cur = source_number(atem.programInput[0].videoSource)
                 if cur < 0:
                     raise ValueError("ATEM program input must not be negative")
@@ -255,9 +263,14 @@ class ATEMMonitor(QThread):
                 prev_input = cur
             except Exception:
                 verified = False
-                logger.exception("ATEM poll cycle failed")
+                if isinstance(sys.exc_info()[1], ConnectionError):
+                    logger.warning("ATEM poll: link lost, waiting for PyATEMMax to reconnect")
+                    err = "link lost"
+                else:
+                    logger.exception("ATEM poll cycle failed")
+                    err = "poll cycle failed"
                 if self._state != ATEMState.ERROR:
-                    self._emit_state(ATEMState.ERROR, last_error="poll cycle failed")
+                    self._emit_state(ATEMState.ERROR, last_error=err)
             self._poll_pip(atem)
             time.sleep(0.1)
 
