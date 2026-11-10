@@ -624,8 +624,11 @@ class CameraWorker:
         IMPORTANTE: si connect() lanza excepción, el socket se cierra
         explícitamente para evitar file descriptor leak.
         """
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s = None
         try:
+            # Descriptor/buffer exhaustion can fail before connect itself.
+            # Keep that failure in the same bounded recovery path.
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(CAMERA_CONNECT_TIMEOUT)
             s.connect((self.ip, self.port))
             logger.info("CameraWorker: conectado a %s:%s", self.ip, self.port)
@@ -635,7 +638,8 @@ class CameraWorker:
             # [WARN] y no [ERROR]: fallo de conexión en arranque es esperado
             # si las cámaras aún no están encendidas o alcanzables en desarrollo.
             logger.warning("CameraWorker: no se pudo conectar a %s: %s", self.ip, exc)
-            s.close()  # Cierre explícito: evita leak de file descriptors
+            if s is not None:
+                s.close()  # Cierre explícito: evita leak de file descriptors
             self._set_connected(False)
             return None
 
