@@ -121,3 +121,29 @@ class TestSwitchToAdminCancelsCountdown:
         assert login._operator_auto is True
         assert login._countdown_timer.isActive()
         assert login.password_input.isHidden()
+
+
+class TestModeSwitchKeepsLockoutCounter:
+    """Regression: toggling Operator <-> Admin must not reset the failed-attempt
+    counter. _set_mode used to zero it, so two clicks wiped the progressive
+    lockout and password guessing continued at full speed."""
+
+    def test_mode_toggle_preserves_attempts(self, login):
+        login._set_mode("admin")
+        login.attempts = 3
+        login._on_switch_user()   # admin -> operator
+        login._on_switch_user()   # operator -> admin
+        assert login._mode == "admin"
+        assert login.attempts == 3
+
+    def test_lockout_duration_uses_accumulated_attempts(self, login):
+        login._set_mode("admin")
+        login.attempts = 3
+        login._set_mode("operator")
+        login._set_mode("admin")
+        # Next failure must schedule attempt #4's lockout (30s), not restart
+        # at the free first entries of the schedule.
+        login._on_login_failure()
+        assert login.attempts == 4
+        assert login.is_locked is True
+        login.lockout_timer.stop()

@@ -24,6 +24,13 @@ def _ensure_stubs() -> None:
         "PyQt5.QtGui", "PyQt5.QtSvg",
     ):
         if mod not in sys.modules:
+            # Prefer the real module: a stub left in sys.modules poisons
+            # later tests that need the real QtSvg (MainWindow smoke).
+            try:
+                __import__(mod)
+                continue
+            except ImportError:
+                pass
             sys.modules[mod] = types.ModuleType(mod)
 
     qtc = sys.modules["PyQt5.QtCore"]
@@ -106,6 +113,11 @@ if _injected_widgets_stub:
     sys.modules.pop("ui.widgets", None)
 if _injected_icons_stub:
     sys.modules.pop("ui.platform_icons", None)
+if _injected_widgets_stub:
+    # ui.seat_builder is bound to the fake SpecialDragButton; keep our _sb
+    # reference but do not leave it cached for later real-widget tests
+    # (MainWindow smoke: AttributeError '_FakeDragButton' init_preset_actions).
+    sys.modules.pop("ui.seat_builder", None)
 
 
 # ── _load_svg_pixmap ──────────────────────────────────────────────────────────

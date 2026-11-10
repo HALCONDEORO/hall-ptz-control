@@ -384,3 +384,20 @@ def test_cli_migrate_command_with_legacy_files(tmp_path, monkeypatch):
 
     assert rc == 0
     assert config_path.exists()
+
+
+# ── YAML escaping of legacy values ────────────────────────────────────────────
+
+def test_migrate_contact_with_backslash_round_trips(tmp_path):
+    # A backslash in a legacy value introduced a YAML escape sequence: "\2"
+    # made the generated config.yaml unloadable (ScannerError) and "\n"
+    # silently became a newline. The migrated value must round-trip exactly.
+    _write(tmp_path, "PTZ1IP.txt", "172.16.1.11")
+    _write(tmp_path, "Contact.txt", 'Rack \\2 AV \\ support')
+    config_path = tmp_path / "config.yaml"
+
+    result = migrate(tmp_path, config_path)
+
+    assert result.config_written is True
+    loaded = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert loaded["site"]["contact"] == 'Rack \\2 AV \\ support'
