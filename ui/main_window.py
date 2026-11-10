@@ -75,6 +75,7 @@ from ui.seat_builder import build_special_seat_button
 
 from ui.chairman_button import ChairmanButton
 from ui.camera_indicator import CameraIndicator
+from ui.message_box_layout import fit_message_box_buttons
 from ui.auditorium_overlay import AuditoriumOverlay
 from ui.mode_border_overlay import ModeBorderOverlay
 
@@ -388,6 +389,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         yes_btn = box.addButton('Power on cameras', QMessageBox.AcceptRole)
         box.addButton('Leave as they are', QMessageBox.RejectRole)
         box.setDefaultButton(yes_btn)
+        fit_message_box_buttons(box)
         box.exec_()
         if box.clickedButton() is yes_btn:
             self._session.ToggleSession()
@@ -1660,15 +1662,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         # Safe default/escape: a stray Enter or tap cancels, never powers off.
         msg.setDefaultButton(btn_cancel)
         msg.setEscapeButton(btn_cancel)
-        # Mark the destructive option red so it reads as the heavy action.
-        btn_off.setStyleSheet(
-            "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            " stop:0 #C0141F, stop:1 #8E0F18); border: none; border-radius: 9px;"
-            " padding: 7px 16px; min-width: 90px; min-height: 36px;"
-            " font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; }"
-            "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            " stop:0 #d41828, stop:1 #a01020); }"
-        )
+        from ui.message_box_layout import destructive_message_button_qss
+        btn_off.setStyleSheet(destructive_message_button_qss())
+        fit_message_box_buttons(msg)
         msg.exec_()
         clicked = msg.clickedButton()
         if clicked is btn_keep:
