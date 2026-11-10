@@ -2,7 +2,10 @@
 
 Esta guía resume el flujo en español. La referencia detallada es
 [INSTALL_RPI.md](INSTALL_RPI.md). No autoriza un despliegue: hacen falta permiso
-para el equipo concreto y una versión aprobada. No hay un PASS de hardware por
+para el equipo concreto y una versión aprobada. Para la primera prueba puede
+ser el commit exacto de `main` revisado y con CI verde: anota su SHA completo,
+no uses un `main` que siga cambiando. La release v1.0.1 no contiene todas las
+correcciones posteriores. Consulta [INSTALL_TODAY_ES.md](INSTALL_TODAY_ES.md). No hay un PASS de hardware por
 el hecho de que CI esté en verde.
 
 ## Antes de tocar el equipo
@@ -50,7 +53,7 @@ el hecho de que CI esté en verde.
 
 ## Preparar y comprobar
 
-En el escritorio, como usuario normal, desde un clon de la etiqueta aprobada:
+En el escritorio, como usuario normal, desde un clon del commit exacto aprobado de `main` o su etiqueta aprobada:
 
 ```bash
 sudo apt update
