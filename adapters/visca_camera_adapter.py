@@ -205,14 +205,18 @@ class ViscaCameraAdapter:
                 return priority_admit(cmd, deferred_failures=deferred_failures)
 
             def enqueue():
-                pan = send_stop(ViscaCommand(
-                    camera=self._index(camera_id),
-                    payload=bytes.fromhex(cam_id_hex + "01060100000303FF"),
-                ))
-                zoom = send_stop(ViscaCommand(
-                    camera=self._index(camera_id),
-                    payload=bytes.fromhex(cam_id_hex + "01040700FF"),
-                ))
+                commands = [
+                    ViscaCommand(camera=self._index(camera_id), payload=bytes.fromhex(
+                        cam_id_hex + "01060100000303FF")),
+                    ViscaCommand(camera=self._index(camera_id), payload=bytes.fromhex(
+                        cam_id_hex + "01040700FF")),
+                ]
+                # Resolve the real class hook, not a fabricated Mock attribute.
+                batch = getattr(type(worker), "_send_stop_batch_admitted", None)
+                if callable(batch):
+                    return batch(worker, commands, deferred_failures=deferred_failures)
+                pan = send_stop(commands[0])
+                zoom = send_stop(commands[1])
                 return pan and zoom
 
             queued = fence.stop(ticket, enqueue)
