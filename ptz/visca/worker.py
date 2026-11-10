@@ -805,8 +805,10 @@ class CameraWorker:
         received_bytes = 0
         ack_identity = None
         deadline = time.monotonic() + VISCA_READ_TIMEOUT
+        mechanical = getattr(self, '_confirmed_mechanical_read', None)
         while True:
-            if self._interrupt.is_set() or self._shutdown.is_set():
+            if (self._interrupt.is_set() or self._shutdown.is_set()
+                    or (mechanical is not None and mechanical.cancelled.is_set())):
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -836,6 +838,10 @@ class CameraWorker:
                 accepted, ack_identity = self._correlate_response_frame(frame, ack_identity)
                 if accepted:
                     buf += framed
+                    if (mechanical is not None and ack_identity is not None
+                            and (frame[1] & 0xF0) == 0x40):
+                        # Fixed caller deadline, never a sliding ACK timeout.
+                        deadline = mechanical.expires_at
             if CameraWorker._has_final_visca_frame(buf):
                 break
         return buf
@@ -999,7 +1005,21 @@ class CameraWorker:
                     if cmd.payload and 0x81 <= cmd.payload[0] <= 0x87:
                         self._response_headers.add((cmd.payload[0] - 0x80 + 8) << 4)
                     sock_ref.sendall(cmd.payload)
-                    response = self._read_visca_response(sock_ref)
+                    # Only mechanical commands already carrying a confirmed
+                    # caller deadline may wait longer after an ACK. STOP,
+                    # continuous motion, inquiries and queued Home stay short.
+                    body = cmd.payload[1:-1]
+                    mechanical = (body.startswith(b'\x01\x04\x3f\x02')
+                                  or body.startswith(b'\x01\x04\x47')
+                                  or body == b'\x01\x06\x04')
+                    self._confirmed_mechanical_read = (
+                        cmd if mechanical and cmd.fast_connect and cmd.expires_at
+                        and not cmd.priority else None
+                    )
+                    try:
+                        response = self._read_visca_response(sock_ref)
+                    finally:
+                        self._confirmed_mechanical_read = None
 
                     # Si send_priority() interrumpió la lectura: un STOP no se
                     # pierde — se reencola tras el más nuevo; un comando normal
