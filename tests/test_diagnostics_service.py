@@ -437,3 +437,55 @@ class TestInstallationIdCheck:
         check = next(c for c in report.checks if c.name == "installation_id")
         assert check.status == Status.WARNING
 
+
+
+class TestGuiModeCoherenceEnumRegression:
+    """Regression: CheckResult statuses must be real Status members.
+
+    Three diagnostics paths used Status.WARN, which does not exist (the enum
+    member is WARNING). On a user-GUI-mode appliance, `khptz doctor` run by
+    the desktop user reached the 'credential file unreadable' branch and
+    crashed with AttributeError instead of reporting the documented login
+    limitation — taking the whole doctor run down with it."""
+
+    def _service(self, tmp_path):
+        install_dir = tmp_path / "app"
+        install_dir.mkdir()
+        (install_dir / "VERSION").write_text("1.2.3", encoding="utf-8")
+        return DiagnosticsService(
+            install_dir=install_dir, data_dir=tmp_path / "data",
+        )
+
+    def test_user_mode_unreadable_credential_warns(self, tmp_path, monkeypatch):
+        import runtime.install_state as istate
+        import runtime.secret_manager as sm
+        monkeypatch.setattr(istate, "gui_mode", lambda: "user")
+        monkeypatch.setattr(sm, "_secret_file", lambda entry: tmp_path / "missing.enc")
+
+        result = self._service(tmp_path)._check_gui_mode_coherence()
+
+        assert result.status is Status.WARNING
+        assert "cannot read the credential file" in result.message
+
+    def test_gui_mode_read_error_warns(self, tmp_path, monkeypatch):
+        import runtime.install_state as istate
+
+        def _boom():
+            raise RuntimeError("state file gone")
+
+        monkeypatch.setattr(istate, "gui_mode", _boom)
+        result = self._service(tmp_path)._check_gui_mode_coherence()
+
+        assert result.status is Status.WARNING
+        assert "Could not read the GUI mode" in result.message
+
+    def test_secret_permissions_inspect_error_warns(self, tmp_path, monkeypatch):
+        import runtime.secret_manager as sm
+        monkeypatch.setattr(
+            sm, "_secret_file",
+            lambda entry: (_ for _ in ()).throw(OSError("metadata gone")),
+        )
+        result = self._service(tmp_path)._check_secret_permissions()
+
+        # Both secrets unreadable -> nothing checked -> benign OK path.
+        assert result.status is Status.OK

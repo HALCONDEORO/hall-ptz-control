@@ -404,7 +404,7 @@ class DiagnosticsService:
         try:
             from runtime import secret_manager
         except Exception as exc:  # noqa: BLE001
-            return CheckResult(name, Status.WARN, f"Could not inspect secrets: {exc}",
+            return CheckResult(name, Status.WARNING, f"Could not inspect secrets: {exc}",
                                category=CheckCategory.ADVISORY)
 
         exposed: list[str] = []
@@ -452,7 +452,7 @@ class DiagnosticsService:
             from runtime.install_state import gui_mode
             mode = gui_mode()
         except Exception as exc:  # noqa: BLE001
-            return CheckResult(name, Status.WARN, f"Could not read the GUI mode: {exc}",
+            return CheckResult(name, Status.WARNING, f"Could not read the GUI mode: {exc}",
                                category=CheckCategory.ADVISORY)
 
         if mode != "user":
@@ -468,7 +468,7 @@ class DiagnosticsService:
         if readable:
             return CheckResult(name, Status.OK, "GUI mode: user (session-owned)")
         return CheckResult(
-            name, Status.WARN,
+            name, Status.WARNING,
             "GUI mode is 'user' but this process cannot read the credential file — "
             "login will fail. Passwords are verified in-process, so a "
             "session-owned GUI cannot both authenticate and keep the "
