@@ -51,6 +51,7 @@ class HandoffResult:
     error: str = ""
     issues: List[dict] = field(default_factory=list)
     written: List[str] = field(default_factory=list)
+    outcome_unknown: bool = False
 
     def summary(self) -> str:
         """One-line human summary for the Installing/Done screens."""
@@ -61,6 +62,12 @@ class HandoffResult:
                 "No result was received in time. The system may still be applying changes. "
                 "Keep this message and ask the technician to check the result; "
                 "do not retry or restart blindly."
+            )
+        if self.outcome_unknown:
+            return (
+                "The setup result could not be read. The system outcome is unknown. "
+                "Ask the technician to check it before another attempt. "
+                f"Details: {self.error}"
             )
         if self.issues:
             joined = "; ".join(i.get("message", "") for i in self.issues)
@@ -162,7 +169,7 @@ class ProvisionHandoff:
             if not isinstance(error, str):
                 raise ValueError("expected error to be text")
         except (OSError, UnicodeError, ValueError) as exc:
-            return HandoffResult(ok=False, error=f"unreadable result: {exc}")
+            return HandoffResult(ok=False, error=f"unreadable result: {exc}", outcome_unknown=True)
         if data["ok"]:
             return HandoffResult(ok=True, written=written)
         return HandoffResult(ok=False, error=error, issues=issues)

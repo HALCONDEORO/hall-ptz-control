@@ -23,7 +23,9 @@ def test_damaged_result_is_a_safe_failure(tmp_path, payload):
     assert result is not None
     assert result.ok is False
     assert 'unreadable result' in result.error
-    assert 'failed' in result.summary().lower()
+    assert result.outcome_unknown is True
+    assert 'outcome is unknown' in result.summary().lower()
+    assert 'before another attempt' in result.summary().lower()
 
 
 def test_invalid_utf8_result_is_a_safe_failure(tmp_path):

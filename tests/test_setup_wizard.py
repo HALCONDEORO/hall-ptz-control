@@ -564,7 +564,7 @@ class TestInstallingPageCloseLifecycle:
 
 
 class TestInstallingTimeoutGuidance:
-    def test_timeout_stops_polling_but_does_not_unlock_next(self, wizard):
+    def test_timeout_keeps_polling_without_unlocking_next(self, wizard):
         from application.provision_handoff import HandoffResult
 
         class TimedOut:
@@ -586,7 +586,7 @@ class TestInstallingTimeoutGuidance:
         wizard.setStartId(pid)
         wizard.show()
         page._poll_once()
-        assert not page._timer.isActive()
+        assert page._timer.isActive()
         assert not page.isComplete()
         assert page._result.timed_out
         assert "do not retry or restart blindly" in page._status.text()
