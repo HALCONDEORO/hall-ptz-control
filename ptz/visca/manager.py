@@ -117,7 +117,10 @@ class CameraManager:
                     self._cam2_ip = new_ip
                 if old_ip != new_ip:
                     self._reset_camera_state(cam_key)
-            old_worker = self._workers.pop(old_ip, None)
+            # A worker belongs to its endpoint, not the logical slot being
+            # changed. Preserve it while the other slot still uses that IP.
+            old_worker = (self._workers.pop(old_ip, None)
+                          if old_ip not in (self._cam1_ip, self._cam2_ip) else None)
         if old_worker is not None:
             old_worker.stop()
         # Eagerly create the worker for the new IP so it connects (and wires its
