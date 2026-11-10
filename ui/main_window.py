@@ -106,9 +106,11 @@ def _load_cam_configs_from_yaml():
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
         # Mutate the shared objects, never rebind: Splash/Admin/services already
         # imported references to them. Workers must consume that same identity.
-        for current, saved in zip((CAM1, CAM2), settings.cameras):
-            current.ip = saved.ip
-            current.cam_id = saved.visca_id
+        by_role = {saved.role: saved for saved in settings.cameras}
+        for role, current in (('platform', CAM1), ('comments', CAM2)):
+            saved = by_role.get(role)
+            current.ip = saved.ip if saved is not None else ''
+            current.cam_id = saved.visca_id if saved is not None else ''
         return CAM1, CAM2
     except Exception:
         return CAM1, CAM2
