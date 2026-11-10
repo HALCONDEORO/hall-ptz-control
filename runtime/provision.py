@@ -71,6 +71,7 @@ def answers_from_dict(data: dict) -> ProvisioningAnswers:
         site_name=str(data.get("site_name", base.site_name)),
         site_contact=str(data.get("site_contact", base.site_contact)),
         installation_id=str(data.get("installation_id", base.installation_id)),
+        installation_profile=str(data.get("installation_profile", base.installation_profile)),
         cameras=cameras,
         atem_enabled=bool(data.get("atem_enabled", base.atem_enabled)),
         atem_ip=str(data.get("atem_ip", base.atem_ip)),
