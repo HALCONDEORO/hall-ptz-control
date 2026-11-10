@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Legacy migration escapes backslashes in values written to config.yaml,
+  so migrated values round-trip byte-exact and the generated file stays valid YAML.
 - Support bundle: collector errors and content are redacted before the ZIP is
   written, and a redaction failure produces no export.
 
