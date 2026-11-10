@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- ATEM writes report DISCONNECTED when the underlying link is down instead
+  of claiming success for commands the library did not send.
 - ATEM polling detects a dropped link instead of continuing to report
   cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
