@@ -243,8 +243,14 @@ class PresetActionMixin:
         if event.button() == Qt.RightButton:
             self._long_press_timer.stop()
             self._press_pos = None
-            self._set_cb(self._preset_number)
             event.accept()
+            reply = QMessageBox.question(
+                self, "Save Camera Position",
+                f"Continue to SET preset {self._preset_number}? This can overwrite its saved position.",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+            )
+            if reply == QMessageBox.Yes:
+                self._set_cb(self._preset_number)
             return
         if event.button() == Qt.LeftButton:
             self._long_press_fired = False

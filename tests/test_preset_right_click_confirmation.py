@@ -1,15 +1,16 @@
-"""Exercise real preset widgets rather than a copy of the interaction logic."""
+"""Real right clicks need explicit consent before dispatching SET."""
 import os
 from pathlib import Path
 import subprocess
 import sys
 
 
-def test_right_click_sets_once_on_real_preset_widgets():
+def test_right_click_requires_confirmation_on_real_widgets():
     script = r'''
+from unittest.mock import patch
 from PyQt5.QtCore import Qt
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication
+from PyQt5.QtWidgets import QApplication, QMessageBox
 from ui.widgets import GoButton, SpecialDragButton, PlatformPresetButton
 app = QApplication([])
 for make in (lambda: GoButton(42), lambda: SpecialDragButton(42, 'Seat'), PlatformPresetButton):
@@ -17,11 +18,14 @@ for make in (lambda: GoButton(42), lambda: SpecialDragButton(42, 'Seat'), Platfo
     calls, saves = [], []
     widget.init_preset_actions(42, calls.append, saves.append)
     widget.show()
-    QTest.mouseClick(widget, Qt.RightButton)
-    assert saves == [42], (type(widget).__name__, saves)
-    assert calls == []
-    assert not widget._long_press_timer.isActive()
-    # Context-menu delivery must not duplicate the SET. A later tap still calls.
+    for answer, expected in ((QMessageBox.No, []), (QMessageBox.Yes, [42])):
+        with patch.object(QMessageBox, 'question', return_value=answer) as question:
+            QTest.mouseClick(widget, Qt.RightButton)
+        question.assert_called_once()
+        assert question.call_args.args[-1] == QMessageBox.No
+        assert saves == expected, (type(widget).__name__, saves)
+        assert calls == []
+        assert not widget._long_press_timer.isActive()
     QTest.mouseClick(widget, Qt.LeftButton)
     assert calls == [42]
     assert saves == [42]
