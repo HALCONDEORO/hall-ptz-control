@@ -24,6 +24,7 @@
 
 from __future__ import annotations  # type hints modernos sin romper Python 3.9 en runtime
 
+import errno
 import logging
 import queue
 import select
@@ -694,7 +695,14 @@ class CameraWorker:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            readable, _, _ = select.select([sock], [], [], min(remaining, 0.05))
+            try:
+                readable, _, _ = select.select([sock], [], [], min(remaining, 0.05))
+            except ValueError as exc:
+                # A concurrent reconnect/stop may close this local reference
+                # after the interruption check. select raises ValueError for
+                # fd=-1, not OSError; normalize it into the bounded I/O retry
+                # path rather than letting the worker thread die.
+                raise OSError(errno.EBADF, "VISCA descriptor closed during read") from exc
             if not readable:
                 continue   # rodaja de 50 ms agotada; vuelve a comprobar interrupt y deadline
             chunk = sock.recv(1024)
