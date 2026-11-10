@@ -457,12 +457,12 @@ class TestTitleCounter:
     def test_counter_reflects_assigned_and_total(self):
         stub = _panel_stub(names=["PersonA", "PersonB", "PersonC"], assigned={"PersonB"})
         _np.NamesPanel._update_title(stub)
-        stub._title.setText.assert_called_once_with("👥 Attendees  (1/3 seated)")
+        stub._title.setText.assert_called_once_with("Attendees  (1/3 seated)")
 
     def test_counter_zero_seated(self):
         stub = _panel_stub(names=["PersonA"], assigned=set())
         _np.NamesPanel._update_title(stub)
-        stub._title.setText.assert_called_once_with("👥 Attendees  (0/1 seated)")
+        stub._title.setText.assert_called_once_with("Attendees  (0/1 seated)")
 
 
 

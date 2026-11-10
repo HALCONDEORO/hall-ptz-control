@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from ui.icon_loader import get_svg_icon
 from ui.widgets import DragDropButton
 
 
@@ -272,10 +273,19 @@ class NamesPanel(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(4)
 
-        self._title = QLabel("👥 Attendees")
+        title_row = QHBoxLayout()
+        title_row.setSpacing(4)
+        title_row.addStretch()
+        self._title_icon = QLabel()
+        self._title_icon.setPixmap(get_svg_icon("attendees").pixmap(18, 18))
+        self._title_icon.setAccessibleName("Attendees")
+        title_row.addWidget(self._title_icon)
+        self._title = QLabel("Attendees")
         self._title.setStyleSheet("font: bold 12px; color: #333;")
         self._title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self._title)
+        title_row.addWidget(self._title)
+        title_row.addStretch()
+        layout.addLayout(title_row)
 
         hint = QLabel("Drag to seat · drag back to unassign\nDouble-tap seat to clear")
         hint.setStyleSheet("font: 9px; color: #666;")
@@ -286,7 +296,9 @@ class NamesPanel(QWidget):
         # Búsqueda: filtra la lista en vivo (A1) y, con Enter en modo Call,
         # lleva la cámara al asiento de esa persona (B3 — recall por nombre).
         self._search = QLineEdit()
-        self._search.setPlaceholderText("🔍 Search · Enter = go to seat")
+        self._search.setPlaceholderText("Search - Enter = go to seat")
+        self._search.setAccessibleName("Search attendees")
+        self._search.addAction(get_svg_icon("search"), QLineEdit.LeadingPosition)
         self._search.setClearButtonEnabled(True)
         self._search.setFixedHeight(26)
         self._search.setStyleSheet(
@@ -310,18 +322,24 @@ class NamesPanel(QWidget):
         )
 
         self._edit_buttons = []
-        for label, slot in [
-            ("＋ Add", self._add_name),
-            ("↩ Undo last assignment", self._undo),
+        for label, icon_name, slot in [
+            ("Add", "add", self._add_name),
+            ("Undo last assignment", "undo", self._undo),
         ]:
             b = QPushButton(label)
+            b.setIcon(get_svg_icon(icon_name))
+            b.setIconSize(QSize(16, 16))
+            b.setAccessibleName(label)
             b.setFixedHeight(26)
             b.setStyleSheet(_btn_style)
             b.clicked.connect(slot)
             layout.addWidget(b)
             self._edit_buttons.append(b)
 
-        btn_clear = QPushButton("🔄 Bring All Back")
+        btn_clear = QPushButton("Bring All Back")
+        btn_clear.setIcon(get_svg_icon("refresh"))
+        btn_clear.setIconSize(QSize(16, 16))
+        btn_clear.setAccessibleName("Bring All Back")
         btn_clear.setFixedHeight(26)
         btn_clear.setStyleSheet(
             "QPushButton { background: white; border: 1px solid #1976d2;"
@@ -405,7 +423,7 @@ class NamesPanel(QWidget):
         """Título con contador sentados/total (A3)."""
         total = len(self.names)
         seated = len(self._assigned)
-        self._title.setText(f"👥 Attendees  ({seated}/{total} seated)")
+        self._title.setText(f"Attendees  ({seated}/{total} seated)")
 
     # ── Búsqueda (A1) + recall por nombre (B3) ─────────────────────────────────
 

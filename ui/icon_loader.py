@@ -69,3 +69,19 @@ def required_png_paths() -> list[Path]:
         ICON_WARNING, ICON_REFRESH, ICON_LOCK, ICON_DATA,
     ]
     return [_PNG_DIR / f"{icon}_{size}.png" for icon in p1_icons for size in REQUIRED_SIZES]
+
+
+def get_svg_icon(name: str):
+    """Load a packaged vector icon without depending on an installed icon font.
+
+    QtSvg is already a runtime dependency. Text labels remain available if a
+    damaged installation is missing an asset.
+    """
+    from PyQt5.QtGui import QIcon
+    path = svg_path(name)
+    if path.is_file():
+        return QIcon(str(path))
+    if _STRICT:
+        raise FileNotFoundError(f"Missing UI icon: {path}")
+    logger.warning("UI icon not found: %s - text label will be used", path)
+    return QIcon()
