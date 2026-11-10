@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- The shutdown intent dialog is extracted from the main window with
+  focused regression tests, keeping its existing choices and behavior.
 - An unavailable data directory no longer aborts data_paths at import time,
   before startup logging and crash handling can be installed.
 - Restore rejects malformed manifest structures with a controlled error before
