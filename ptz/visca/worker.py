@@ -766,8 +766,17 @@ class CameraWorker:
         identity = (frame[0], frame[1] & 0x0F)
         if kind == 0x40 and ack_identity is None:
             return True, identity
+        # A direct-IP ACK may use 90 while its terminal uses the configured
+        # addressed header. Both must already belong to this command's allowlist;
+        # the VISCA socket number must still match the acknowledged command.
+        same_command = (ack_identity is not None
+                        and identity[1] == ack_identity[1]
+                        and (identity[0] == ack_identity[0]
+                             or (allowed is not None
+                                 and identity[0] in allowed
+                                 and ack_identity[0] in allowed)))
         if (kind in (0x50, 0x60) and ack_identity is not None
-                and identity != ack_identity
+                and not same_command
                 and not (kind == 0x60 and identity[1] == 0)):
             # Socket-zero errors can reject a command before its ACK.
             logger.warning("CameraWorker %s: ignored unrelated VISCA frame %s",
