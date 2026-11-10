@@ -179,7 +179,9 @@ class Controller:
         cam  = event.payload["camera"]
         pan  = event.payload["pan_speed"]
         tilt = event.payload["tilt_speed"]
-        self._camera_port.move(self._cam_id(cam), pan, tilt)
+        result = self._camera_port.move(self._cam_id(cam), pan, tilt)
+        if not self._result_ok(result):
+            return
         def update():
             cam_state = self._state.camera(cam)
             cam_state.pan_speed = pan
@@ -239,7 +241,7 @@ class Controller:
             if self._commit_motion(event, update):
                 self._invalidate_zoom(cam)
         else:
-            logger.warning("chairman_assigned: fallo al hacer recall preset %d", preset)
+            logger.warning("chairman_assigned: fallo al hacer recall preset %r", preset)
 
     def _on_preset_save_requested(self, event: Event) -> None:
         if self._no_session("preset_save_requested", event.payload):

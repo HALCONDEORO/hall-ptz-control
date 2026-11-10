@@ -87,6 +87,14 @@ def build_settings(raw: Dict[str, Any]) -> AppSettings:
             remediation="The top level of config.yaml must be a YAML mapping",
         )
 
+    for section in ('site', 'atem', 'runtime', 'features', 'network'):
+        if section in raw and raw[section] is not None and not isinstance(raw[section], dict):
+            raise ConfigError(
+                f"{section}: expected a mapping",
+                field_path=section,
+                remediation=f"Use a YAML mapping for {section}, or omit the section",
+            )
+
     site = _load_site(raw.get("site") or {})
     cameras = _load_cameras(raw.get("cameras") or [])
     atem = _load_atem(raw.get("atem") or {})
@@ -212,13 +220,13 @@ def _load_cameras(items: Any) -> list[CameraSettings]:
                 field_path=f"cameras[{idx}].visca_id",
                 remediation="visca_id debe ser un byte hexadecimal de dos dígitos, p.ej. '81' para la primera cámara, '82' para la segunda",
             )
-        if visca_id in seen_visca:
+        if visca_id.upper() in seen_visca:
             raise ConfigError(
                 f"cameras[{idx}].visca_id: ID VISCA duplicado: '{visca_id}'",
                 field_path=f"cameras[{idx}].visca_id",
                 remediation="Cada cámara debe tener un visca_id distinto",
             )
-        seen_visca.add(visca_id)
+        seen_visca.add(visca_id.upper())
 
         # `name` es opcional: etiqueta editable y visible, separada del rol.
         # Si falta o está vacío, se deriva del rol (retro-compatible).

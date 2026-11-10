@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 import socket
-import binascii
 import threading
 import time
 import json
@@ -16,8 +15,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import ClassVar
 
 logger = logging.getLogger(__name__)
-
-CAMERA_STARTUP_TIMEOUT_SECONDS = 10
 
 from application.camera_discovery import get_camera_subnet, tcp_scan, arp_scan
 from runtime.path_resolver import RuntimePathResolver as _RuntimePathResolver
@@ -870,36 +867,13 @@ class SplashScreen(QWidget):
         threading.Thread(target=self._startup_sequence, daemon=True).start()
 
     def _startup_sequence(self):
-        """Three-phase startup: config/data → hardware → tests.
+        """Validate config and run read-only diagnostics, without powering cameras.
 
-        Phase 1 validates config and data files before any hardware is touched.
-        Phase 2 powers on cameras with a bounded timeout; times out gracefully.
-        Phase 3 runs all diagnostic tests in parallel and emits startup_complete.
+        Camera power and Home belong to the session path after operator consent.
         """
-        # ── Phase 1: Config and data ──────────────────────────────────────────
-        logger.info("[STARTUP][PHASE 1] Config and data validation starting")
-        phase1_ok = self._run_config_phase()
-        if phase1_ok:
-            logger.info("[STARTUP][PHASE 1] Config and data OK")
-        else:
-            logger.warning("[STARTUP][PHASE 1] Config or data issues detected — hardware phase will still run")
-
-        # ── Phase 2: Hardware (camera power-on) ──────────────────────────────
-        logger.info("[STARTUP][PHASE 2] Hardware startup starting")
-        cam_thread = threading.Thread(target=self._startup_cameras, daemon=True)
-        cam_thread.start()
-        cam_thread.join(timeout=CAMERA_STARTUP_TIMEOUT_SECONDS)
-        if cam_thread.is_alive():
-            from domain.startup_errors import recoverable
-            err = recoverable("camera", f"startup did not complete within {CAMERA_STARTUP_TIMEOUT_SECONDS}s")
-            logger.warning("[STARTUP][PHASE 2][%s] %s — continuing in degraded mode", err.kind.value, err)
-            self._update_log("Camera startup incomplete. Continuing in degraded mode.")
-            self._update_status("Camera startup timeout — degraded mode", "yellow")
-        else:
-            logger.info("[STARTUP][PHASE 2] Hardware startup complete")
-
-        # ── Phase 3: Diagnostic tests ─────────────────────────────────────────
-        logger.info("[STARTUP][PHASE 3] Diagnostic tests starting")
+        logger.info("[STARTUP] Config and data validation starting")
+        if not self._run_config_phase():
+            logger.warning("[STARTUP] Config/data issues detected; continuing diagnostics")
         self._run_initialization()
 
     def _run_config_phase(self) -> bool:
@@ -981,37 +955,6 @@ class SplashScreen(QWidget):
         """
         self._sig_schedule_text.emit('', '')
 
-    def _startup_cameras(self):
-        """Power on cameras only if in standby; skip Home if already on to avoid mid-session disruption."""
-        cam1_was_on = self._query_camera_powered(CAM1.ip, CAM1.cam_id)
-        cam2_was_on = self._query_camera_powered(CAM2.ip, CAM2.cam_id)
-
-        if cam1_was_on:
-            logger.info("Camera startup: CAM1 (%s) already powered — skipping Power ON and Home", CAM1.ip)
-        else:
-            logger.info("Camera startup: sending Power ON to CAM1 (%s)", CAM1.ip)
-            self._power_on_camera(CAM1.ip, CAM1.cam_id)
-
-        if cam2_was_on:
-            logger.info("Camera startup: CAM2 (%s) already powered — skipping Power ON and Home", CAM2.ip)
-        else:
-            logger.info("Camera startup: sending Power ON to CAM2 (%s)", CAM2.ip)
-            self._power_on_camera(CAM2.ip, CAM2.cam_id)
-
-        if cam1_was_on and cam2_was_on:
-            logger.info("Camera startup: complete (both cameras were already on)")
-            return
-
-        # Only wait and send Home for cameras we actually powered on
-        time.sleep(8)
-        if not cam1_was_on:
-            logger.info("Camera startup: sending Home to CAM1 (%s)", CAM1.ip)
-            self._home_camera(CAM1.ip, CAM1.cam_id)
-        if not cam2_was_on:
-            logger.info("Camera startup: sending Home to CAM2 (%s)", CAM2.ip)
-            self._home_camera(CAM2.ip, CAM2.cam_id)
-        logger.info("Camera startup: complete")
-
     def _run_initialization(self):
         """
         Ejecuta todos los tests en paralelo.
@@ -1024,8 +967,6 @@ class SplashScreen(QWidget):
             ("Camera 2 (Audience)",    self._test_camera2),
             ("Configuration",          self._test_config),
             ("Statistics",             self._test_statistics),
-            ("Focus & Exposure Cam1",  self._test_focus_exposure_cam1),
-            ("Focus & Exposure Cam2",  self._test_focus_exposure_cam2),
             ("Data Files",             self._test_data_files),
             ("TCP Scan (cameras)",     self._test_tcp_scan),
             ("ARP Table",              self._test_arp_table),
@@ -1157,44 +1098,6 @@ class SplashScreen(QWidget):
     #  TESTS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _send_visca_cmd(self, ip: str, cam_id: str, cmd: str) -> bool:
-        """Envía un comando VISCA y devuelve True si la cámara responde."""
-        try:
-            full_cmd = cam_id + cmd
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(SOCKET_TIMEOUT)
-                sock.connect((ip, VISCA_PORT))
-                sock.send(binascii.unhexlify(full_cmd))
-                data = sock.recv(64)
-                return len(data) > 0
-        except Exception:
-            return False
-
-    def _test_focus_exposure_cam1(self) -> bool:
-        """
-        Verifica que los comandos de foco y exposición llegan correctamente a Cam1.
-        Envía Auto Focus, Brightness Up y Backlight ON.
-        En modo simulación devuelve True directamente (sin hardware real).
-        """
-        if _sim_mode.is_active():
-            return True
-        af_ok = self._send_visca_cmd(CAM1.ip, CAM1.cam_id, "01043802FF")  # Auto Focus
-        br_ok = self._send_visca_cmd(CAM1.ip, CAM1.cam_id, "01040D02FF")  # Brightness Up
-        bl_ok = self._send_visca_cmd(CAM1.ip, CAM1.cam_id, "01043302FF")  # Backlight ON
-        return af_ok and br_ok and bl_ok
-
-    def _test_focus_exposure_cam2(self) -> bool:
-        """
-        Verifica que los comandos de foco y exposición llegan correctamente a Cam2.
-        Envía Auto Focus y Brightness Up.
-        En modo simulación devuelve True directamente (sin hardware real).
-        """
-        if _sim_mode.is_active():
-            return True
-        af_ok = self._send_visca_cmd(CAM2.ip, CAM2.cam_id, "01043802FF")  # Auto Focus
-        br_ok = self._send_visca_cmd(CAM2.ip, CAM2.cam_id, "01040D02FF")  # Brightness Up
-        return af_ok and br_ok
-
     def _test_data_files(self) -> bool:
         """Verifica que seat_names.json y schedule.json son legibles y JSON válido."""
         from config import NAMES_FILE
@@ -1251,44 +1154,6 @@ class SplashScreen(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
     #  HELPERS DE CÁMARA
     # ─────────────────────────────────────────────────────────────────────────
-
-    def _query_camera_powered(self, ip: str, cam_id: str) -> bool:
-        """Returns True if the camera reports power ON (0x02). Returns False on any error or standby (0x03)."""
-        try:
-            cmd = binascii.unhexlify(cam_id + "090400FF")
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(SOCKET_TIMEOUT)
-                sock.connect((ip, VISCA_PORT))
-                sock.send(cmd)
-                resp = sock.recv(64)
-            # y0 50 02 FF = ON,  y0 50 03 FF = STANDBY
-            return len(resp) >= 3 and resp[1] == 0x50 and resp[2] == 0x02
-        except Exception:
-            return False
-
-    def _power_on_camera(self, ip: str, cam_id: str):
-        """Envía comando VISCA Power On. Falla silenciosamente."""
-        try:
-            cmd = cam_id + "01040002FF"
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(SOCKET_TIMEOUT)
-                sock.connect((ip, VISCA_PORT))
-                sock.send(binascii.unhexlify(cmd))
-                sock.recv(64)
-        except Exception:
-            pass
-
-    def _home_camera(self, ip: str, cam_id: str):
-        """Envía comando VISCA Home. Falla silenciosamente."""
-        try:
-            cmd = cam_id + "010604FF"
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(SOCKET_TIMEOUT)
-                sock.connect((ip, VISCA_PORT))
-                sock.send(binascii.unhexlify(cmd))
-                sock.recv(64)
-        except Exception:
-            pass
 
     # ─────────────────────────────────────────────────────────────────────────
     #  DESCUBRIMIENTO DE CÁMARAS  (lógica en camera_discovery.py)

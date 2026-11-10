@@ -454,9 +454,8 @@ def test_start_does_not_block_on_slow_power_on():
 
 # ── v8: contrato de cancelación del arranque ─────────────────────────────────
 
-def test_power_on_sequence_aborts_after_first_failure():
-    """STOP global o fallo en cam1 cancela el resto del arranque: cam2 no
-    recibe órdenes a ciegas sobre una secuencia ya fallida."""
+def test_power_on_failure_does_not_skip_other_camera(caplog):
+    """Each configured camera gets its own attempt despite a prior failure."""
     svc, port = _svc()
     orig = port.power_on
 
@@ -473,8 +472,9 @@ def test_power_on_sequence_aborts_after_first_failure():
     svc.start()
     svc._power_thread.join(timeout=5)
     assert ("power_on", "cam1") in port.calls
-    assert ("power_on", "cam2") not in port.calls
-    assert svc.active is True  # la sesión queda activa; el operador decide
+    assert ("power_on", "cam2") in port.calls
+    assert svc.active is True
+    assert "power_on falló en cam1" in caplog.text
 
 
 def test_end_cancels_remaining_power_on():
@@ -569,3 +569,30 @@ def test_poll_cancellation_exception_does_not_block_session_end(caplog):
     assert store.snapshot().session.active is False
     clear.assert_called_once()
     assert "simulated poll failure" in caplog.text
+
+
+def test_power_on_exception_does_not_skip_other_camera(caplog):
+    svc, port = _svc()
+
+    def power_on(camera_id):
+        port.calls.append(("power_on", camera_id))
+        if camera_id == "cam1":
+            raise OSError("adapter unavailable")
+        return MagicMock(ok=True)
+
+    port.power_on = power_on
+    svc.start()
+    svc._power_thread.join(timeout=5)
+    assert port.calls == [("power_on", "cam1"), ("power_on", "cam2")]
+    assert "cam1" in caplog.text
+    assert "adapter unavailable" in caplog.text
+
+
+def test_successful_power_on_records_each_camera(caplog):
+    import logging
+    svc, port = _svc()
+    with caplog.at_level(logging.INFO):
+        svc.start()
+        svc._power_thread.join(timeout=5)
+    assert "Power ON completed for cam1" in caplog.text
+    assert "Power ON completed for cam2" in caplog.text

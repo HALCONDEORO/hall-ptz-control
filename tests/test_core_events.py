@@ -307,3 +307,50 @@ def test_handler_can_request_stop_without_self_join_error(caplog):
         assert "Excepción en handler" not in caplog.text
     finally:
         bus.stop()
+
+def test_emit_after_stop_does_not_replay_on_restart():
+    bus = AsyncEventBus()
+    seen = []
+    bus.subscribe(EventType.SESSION_START, lambda event: seen.append(event.payload['n']))
+    bus.start()
+    bus.emit(EventType.SESSION_START, n='before')
+    _drain(bus)
+    bus.stop()
+    bus.emit(EventType.SESSION_START, n='after-stop')
+    bus.start()
+    try:
+        bus.emit(EventType.SESSION_START, n='after-restart')
+        _drain(bus)
+        assert seen == ['before', 'after-restart']
+    finally:
+        bus.stop()
+
+
+def test_emit_while_stop_drains_does_not_outlive_sentinel(monkeypatch):
+    bus = AsyncEventBus()
+    entered, release = threading.Event(), threading.Event()
+    seen = []
+
+    def handler(event):
+        seen.append(event.payload['n'])
+        entered.set()
+        release.wait(timeout=2)
+
+    bus.subscribe(EventType.SESSION_START, handler)
+    bus.start()
+    bus.emit(EventType.SESSION_START, n='before')
+    assert entered.wait(timeout=2)
+    worker = bus._worker
+    monkeypatch.setattr(worker, 'join', lambda timeout=None: None)
+    try:
+        bus.stop()
+        bus.emit(EventType.SESSION_START, n='during-stop')
+    finally:
+        release.set()
+        threading.Thread.join(worker, timeout=2)
+    bus.start()
+    try:
+        _drain(bus)
+        assert seen == ['before']
+    finally:
+        bus.stop()
