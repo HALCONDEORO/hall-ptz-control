@@ -907,7 +907,13 @@ class CameraWorker:
                     # Si send_priority() interrumpió la lectura: un STOP no se
                     # pierde — se reencola tras el más nuevo; un comando normal
                     # queda obsoleto y un confirmado falla hacia su llamante.
-                    if self._interrupt.is_set():
+                    # A later STOP half must not cancel a STOP that already
+                    # returned a terminal frame. Keep normal validation below:
+                    # ACK-only/partial responses still take the interrupt path,
+                    # and non-STOP commands retain fail-closed cancellation.
+                    completed_stop = (self._is_stop_payload(cmd.payload)
+                                      and self._has_final_visca_frame(response))
+                    if self._interrupt.is_set() and not completed_stop:
                         _interrupted = True
                         if cmd.priority:
                             self._requeue(cmd)
