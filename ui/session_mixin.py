@@ -100,12 +100,16 @@ class SessionController:
 
         else:
             # ── Terminar sesión ───────────────────────────────────────────
+            generation = self._session_generation
             reply = QMessageBox.question(
                 self._w, 'End Session',
                 'Power off both cameras and end the session?',
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No
             )
-            if reply == QMessageBox.Yes:
+            if (reply == QMessageBox.Yes
+                    and self._w.session_active
+                    and not getattr(self._w, "_shutting_down", False)
+                    and self._session_generation == generation):
                 self.shutdown("manual")
 
     def shutdown(self, reason: str = "manual") -> None:
