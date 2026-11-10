@@ -57,6 +57,9 @@ class SessionService:
         self._active = False
         self._chairman: Optional[str] = None
         self._session_id: Optional[str] = None
+        self._power_generation = 0
+        # Worker-only lock: lifecycle callbacks must never wait on network I/O.
+        self._power_command_lock = threading.Lock()
 
     @property
     def active(self) -> bool:
@@ -114,6 +117,7 @@ class SessionService:
 
     def start(self) -> None:
         """Envía Power ON a todas las cámaras. QTimer para Home lo gestiona SessionController."""
+        self._power_generation += 1
         self._session_id = f"session-{uuid.uuid4().hex[:12]}"
         # _active ANTES de lanzar el hilo: si no, el chequeo de cancelación del
         # arranque podría ver la sesión aún inactiva y no encender nada.
@@ -128,12 +132,15 @@ class SessionService:
         logger.info("SessionService: sesión iniciada session_id=%s", self._session_id)
         self._record_event("SessionStarted", result="succeeded")
 
-    def _standby_all(self) -> None:
-        """Standby secuencial de todas las cámaras (siempre ambas: apagar es
-        la operación segura; no se cancela a mitad)."""
+    def _standby_all(self, generation: Optional[int] = None) -> None:
+        """Standby only for the ending session, never a replacement session."""
         for cam_id in self._camera_ids:
             try:
-                result = self._port.standby(cam_id)
+                with self._power_command_lock:
+                    if self._active or (generation is not None and
+                                        generation != self._power_generation):
+                        return
+                    result = self._port.standby(cam_id)
             except Exception:
                 # Shutdown is best-effort per camera: an adapter exception must
                 # not leave the remaining cameras without a standby attempt.
@@ -147,7 +154,8 @@ class SessionService:
 
     def _standby_all_async(self) -> threading.Thread:
         t = threading.Thread(
-            target=self._standby_all, daemon=True, name="SessionStandby")
+            target=self._standby_all, args=(self._power_generation,),
+            daemon=True, name="SessionStandby")
         t.start()
         return t
 
@@ -161,11 +169,12 @@ class SessionService:
         comandos de encendido sobre una cámara en estado desconocido.
         """
         for cam_id in self._camera_ids:
-            if not self._active or (session_id is not None and self._session_id != session_id):
-                # Sesión terminada (o STOP global) mientras encendía la anterior.
-                logger.info("SessionService: arranque cancelado antes de %s", cam_id)
-                return
-            result = self._port.power_on(cam_id)
+            with self._power_command_lock:
+                if not self._active or (session_id is not None and self._session_id != session_id):
+                    logger.info("SessionService: arranque cancelado antes de %s", cam_id)
+                    return
+                # Any already-dispatched old standby completes before new ON.
+                result = self._port.power_on(cam_id)
             if result is not None and hasattr(result, "ok") and not result.ok:
                 logger.warning(
                     "SessionService: power_on falló en %s: %s — secuencia de arranque abortada",
@@ -202,6 +211,7 @@ class SessionService:
         # power_on no envía los encendidos que queden). Los standby, al igual
         # que los power_on, son confirmados y pueden bloquear segundos por
         # cámara: fuera del hilo llamante (ToggleSession viene de la UI).
+        self._power_generation += 1
         self._active = False
         for cam_id in self._camera_ids:
             try:
@@ -230,6 +240,7 @@ class SessionService:
         cameras into standby — the reset service has already stopped them.
         Preserves persistent data (config, layout, presets, names).
         """
+        self._power_generation += 1
         self._active = False
         self._sync_active(False)
         self._chairman = None
