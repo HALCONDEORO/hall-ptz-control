@@ -106,6 +106,9 @@ class ViscaCommand:
     sent_at: float                           = 0.0  # first network send attempt; 0 while queued
 
 
+MAX_VISCA_RESPONSE_BYTES = 4096  # bounded aggregate, including ignored/partial frames
+
+
 class CameraWorkerSignals(QObject):
     """Señales Qt para CameraWorker (QObject requerido para pyqtSignal)."""
     connection_changed       = pyqtSignal(bool)    # True = conectado, False = desconectado
@@ -688,6 +691,7 @@ class CameraWorker:
         """
         buf = b''
         pending = b''
+        received_bytes = 0
         ack_identity = None
         deadline = time.monotonic() + VISCA_READ_TIMEOUT
         while True:
@@ -709,6 +713,11 @@ class CameraWorker:
             chunk = sock.recv(1024)
             if not chunk:
                 break
+            received_bytes += len(chunk)
+            if received_bytes > MAX_VISCA_RESPONSE_BYTES:
+                # Fail the whole read, never accept a truncated final frame.
+                # The worker's OSError path closes the ambiguous session.
+                raise OSError(errno.EMSGSIZE, "VISCA response exceeds bounded read budget")
             pending += chunk
             while b"\xff" in pending:
                 frame, pending = pending.split(b"\xff", 1)
