@@ -76,7 +76,6 @@ from ui.seat_builder import build_special_seat_button
 
 from ui.chairman_button import ChairmanButton
 from ui.camera_indicator import CameraIndicator
-from ui.message_box_layout import fit_message_box_buttons
 from ui.auditorium_overlay import AuditoriumOverlay
 from ui.mode_border_overlay import ModeBorderOverlay
 
@@ -1624,35 +1623,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
     def _ask_shutdown_intent(self) -> "ShutdownIntent":
         """Show a shutdown dialog and return the operator's explicit choice.
 
-        Returns ShutdownIntent so the caller decides whether to send standby.
-        Extracted to a method so tests can patch it without showing a dialog.
-
-        If the app is still in login/splash (work not yet started), skips the
-        camera-power-off option entirely and returns EXIT_KEEP_CAMERAS_ON
-        directly without showing a dialog.
+        Thin delegate to ui.shutdown_intent_dialog. Kept as a method so tests
+        can patch it without showing a dialog.
         """
-        from domain.shutdown_intent import ShutdownIntent
-        if not self._normal_work_active:
-            return ShutdownIntent.EXIT_KEEP_CAMERAS_ON
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Close application")
-        msg.setText("How do you want to close the application?")
-        btn_keep = msg.addButton("Keep cameras on",  QMessageBox.YesRole)
-        btn_off  = msg.addButton("Power off cameras", QMessageBox.NoRole)
-        btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
-        # Safe default/escape: a stray Enter or tap cancels, never powers off.
-        msg.setDefaultButton(btn_cancel)
-        msg.setEscapeButton(btn_cancel)
-        from ui.message_box_layout import destructive_message_button_qss
-        btn_off.setStyleSheet(destructive_message_button_qss())
-        fit_message_box_buttons(msg)
-        msg.exec_()
-        clicked = msg.clickedButton()
-        if clicked is btn_keep:
-            return ShutdownIntent.EXIT_KEEP_CAMERAS_ON
-        if clicked is btn_off:
-            return ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS
-        return ShutdownIntent.CANCEL
+        from ui.shutdown_intent_dialog import ask_shutdown_intent
+        return ask_shutdown_intent(self)
 
     def closeEvent(self, event):
         from domain.shutdown_intent import ShutdownIntent
