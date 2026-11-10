@@ -5,12 +5,16 @@ def bind_operational_visibility(window, widget):
     from PyQt5 import sip
     def refresh(_state=None):
         if not sip.isdeleted(widget):
-            widget.setVisible(window.atem_operational())
+            predicate = getattr(window, 'atem_operational', None)
+            widget.setVisible(bool(predicate()) if callable(predicate) else False)
     refresh()
-    window.atem_state_changed.connect(refresh)
+    signal = getattr(window, 'atem_state_changed', None)
+    if signal is None or not callable(getattr(signal, 'connect', None)):
+        return
+    signal.connect(refresh)
     def cleanup(*_):
         try:
-            window.atem_state_changed.disconnect(refresh)
+            signal.disconnect(refresh)
         except (TypeError, RuntimeError):
             pass
     widget.destroyed.connect(cleanup)
