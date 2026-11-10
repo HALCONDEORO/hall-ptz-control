@@ -16,45 +16,53 @@ from unittest.mock import MagicMock
 
 # ── Qt stubs ─────────────────────────────────────────────────────────────────
 
-def _ensure_qt_stubs() -> None:
-    for mod_name in ("PyQt5", "PyQt5.QtWidgets", "PyQt5.QtCore"):
-        if mod_name not in sys.modules:
-            sys.modules[mod_name] = types.ModuleType(mod_name)
-
-    qtc = sys.modules["PyQt5.QtCore"]
-    if not hasattr(qtc, "Qt"):
-        qtc.Qt = MagicMock()
-    if not hasattr(qtc, "QObject"):
-        qtc.QObject = object
-    if not hasattr(qtc, "QEvent"):
-        qtc.QEvent = MagicMock()
-    if not hasattr(qtc, "QTimer"):
-        qtc.QTimer = MagicMock()
-
-    qtw = sys.modules["PyQt5.QtWidgets"]
-    # QWidget and QLineEdit must be plain object so VirtualKeyboard (which inherits
-    # from QWidget) is a normal Python class — force-set regardless of prior stubs.
-    qtw.QWidget = object
-    qtw.QLineEdit = object
-    _defaults = {
-        "QPushButton":  MagicMock,
-        "QVBoxLayout":  MagicMock,
-        "QHBoxLayout":  MagicMock,
-        "QApplication": MagicMock(),
-        "QSizePolicy":  MagicMock(),
-    }
-    for name, value in _defaults.items():
-        if not hasattr(qtw, name):
-            setattr(qtw, name, value)
+_STUBBED = ("PyQt5", "PyQt5.QtWidgets", "PyQt5.QtCore", "ui.virtual_keyboard")
 
 
-_ensure_qt_stubs()
+def _load_vk_with_stubs():
+    """Import ui.virtual_keyboard against stub Qt, then restore global state.
 
-import importlib
-import ui.virtual_keyboard as vk  # noqa: E402
-# Re-import so VirtualKeyboard picks up our QWidget=object stub even if another
-# test file already cached the module with a different QWidget base class.
-vk = importlib.reload(vk)
+    The stub sets QWidget/QLineEdit = object. Doing that on the real
+    PyQt5.QtWidgets (or leaving the stub-built module cached) poisoned every
+    later real-widget test: ``TypeError: object() takes no arguments``.
+    """
+    import importlib
+    saved_mods = {n: sys.modules.get(n) for n in _STUBBED}
+    saved_attrs = {}
+    try:
+        for mod_name in ("PyQt5", "PyQt5.QtWidgets", "PyQt5.QtCore"):
+            if mod_name not in sys.modules:
+                sys.modules[mod_name] = types.ModuleType(mod_name)
+        qtc = sys.modules["PyQt5.QtCore"]
+        qtw = sys.modules["PyQt5.QtWidgets"]
+        for mod, attrs in (
+            (qtc, {"Qt": MagicMock(), "QObject": object, "QEvent": MagicMock(),
+                   "QTimer": MagicMock()}),
+            (qtw, {"QWidget": object, "QLineEdit": object,
+                   "QPushButton": MagicMock, "QVBoxLayout": MagicMock,
+                   "QHBoxLayout": MagicMock, "QApplication": MagicMock(),
+                   "QSizePolicy": MagicMock()}),
+        ):
+            for name, value in attrs.items():
+                saved_attrs[(mod, name)] = mod.__dict__.get(name, _MISSING)
+                setattr(mod, name, value)
+        sys.modules.pop("ui.virtual_keyboard", None)
+        return importlib.import_module("ui.virtual_keyboard")
+    finally:
+        for (mod, name), old in saved_attrs.items():
+            if old is _MISSING:
+                mod.__dict__.pop(name, None)
+            else:
+                setattr(mod, name, old)
+        for n, m in saved_mods.items():
+            if m is None:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = m
+
+
+_MISSING = object()
+vk = _load_vk_with_stubs()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
