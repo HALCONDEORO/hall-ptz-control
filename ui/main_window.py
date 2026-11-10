@@ -50,15 +50,7 @@ from config import (
     ZOOM_DRIVE_MAX,
 )
 from domain.atem_state import ATEMState, is_atem_supervisor_healthy
-from domain.adaptive_speed import (
-    zoom_to_raw_speed,
-    reduced_move_caps,
-    reduced_zoom_drive_cap,
-    recovered_move_caps,
-    recovered_zoom_drive_cap,
-    evaluate_speed_error,
-    fresh_channel_state,
-)
+from domain.adaptive_speed import zoom_to_raw_speed, fresh_channel_state
 from adapters.atem_monitor import ATEMMonitor
 from adapters.atem_dispatcher import ATEMDispatcher
 from ptz.visca import CameraManager
@@ -731,87 +723,10 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         self._update_controls_visibility()
 
     def _on_visca_speed_error(self, ip: str, cmd_type: str) -> None:
-        if cmd_type not in self._watchdog_state:
-            return
-        now  = time.monotonic()
-        next_state, decision = evaluate_speed_error(
-            self._watchdog_state[cmd_type],
-            now,
-            cooldown=self._WATCHDOG_COOLDOWN,
-            window_secs=self._WATCHDOG_WINDOW_SECS,
-            max_retries=self._WATCHDOG_MAX_RETRIES,
-        )
-        self._watchdog_state[cmd_type] = next_state
-
-        if not decision.apply_reduction:
-            return
-
-        self._apply_reduction(cmd_type, ip)
-
-        # Programar intento de recuperación si quedan reintentos
-        if decision.schedule_recovery:
-            QTimer.singleShot(
-                self._WATCHDOG_RECOVERY_MS,
-                lambda ct=cmd_type: self._recover_cap(ct),
-            )
-        else:
-            logger.warning(
-                "Watchdog VISCA [%s] %s: %d reducciones en %.0f s — cap bloqueado hasta reinicio de sesión",
-                cmd_type, ip, self._WATCHDOG_MAX_RETRIES, self._WATCHDOG_WINDOW_SECS,
-            )
-
-    def _apply_reduction(self, cmd_type: str, ip: str) -> None:
-        if cmd_type == 'move':
-            new_pan, new_tilt = reduced_move_caps(self._pan_cap, self._tilt_cap)
-            changed = False
-            if new_pan != self._pan_cap:
-                self._pan_cap = new_pan
-                self._camera_port.pan_cap = new_pan
-                changed = True
-            if new_tilt != self._tilt_cap:
-                self._tilt_cap = new_tilt
-                self._camera_port.tilt_cap = new_tilt
-                changed = True
-            if changed:
-                logger.warning(
-                    "Watchdog VISCA [move] %s — pan_cap→%d  tilt_cap→%d",
-                    ip, self._pan_cap, self._tilt_cap,
-                )
-        elif cmd_type == 'zoom_drive':
-            new_zoom = reduced_zoom_drive_cap(self._zoom_drive_cap)
-            if new_zoom != self._zoom_drive_cap:
-                self._zoom_drive_cap = new_zoom
-                self._camera_port.zoom_drive_cap = new_zoom
-                logger.warning(
-                    "Watchdog VISCA [zoom_drive] %s — zoom_drive_cap→%d",
-                    ip, self._zoom_drive_cap,
-                )
-
-    def _recover_cap(self, cmd_type: str) -> None:
-        """Sube el cap un paso para comprobar si la cámara admite mayor velocidad."""
-        st = self._watchdog_state.get(cmd_type)
-        if st is None or st['retries'] >= self._WATCHDOG_MAX_RETRIES:
-            return
-        if cmd_type == 'move':
-            self._pan_cap, self._tilt_cap = recovered_move_caps(
-                self._pan_cap, self._tilt_cap,
-                pan_max=PAN_SPEED_MAX, tilt_max=TILT_SPEED_MAX,
-            )
-            self._camera_port.pan_cap  = self._pan_cap
-            self._camera_port.tilt_cap = self._tilt_cap
-            logger.info(
-                "Watchdog VISCA [move]: intento recuperación %d/%d — pan_cap→%d tilt_cap→%d",
-                st['retries'], self._WATCHDOG_MAX_RETRIES, self._pan_cap, self._tilt_cap,
-            )
-        elif cmd_type == 'zoom_drive':
-            self._zoom_drive_cap = recovered_zoom_drive_cap(
-                self._zoom_drive_cap, zoom_max=ZOOM_DRIVE_MAX,
-            )
-            self._camera_port.zoom_drive_cap = self._zoom_drive_cap
-            logger.info(
-                "Watchdog VISCA [zoom_drive]: intento recuperación %d/%d — cap→%d",
-                st['retries'], self._WATCHDOG_MAX_RETRIES, self._zoom_drive_cap,
-            )
+        # Shell extraído a ui/visca_watchdog.py (ratchet anti god-object);
+        # la decisión es de domain/adaptive_speed. Comportamiento idéntico.
+        from ui.visca_watchdog import on_visca_speed_error
+        on_visca_speed_error(self, ip, cmd_type)
 
     def _build_demo_atem_panel(self) -> None:
         """Create DemoAtemPanel when running in demo/simulation mode (starts hidden)."""
