@@ -323,3 +323,55 @@ def test_import_preserves_current_layout_when_backup_fails(tmp_path, monkeypatch
     assert result.imported is False
     assert "back up" in result.reason.lower()
     assert layout_path.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("field,value", [
+    ("preset", "not-a-number"),
+    ("preset", None),
+    ("x", []),
+    ("y", {}),
+    ("screen_width", "wide"),
+    ("screen_height", None),
+    ("schema_version", 0),
+    ("preset", float("inf")),
+])
+def test_import_rejects_layout_unreadable_by_runtime_without_touching_disk(tmp_path, field, value):
+    layout_path = tmp_path / "room_layout.json"
+    current = _valid_layout()
+    current["room_name"] = "Original custom room"
+    _write(layout_path, current)
+    original = layout_path.read_bytes()
+    backup = layout_path.with_suffix(".import.bak")
+    backup.write_bytes(b"previous recovery copy")
+    src = tmp_path / "invalid-template.json"
+    invalid = _valid_layout()
+    if field in {"screen_width", "screen_height", "schema_version"}:
+        invalid[field] = value
+    else:
+        invalid["seats"][0][field] = value
+    _write(src, invalid)
+
+    result = _svc(layout_path).import_layout(src)
+
+    assert result.imported is False
+    assert result.reason
+    assert result.pre_import_backup is None
+    assert layout_path.read_bytes() == original
+    assert backup.read_bytes() == b"previous recovery copy"
+
+
+def test_successful_import_loads_without_runtime_recovery(tmp_path):
+    from application.layout_service import LayoutService
+
+    layout_path = tmp_path / "room_layout.json"
+    src = tmp_path / "template.json"
+    _write(src, _valid_layout())
+
+    result = _svc(layout_path).import_layout(src)
+    reader = LayoutService(layout_path, legacy_positions={})
+    layout = reader.load()
+
+    assert result.imported is True
+    assert reader.recovery_used is False
+    assert layout.seats[0].id == "1"
+    assert layout.seats[0].preset == 1

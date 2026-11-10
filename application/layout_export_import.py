@@ -118,6 +118,16 @@ class LayoutExportImportService:
             )
 
         error = self._validate_raw(raw)
+        if not error:
+            # Match the runtime reader before backing up or replacing a valid
+            # layout. JSON/ID checks alone accept values the loader cannot read.
+            from application.layout_service import LayoutService
+            reader = LayoutService(layout_path=self._path, legacy_positions={})
+            try:
+                layout = reader._deserialize_with_migration(raw)
+                reader._validate(layout)
+            except (ValueError, TypeError, OverflowError) as exc:
+                error = f"Invalid layout file: {exc}"
         if error:
             return ImportResult(
                 imported=False,
