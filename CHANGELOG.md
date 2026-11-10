@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Test setup preloads real Qt and shared UI modules so later tests do not
+  inherit partial stubs installed during collection.
 - Demo reset refuses service-install production data paths before creating
   or overwriting files, including nested directories.
 - The shutdown intent dialog is extracted from the main window with
