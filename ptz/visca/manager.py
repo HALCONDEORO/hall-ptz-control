@@ -195,6 +195,43 @@ class CameraManager:
             worker = self._workers.get(ip)
             return True if worker is None else worker.restart()
 
+    def check_power_response(self, key: int, timeout: float = 2.0) -> Optional[bool]:
+        """Read-only recognition through the current worker, never a new socket.
+
+        An ON or STANDBY response means VISCA answered, not motion readiness.
+        None means no observation: the connected worker never sent the inquiry.
+        A result for a replaced endpoint must not update the new camera's UI.
+        """
+        from .worker import ViscaCommand
+        from .parser import inquiry_frame
+
+        self._validate_camera_key(key)
+        with self._workers_lock:
+            ip = self._cam1_ip if key == 1 else self._cam2_ip
+            cam_id = self._cam1_id if key == 1 else self._cam2_id
+            worker = self._workers.get(ip)
+        if not ip or not cam_id or worker is None:
+            return False
+        try:
+            payload = bytes.fromhex(cam_id + "090400ff")
+            command = ViscaCommand(key, payload)
+            response = worker.send_inquiry(command, timeout=timeout)
+        except (ValueError, OSError):
+            return False
+        frame = inquiry_frame(response, payload_len=1)
+        recognised = frame is not None and frame[2] in (0x02, 0x03)
+        with self._workers_lock:
+            current_ip = self._cam1_ip if key == 1 else self._cam2_ip
+            current_id = self._cam1_id if key == 1 else self._cam2_id
+            if current_ip != ip or current_id != cam_id or self._workers.get(ip) is not worker:
+                return False
+            # A cancelled/expired inquiry that never left the queue is not
+            # evidence that a connected camera is offline. Do not interrupt
+            # operator commands or drain them via the emergency STOP path.
+            if not response and not command.sent_at and worker.is_connected:
+                return None
+            return bool(recognised)
+
     def is_connected(self, ip: str) -> bool:
         """True si hay worker para esa IP y está conectado. NO crea workers."""
         if not ip:

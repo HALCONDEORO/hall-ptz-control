@@ -106,6 +106,7 @@ def test_real_worker_reuses_one_tcp_session_for_commands_and_inquiries():
         assert not server.is_alive()
         assert not failures
         assert received == [before.payload, inquiry.payload, after.payload]
+        assert inquiry.sent_at > 0
     finally:
         worker.stop()
         listener.close()
@@ -120,6 +121,7 @@ def test_timed_out_queued_inquiry_is_cancelled_without_response():
     cmd = ViscaCommand(1, bytes.fromhex("81090447ff"))
     assert worker.send_inquiry(cmd, 0.01) == b""
     assert queued == [cmd]
+    assert cmd.sent_at == 0
     assert cmd.cancelled.is_set()
     assert worker._command_outdated(cmd)
 

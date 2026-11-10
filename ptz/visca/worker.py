@@ -103,6 +103,7 @@ class ViscaCommand:
     on_success: Optional[Callable[[], None]] = None
     on_failure: Optional[Callable[[], None]] = None
     response: bytes                          = field(default=b"", repr=False, compare=False)
+    sent_at: float                           = 0.0  # first network send attempt; 0 while queued
 
 
 class CameraWorkerSignals(QObject):
@@ -873,6 +874,7 @@ class CameraWorker:
                 # --- Fase 2: enviar y leer respuesta SIN el lock ---
                 try:
                     send_started_at = time.monotonic()
+                    cmd.sent_at = send_started_at
                     logger.debug("%s cam=%s sent", cmd.cmd_id, self.ip)
                     self._response_headers = {0x90}
                     if cmd.payload and 0x81 <= cmd.payload[0] <= 0x87:
