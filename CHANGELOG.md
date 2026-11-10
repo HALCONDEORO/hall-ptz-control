@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Login mode toggle (Operator/Admin) no longer resets the failed-attempt
+  counter, so the progressive lockout cannot be bypassed by switching modes.
 - Legacy migration escapes backslashes in values written to config.yaml,
   so migrated values round-trip byte-exact and the generated file stays valid YAML.
 - Restore rejects a backup whose manifest declares a hash for a member
