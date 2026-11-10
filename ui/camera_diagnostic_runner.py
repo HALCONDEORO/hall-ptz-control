@@ -10,10 +10,12 @@ logger = logging.getLogger(__name__)
 class CameraDiagnosticRunner(QObject):
     result = pyqtSignal(int, bool)
     complete = pyqtSignal()
+    interrupted = pyqtSignal()
     _done = pyqtSignal(int, bool)
 
-    def __init__(self, owner, port, camera_id, commands):
+    def __init__(self, owner, port, camera_id, commands, is_current=None):
         super().__init__(owner)
+        self._is_current = is_current or (lambda: True)
         self._port = port
         self._camera_id = camera_id
         self._commands = tuple(commands)
@@ -33,8 +35,17 @@ class CameraDiagnosticRunner(QObject):
         self._cancelled.set()
         self._timer.stop()
 
-    def _next(self):
+    def _can_continue(self):
         if self._cancelled.is_set():
+            return False
+        if not self._is_current():
+            self.cancel()
+            self.interrupted.emit()
+            return False
+        return True
+
+    def _next(self):
+        if not self._can_continue():
             return
         if self._step == len(self._commands):
             self.complete.emit()
@@ -61,7 +72,7 @@ class CameraDiagnosticRunner(QObject):
         threading.Thread(target=run, daemon=True).start()
 
     def _apply(self, indicator, ok):
-        if self._cancelled.is_set():
+        if not self._can_continue():
             return
         self.result.emit(indicator, ok)
         self._step += 1
