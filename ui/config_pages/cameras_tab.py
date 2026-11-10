@@ -73,6 +73,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     # References kept so a re-check after assigning a discovered IP can
     # refresh the card IP value and its Online/Offline badge in place.
     dialog._cam_ip_labels: dict = {}
+    ip_edit_buttons = []
     dialog._cam_online_badges: dict = {}
 
     for cam_label, cam_obj, cam_num in (('Platform', CAM1, 1), ('Comments', CAM2, 2)):
@@ -100,6 +101,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
 
         btn_ip = ip_row_w.findChild(QPushButton)
         if btn_ip:
+            ip_edit_buttons.append(btn_ip)
             def _edit_ip(_, n=cam_num, vlbl=_ip_val_lbl):
                 _CamEditDialog(dialog, mw, n, 'ip').exec_()
                 import config as _cfg
@@ -381,6 +383,8 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     def _on_scan_finished(found):
         if not dialog.isVisible():
             return
+        for edit in ip_edit_buttons:
+            edit.setEnabled(not is_on and not getattr(mw, 'session_active', False))
         _show_results(found or [])
         if found is None:
             disc_status.setText('Camera check failed. No addresses were assigned. Check the subnet and retry.')
@@ -411,6 +415,8 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         disc_scroll.setFixedHeight(0)
         disc_status.setText(f'Checking {subnet}.0/24. Read-only inquiry; no movement.')
         subnet_input.setEnabled(False)
+        for edit in ip_edit_buttons:
+            edit.setEnabled(False)
         btn_scan.setEnabled(False)
         btn_scan.setText('Scanning…')
         threading.Thread(target=_run_scan, args=(subnet,), daemon=True).start()
