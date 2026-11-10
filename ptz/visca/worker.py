@@ -185,9 +185,13 @@ class CameraWorker:
         if self._shutdown.is_set():
             return False
         cmd.queued_at = time.monotonic()
-        if cmd.coalesce:
-            cmd_type = CameraWorker._classify_payload(cmd.payload)
-            with self._queue.mutex:
+        with self._queue.not_full:
+            # Retirement and queue admission share this mutex. A producer
+            # paused after the fast check must not admit into a stopped worker.
+            if self._shutdown.is_set():
+                return False
+            if cmd.coalesce:
+                cmd_type = CameraWorker._classify_payload(cmd.payload)
                 dq = self._queue.queue
                 for i in range(len(dq) - 1, -1, -1):
                     c = dq[i]
@@ -198,16 +202,18 @@ class CameraWorker:
                         logger.debug("%s cam=%s type=%s queued (coalesced)",
                                      cmd.cmd_id, self.ip, cmd_type)
                         return True
-        try:
-            self._queue.put_nowait(cmd)
-            logger.debug("%s cam=%s type=%s queued",
-                         cmd.cmd_id, self.ip,
-                         CameraWorker._classify_payload(cmd.payload))
-            return True
-        except queue.Full:
-            logger.warning("CameraWorker %s: cola llena, descartado: %s",
-                           self.ip, cmd.payload.hex())
-            return False
+            if (self._queue.maxsize > 0
+                    and len(self._queue.queue) >= self._queue.maxsize):
+                logger.warning("CameraWorker %s: cola llena, descartado: %s",
+                               self.ip, cmd.payload.hex())
+                return False
+            self._queue.queue.append(cmd)
+            self._queue.unfinished_tasks += 1
+            self._queue.not_empty.notify()
+        logger.debug("%s cam=%s type=%s queued",
+                     cmd.cmd_id, self.ip,
+                     CameraWorker._classify_payload(cmd.payload))
+        return True
 
     def send_priority(self, cmd: ViscaCommand) -> bool:
         return self._send_priority_admitted(cmd)
@@ -234,6 +240,8 @@ class CameraWorker:
         # el drain y el requeue (los kept no pueden caer en queue.Full) ni
         # colarse delante del STOP.
         with self._queue.not_full:
+            if self._shutdown.is_set() and not incoming_is_stop:
+                return False
             q = self._queue.queue
             # Drain: solo sobreviven los STOPs priority ya encolados (las
             # mitades pan/tilt y zoom de STOPs anteriores). Todo lo demás —
@@ -440,8 +448,9 @@ class CameraWorker:
         cierra el socket y espera a que el thread termine.
         Idempotente: cierra la sesión incluso si el thread ya está muerto.
         """
-        self._shutdown.set()
-        self._interrupt.set()
+        with self._queue.mutex:
+            self._shutdown.set()
+            self._interrupt.set()
         self._close_socket()
         # Thread death is not transport cleanup. An unexpected exit may leave
         # its socket alive; retirement must release it and close admission.
