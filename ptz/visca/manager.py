@@ -50,6 +50,7 @@ class CameraManager:
         # Keep reassignment serialized, but permit same-thread status re-entry.
         self._workers_lock = threading.RLock()
         self._workers: dict[str, CameraWorker] = {}
+        self._closed = False
 
         # Cache de zoom: None = sin valor local, necesita query de red.
         # Clave: cam_key (1 o 2). Valor: último porcentaje enviado a la cámara.
@@ -96,6 +97,7 @@ class CameraManager:
         # Snapshot bajo lock; stop() (que hace join) se ejecuta fuera del lock
         # para no bloquear worker() durante el cierre.
         with self._workers_lock:
+            self._closed = True
             workers = list(self._workers.values())
             self._workers.clear()
         for w in workers:
@@ -123,7 +125,12 @@ class CameraManager:
         # the next camera command. Without this the connection LED stayed red
         # until the operator happened to trigger a camera action.
         if new_ip:
-            self.worker(new_ip)
+            try:
+                self.worker(new_ip)
+            except ValueError:
+                # A newer reassignment or shutdown won while old_worker.stop
+                # waited. Never resurrect that retired intermediate endpoint.
+                pass
 
     def _reset_camera_state(self, key: int) -> None:
         """Discard observations belonging to a different endpoint identity."""
@@ -161,6 +168,8 @@ class CameraManager:
         accesos concurrentes a la misma IP no creen workers duplicados.
         """
         with self._workers_lock:
+            if self._closed or not ip or ip not in (self._cam1_ip, self._cam2_ip):
+                raise ValueError(f"Camera endpoint is not active: {ip!r}")
             w = self._workers.get(ip)
             created = w is None
             if created:

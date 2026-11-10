@@ -1719,6 +1719,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             self._session.shutdown("app_close")
         logger.info("[SHUTDOWN] stopping event bus")
         self._bus.stop()
+        if intent == ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS:
+            logger.info("[SHUTDOWN] sending camera standby (operator requested power-off)")
+            # Standby uses the current worker session, before terminal retirement.
+            self._camera_port.standby("cam1")
+            self._camera_port.standby("cam2")
+        else:
+            logger.info("[SHUTDOWN] skipping camera standby (operator chose keep cameras on)")
+
         logger.info("[SHUTDOWN] stopping camera workers")
         self._cameras.stop_all()
         if self._atem_monitor is not None:
@@ -1731,14 +1739,6 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         if self._atem_write_adapter is not None:
             logger.info("[SHUTDOWN] disconnecting ATEM write adapter")
             self._atem_write_adapter.disconnect()
-
-        if intent == ShutdownIntent.EXIT_AND_POWER_OFF_CAMERAS:
-            logger.info("[SHUTDOWN] sending camera standby (operator requested power-off)")
-            # power_standby abre su propio socket, así que funciona tras stop_all().
-            self._camera_port.standby("cam1")
-            self._camera_port.standby("cam2")
-        else:
-            logger.info("[SHUTDOWN] skipping camera standby (operator chose keep cameras on)")
 
         logger.info("[SHUTDOWN] complete")
         event.accept()

@@ -193,7 +193,10 @@ class ViscaCameraAdapter:
         try:
             if ticket.endpoint != ip:
                 return self._queued_result("stop_move", camera_id, False)
-            worker = self._mgr.worker(ip)
+            try:
+                worker = self._mgr.worker(ip)
+            except ValueError:
+                return self._queued_result("stop_move", camera_id, False)
             from ptz.visca import ViscaCommand
 
             deferred_failures = []
@@ -598,7 +601,10 @@ class ViscaCameraAdapter:
             logger.error("ViscaCameraAdapter._send_confirmed %s: hex inválido: %s", ip, exc)
             return False
         idx = 2 if cam_id_hex.lower() == "82" else 1
-        worker = self._mgr.worker(ip)
+        try:
+            worker = self._mgr.worker(ip)
+        except ValueError:
+            return False
         cmd = ViscaCommand(camera=idx, payload=payload)
         admitted = getattr(worker, "_send_confirmed_admitted", None)
         if admitted is None:  # Legacy queue-only test doubles.
@@ -621,7 +627,10 @@ class ViscaCameraAdapter:
             return False
         from ptz.visca import ViscaCommand  # noqa: PLC0415
         idx = self._index(camera_id)
-        worker = self._mgr.worker(ip)
+        try:
+            worker = self._mgr.worker(ip)
+        except ValueError:
+            return False
         cmd = ViscaCommand(camera=idx, payload=payload, coalesce=coalesce)
         return self._motion_admission.admit(
             ip, lambda: worker.send_priority(cmd) if priority else worker.send(cmd)
@@ -670,7 +679,11 @@ class ViscaCameraAdapter:
         if not ip or not ip.strip():
             return b""
         idx = 2 if cam_id_hex.lower() == "82" else 1
-        return self._mgr.worker(ip).send_inquiry(
+        try:
+            worker = self._mgr.worker(ip)
+        except ValueError:
+            return b""
+        return worker.send_inquiry(
             ViscaCommand(camera=idx, payload=payload),
             timeout=CONFIRMED_CMD_TIMEOUT,
         )
