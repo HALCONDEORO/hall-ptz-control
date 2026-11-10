@@ -134,10 +134,13 @@ class CameraManager:
                     self._retirement_inflight.discard(old_ip)
             # If the role returned to its old endpoint while stop waited,
             # reopen only after its previous worker has actually terminated.
-            try:
-                self.worker(old_ip)
-            except ValueError:
-                pass
+            with self._workers_lock:
+                returned_to_old = not self._closed and old_ip in (self._cam1_ip, self._cam2_ip)
+            if returned_to_old:
+                try:
+                    self.worker(old_ip)
+                except ValueError:
+                    pass  # A newer update may retire it after the snapshot.
         # Eagerly create the worker for the new IP so it connects (and wires its
         # status signals via on_worker_ready) right away, instead of waiting for
         # the next camera command. Without this the connection LED stayed red
