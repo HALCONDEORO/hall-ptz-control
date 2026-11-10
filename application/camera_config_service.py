@@ -74,6 +74,7 @@ class CameraConfigService:
         self._camera_manager = camera_manager_provider
         self._camera_port = camera_port_provider
         self._config = config_module
+        self._pending_ip_repoints: set[int] = set()
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -97,8 +98,18 @@ class CameraConfigService:
         current = self._camera(cam_num)
         changed = current.ip != clean
         current.ip = clean
-        if changed:
-            self._repoint_runtime(cam_num, clean)
+        runtime = self._camera_manager()
+        getter = getattr(runtime, 'ip_for_key', None)
+        try:
+            runtime_ip = getter(cam_num) if callable(getter) else None
+        except Exception:  # noqa: BLE001 — unavailable runtime must be retried
+            runtime_ip = ''
+        mismatch = isinstance(runtime_ip, str) and runtime_ip != clean
+        if changed or mismatch or cam_num in self._pending_ip_repoints:
+            if self._repoint_runtime(cam_num, clean):
+                self._pending_ip_repoints.discard(cam_num)
+            else:
+                self._pending_ip_repoints.add(cam_num)
         # Still retry persistence for a prior session-only change.
         return self._persist(
             "set_camera_ip", target, cam_index=cam_num - 1, cam_ip=clean
@@ -194,13 +205,14 @@ class CameraConfigService:
             self._camera(other), "ip" if field == "ip" else "cam_id", ""
         )
 
-    def _repoint_runtime(self, cam_num: int, ip: str, *, method: str = "update_camera_ip") -> None:
+    def _repoint_runtime(self, cam_num: int, ip: str, *, method: str = "update_camera_ip") -> bool:
         """Update the live CameraManager and CameraPort, if present.
 
         A runtime that is absent or raises must not fail the config change: the
         in-memory value is already updated and config.yaml is the source of truth
         on next start. Errors are logged, not propagated.
         """
+        succeeded = True
         for provider, label in (
             (self._camera_manager, "CameraManager"),
             (self._camera_port, "CameraPort"),
@@ -214,7 +226,9 @@ class CameraConfigService:
             try:
                 update(cam_num, ip)
             except Exception:  # noqa: BLE001 — runtime repoint is best-effort
+                succeeded = False
                 logger.exception("%s.%s failed for cam %s", label, method, cam_num)
+        return succeeded
 
     def _persist(self, operation: str, target: str, **fields) -> OperationResult:
         """Write the change to config.yaml; report partial success on failure."""
