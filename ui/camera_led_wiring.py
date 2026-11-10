@@ -23,7 +23,8 @@ def wire_connecting_led(main_window, worker) -> None:
         except ValueError:
             return
         (main_window.Cam1 if cam_key == 1 else main_window.Cam2).set_connecting(
-            worker._connection_state is CameraConnectionState.CONNECTING)
+            getattr(worker, '_connection_state', CameraConnectionState.UNKNOWN)
+            is CameraConnectionState.CONNECTING)
 
     worker.signals.connection_state_changed.connect(_on_state_changed)
 
@@ -44,3 +45,8 @@ def wire_camera_worker(main_window, worker) -> None:
     worker.signals.visca_error.connect(error)
     worker.signals.connection_changed.connect(connected)
     wire_connecting_led(main_window, worker)
+    # The worker starts before this wiring runs. Replay its current snapshot
+    # through the connected signal path so an early state change is not lost.
+    worker.signals.connection_state_changed.emit(
+        getattr(worker, '_connection_state', CameraConnectionState.UNKNOWN))
+    worker.signals.connection_changed.emit(worker.is_connected)

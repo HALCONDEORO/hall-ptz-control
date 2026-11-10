@@ -249,8 +249,11 @@ class AsyncEventBus:
             finally:
                 with self._emergency_condition:
                     self._emergency_active = None
-            # Observers retain serial dispatch on the ordinary consumer.
-            self._queue.put(event)
+            # Serialize observer admission with the shutdown sentinel. A late
+            # STOP callback must not leave a notification for the next run.
+            with self._lifecycle_lock:
+                if not self._stop_requested:
+                    self._queue.put(event)
 
     # ── Worker interno ───────────────────────────────────────────────────────
 

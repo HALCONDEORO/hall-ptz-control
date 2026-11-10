@@ -376,3 +376,18 @@ def test_new_files_in_manifest_included_list(tmp_path):
     assert "install_summary.json" in included
     assert "config_summary.json" in included
 
+
+
+def test_create_failure_is_logged_and_still_returns_none(tmp_path, monkeypatch, caplog):
+    service = SupportBundleService(output_dir=tmp_path)
+
+    def fail():
+        raise OSError('synthetic output failure')
+
+    monkeypatch.setattr(service, '_create_inner', fail)
+    with caplog.at_level('ERROR', logger='application.support_bundle_service'):
+        assert service.create() is None
+    records = [record for record in caplog.records if record.exc_info]
+    assert len(records) == 1
+    assert records[0].exc_info[0] is OSError
+    assert 'Support bundle creation failed' in records[0].getMessage()

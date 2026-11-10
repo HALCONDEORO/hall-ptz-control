@@ -126,6 +126,7 @@ class SupportBundleService:
         try:
             return self._create_inner()
         except Exception:
+            logger.exception("Support bundle creation failed")
             return None
 
     # ── Helpers ───────────────────────────────────────────────────────────────

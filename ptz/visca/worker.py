@@ -722,7 +722,9 @@ class CameraWorker:
                 except Exception:
                     pass
                 self._sock = None
-        self._set_connected(False)
+            # Serialize state with socket publication: a concurrent fresh
+            # session must not be overwritten by this retired socket's False.
+            self._set_connected(False)
 
     # Cuerpos VISCA de STOP (sin cam_id ni 0xFF final): pan/tilt stop y zoom
     # stop. Son idempotentes: repetirlos nunca mueve la cámara.
@@ -800,16 +802,23 @@ class CameraWorker:
         esperas: si send_priority() activa el interrupt, este método aborta
         sin esperar el timeout completo (fix #181).
         """
+        self._last_read_end_reason = 'io_error'
+        self._last_read_raw_bytes = 0
+        self._last_read_pending_bytes = 0
         buf = b''
         pending = b''
         received_bytes = 0
         ack_identity = None
         deadline = time.monotonic() + VISCA_READ_TIMEOUT
+        mechanical = getattr(self, '_confirmed_mechanical_read', None)
         while True:
-            if self._interrupt.is_set() or self._shutdown.is_set():
+            if (self._interrupt.is_set() or self._shutdown.is_set()
+                    or (mechanical is not None and mechanical.cancelled.is_set())):
+                self._last_read_end_reason = 'interrupted'
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                self._last_read_end_reason = 'deadline'
                 break
             try:
                 readable, _, _ = select.select([sock], [], [], min(remaining, 0.05))
@@ -823,8 +832,10 @@ class CameraWorker:
                 continue   # rodaja de 50 ms agotada; vuelve a comprobar interrupt y deadline
             chunk = sock.recv(1024)
             if not chunk:
+                self._last_read_end_reason = 'peer_eof'
                 break
             received_bytes += len(chunk)
+            self._last_read_raw_bytes = received_bytes
             if received_bytes > MAX_VISCA_RESPONSE_BYTES:
                 # Fail the whole read, never accept a truncated final frame.
                 # The worker's OSError path closes the ambiguous session.
@@ -836,7 +847,13 @@ class CameraWorker:
                 accepted, ack_identity = self._correlate_response_frame(frame, ack_identity)
                 if accepted:
                     buf += framed
+                    if (mechanical is not None and ack_identity is not None
+                            and (frame[1] & 0xF0) == 0x40):
+                        # Fixed caller deadline, never a sliding ACK timeout.
+                        deadline = mechanical.expires_at
+            self._last_read_pending_bytes = len(pending)
             if CameraWorker._has_final_visca_frame(buf):
+                self._last_read_end_reason = 'terminal'
                 break
         return buf
 
@@ -999,7 +1016,24 @@ class CameraWorker:
                     if cmd.payload and 0x81 <= cmd.payload[0] <= 0x87:
                         self._response_headers.add((cmd.payload[0] - 0x80 + 8) << 4)
                     sock_ref.sendall(cmd.payload)
-                    response = self._read_visca_response(sock_ref)
+                    self._last_read_end_reason = 'unknown'
+                    self._last_read_raw_bytes = 0
+                    self._last_read_pending_bytes = 0
+                    # Only mechanical commands already carrying a confirmed
+                    # caller deadline may wait longer after an ACK. STOP,
+                    # continuous motion, inquiries and queued Home stay short.
+                    body = cmd.payload[1:-1]
+                    mechanical = (body.startswith(b'\x01\x04\x3f\x02')
+                                  or body.startswith(b'\x01\x04\x47')
+                                  or body == b'\x01\x06\x04')
+                    self._confirmed_mechanical_read = (
+                        cmd if mechanical and cmd.fast_connect and cmd.expires_at
+                        and not cmd.priority else None
+                    )
+                    try:
+                        response = self._read_visca_response(sock_ref)
+                    finally:
+                        self._confirmed_mechanical_read = None
 
                     # Si send_priority() interrumpió la lectura: un STOP no se
                     # pierde — se reencola tras el más nuevo; un comando normal
@@ -1035,9 +1069,11 @@ class CameraWorker:
                         # confirmación de la cámara → tratar como fallo.
                         logger.warning(
                             "%s cam=%s no final VISCA frame for [%s] "
-                            "(%d bytes: %s)",
+                            "(%d bytes: %s) read_end=%s raw_received=%d pending_bytes=%d",
                             cmd.cmd_id, self.ip, cmd_type, len(response),
                             response.hex() if response else "empty",
+                            self._last_read_end_reason,
+                            self._last_read_raw_bytes, self._last_read_pending_bytes,
                         )
                         # La cámara puede completar DESPUÉS del timeout; esa
                         # trama tardía quedaría en el buffer y el siguiente
