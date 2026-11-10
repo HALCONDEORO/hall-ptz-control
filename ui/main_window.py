@@ -98,15 +98,19 @@ def _load_cam_configs_from_yaml():
     Falls back to the CAM1/CAM2 globals (empty-string defaults, or sim-patched)
     when config.yaml is absent or unreadable.
     """
+    import adapters.sim_mode as sim_mode
+    if sim_mode.is_active():
+        return CAM1, CAM2
     try:
         from config.loader import load_config
-        from config import CameraConfig as _CC
         from runtime.path_resolver import RuntimePathResolver
         settings = load_config(RuntimePathResolver().config_dir / "config.yaml")
-        cams = settings.cameras
-        cam1 = _CC(ip=cams[0].ip, cam_id=cams[0].visca_id) if len(cams) >= 1 else CAM1
-        cam2 = _CC(ip=cams[1].ip, cam_id=cams[1].visca_id) if len(cams) >= 2 else CAM2
-        return cam1, cam2
+        # Mutate the shared objects, never rebind: Splash/Admin/services already
+        # imported references to them. Workers must consume that same identity.
+        for current, saved in zip((CAM1, CAM2), settings.cameras):
+            current.ip = saved.ip
+            current.cam_id = saved.visca_id
+        return CAM1, CAM2
     except Exception:
         return CAM1, CAM2
 
