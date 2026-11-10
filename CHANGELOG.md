@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 - cleanup_legacy_rpi_autostart.sh no longer records "Disabled" when the
   disable/mask/quarantine step failed; failures are reported as failures.
+- An active password lockout now survives Operator/Admin mode toggles:
+  the button stays disabled and the timer keeps running until it expires.
 - cleanup_legacy_rpi_autostart.sh now passes the bare unit name to
   systemctl (the inherited IFS broke column splitting, so legacy services
   silently survived the migration while the report claimed they were disabled).
