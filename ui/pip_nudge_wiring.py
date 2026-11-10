@@ -4,6 +4,9 @@ from core.events import EventType
 
 def wire_pip_nudge_activity(window) -> None:
     """Register callbacks once after the PiP service has been constructed."""
+    window._bus.subscribe(
+        EventType.SESSION_START, lambda _e: window._pip_nudge_svc.reset_feedback()
+    )
     for _evt in (EventType.CAMERA_MOVE, EventType.CAMERA_ZOOM, EventType.SEAT_SELECTED):
         window._bus.subscribe(_evt, lambda _e: window._record_activity())
         window._bus.subscribe(_evt, lambda _e: window._atem_dispatcher.notify_manual_control())
