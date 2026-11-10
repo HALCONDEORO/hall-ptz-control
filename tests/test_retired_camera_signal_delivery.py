@@ -30,6 +30,9 @@ def test_retired_worker_same_ip_does_not_publish_false_disconnect_to_ui():
         _on_visca_speed_error=Mock(), _on_cam_connected=Mock(), _on_cam_connection_changed=Mock())
     with patch('ui.camera_led_wiring.wire_connecting_led'):
         MainWindow._on_worker_ready(window, old)
+    # Initial snapshot is tested separately; isolate subsequent notifications.
+    window._on_cam_connected.reset_mock()
+    window._on_cam_connection_changed.reset_mock()
     old.signals.connection_changed.emit(True)
     window._on_cam_connected.assert_called_once_with(True, old.ip)
     window._on_cam_connection_changed.assert_called_once_with(True, old.ip)
@@ -66,6 +69,9 @@ def test_real_qt_queued_disconnect_is_checked_at_delivery(replaced):
     window = SimpleNamespace(_cameras=manager, _on_visca_speed_error=Mock(),
         _on_cam_connected=Mock(), _on_cam_connection_changed=Mock(), Cam1=Mock(), Cam2=Mock())
     wire_camera_worker(window, old)
+    window._on_cam_connected.reset_mock()
+    window._on_cam_connection_changed.reset_mock()
+    window.Cam1.set_connecting.reset_mock()
     from domain.camera_state import CameraConnectionState
     def emit():
         old.signals.connection_changed.emit(False)
