@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Diagnostics no longer reference a non-existent Status.WARN, which crashed
+  `khptz doctor` in user mode when a credential was unreadable.
 - test_seat_builder no longer leaves fake SpecialDragButton/QtSvg stubs in
   sys.modules, which poisoned later real-widget tests in the same process.
 - Login mode toggle (Operator/Admin) no longer resets the failed-attempt
