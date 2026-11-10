@@ -17,6 +17,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- cleanup_legacy_rpi_autostart.sh now passes the bare unit name to
+  systemctl (the inherited IFS broke column splitting, so legacy services
+  silently survived the migration while the report claimed they were disabled).
 - Restore rejects a backup whose manifest declares a hash for a member
   missing from the archive, before any write, in both normal and dry-run mode.
 - Support bundle: collector errors and content are redacted before the ZIP is
