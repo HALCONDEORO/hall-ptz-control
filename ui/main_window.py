@@ -955,11 +955,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         Llamado desde AtemAdminPanel cuando el operador activa/desactiva el PiP.
         """
         if self._atem_write_adapter is not None:
-            self._atem_write_adapter.set_pip_enabled(state)
+            result = self._atem_write_adapter.set_pip_enabled(state)
+            if not result.ok:
+                logger.warning("ATEM PiP request failed: %s", result.message)
+            return  # Only monitor telemetry confirms the production state.
         else:
             from domain.atem_state import ATEMPiPState
             self._atem_dispatcher.on_pip_changed(ATEMPiPState(enabled=state, source=None))
-        # Actualización optimista; el monitor confirmará en el siguiente poll.
+        # Demo has no hardware telemetry; update its local state immediately.
         self._pip_active = state
         self._notify_pip_state(state)
 
