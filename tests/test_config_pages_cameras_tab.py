@@ -48,7 +48,7 @@ def discovery(monkeypatch):
 
     state = {"found": ["172.16.1.21", "172.16.1.22"], "error": None}
 
-    def _discover(subnet):
+    def _discover(subnet, **kwargs):
         if state["error"] is not None:
             raise state["error"]
         return [CameraCandidate(ip, True) for ip in state["found"]]
@@ -355,7 +355,7 @@ class TestVerifiedDiscoverySafety:
     def test_unknown_ports_are_not_assignable(self, monkeypatch):
         from application.camera_discovery_verification import CameraCandidate
         import application.camera_discovery_verification as service
-        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: [
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet, **kwargs: [
             CameraCandidate('192.0.2.10', False), CameraCandidate('192.0.2.11', True)])
         dialog, mw, layout = build(monkeypatch)
         button_named(layout, 'Find and check cameras').click()
@@ -396,7 +396,7 @@ class TestVerifiedDiscoverySafety:
         from PyQt5.QtWidgets import QLineEdit
         import application.camera_discovery_verification as service
         seen = []
-        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: seen.append(subnet))
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet, **kwargs: seen.append(subnet))
         dialog, mw, layout = build(monkeypatch)
         dialog.findChild(QLineEdit, 'cameraDiscoverySubnet').setText('bad')
         button_named(layout, 'Find and check cameras').click()
@@ -407,7 +407,7 @@ class TestVerifiedDiscoverySafety:
         from PyQt5.QtWidgets import QLineEdit
         import application.camera_discovery_verification as service
         seen = []
-        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet: seen.append(subnet) or [])
+        monkeypatch.setattr(service, 'discover_and_verify', lambda subnet, **kwargs: seen.append(subnet) or [])
         dialog, mw, layout = build(monkeypatch)
         dialog.findChild(QLineEdit, 'cameraDiscoverySubnet').setText('192.0.2')
         button_named(layout, 'Find and check cameras').click()
@@ -425,6 +425,47 @@ def test_failed_assignment_never_marks_candidate_as_assigned(monkeypatch, discov
     assert dialog._cam_ip_labels[1].text() == '172.16.1.11'
     assert has_text(layout, '172.16.1.21')
 
+
+@pytest.mark.parametrize("scan_error", [False, True])
+def test_ip_editors_stay_locked_until_scan_finishes(monkeypatch, scan_error):
+    from PyQt5.QtWidgets import QPushButton
+    import ui.config_pages.cameras_tab as tab
+    import application.camera_discovery_verification as service
+    pending = []
+    class DeferredThread:
+        def __init__(self, target, args=(), **kwargs):
+            self.target, self.args = target, args
+        def start(self):
+            pending.append(lambda: self.target(*self.args))
+    monkeypatch.setattr(tab.threading, 'Thread', DeferredThread)
+    def discover(*args, **kwargs):
+        if scan_error:
+            raise OSError('test scan failed')
+        return []
+    monkeypatch.setattr(service, 'discover_and_verify', discover)
+    dialog, mw, layout = build(monkeypatch, inline=False)
+    edits = [label.parentWidget().findChild(QPushButton)
+             for label in dialog._cam_ip_labels.values()]
+    assert len(edits) == 2 and all(edit.isEnabled() for edit in edits)
+    button_named(layout, 'Find and check cameras').click()
+    assert all(not edit.isEnabled() for edit in edits)
+    assert len(pending) == 1
+    pending.pop()()
+    assert all(edit.isEnabled() for edit in edits)
+
+
+def test_finishing_scan_does_not_unlock_editors_in_new_live_session(monkeypatch):
+    from PyQt5.QtWidgets import QPushButton
+    import application.camera_discovery_verification as service
+    dialog, mw, layout = build(monkeypatch)
+    def discover(*args, **kwargs):
+        mw.session_active = True
+        return []
+    monkeypatch.setattr(service, 'discover_and_verify', discover)
+    button_named(layout, 'Find and check cameras').click()
+    edits = [label.parentWidget().findChild(QPushButton)
+             for label in dialog._cam_ip_labels.values()]
+    assert all(not edit.isEnabled() for edit in edits)
 
 def test_assignment_result_is_written_only_on_gui_delivery(monkeypatch, discovery):
     import config
