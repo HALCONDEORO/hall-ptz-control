@@ -1103,10 +1103,12 @@ class ConfigDialog(QDialog):
             "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
             f" stop:0 {_C_ERROR}, stop:1 #8E0F18); border: none; border-radius: 9px;"
             " padding: 7px 16px; min-width: 90px; min-height: 36px;"
-            " font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; }"
+            " font-size: 13px; font-weight: bold; font-family: 'Inter Tight'; color: white; }"
             "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
             " stop:0 #d41828, stop:1 #a01020); }"
         )
+        from ui.message_box_layout import fit_message_box_buttons
+        fit_message_box_buttons(box)
         box.exec_()
         return box.clickedButton() is act
 

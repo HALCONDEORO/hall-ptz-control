@@ -391,6 +391,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         yes_btn = box.addButton('Power on cameras', QMessageBox.AcceptRole)
         box.addButton('Leave as they are', QMessageBox.RejectRole)
         box.setDefaultButton(yes_btn)
+        from ui.message_box_layout import fit_message_box_buttons
+        fit_message_box_buttons(box)
         box.exec_()
         if box.clickedButton() is yes_btn:
             self._session.ToggleSession()
@@ -1668,10 +1670,12 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
             " stop:0 #C0141F, stop:1 #8E0F18); border: none; border-radius: 9px;"
             " padding: 7px 16px; min-width: 90px; min-height: 36px;"
-            " font: 600 13px 'Inter Tight', 'Segoe UI'; color: white; }"
+            " font-size: 13px; font-weight: bold; font-family: 'Inter Tight'; color: white; }"
             "QPushButton:hover { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
             " stop:0 #d41828, stop:1 #a01020); }"
         )
+        from ui.message_box_layout import fit_message_box_buttons
+        fit_message_box_buttons(msg)
         msg.exec_()
         clicked = msg.clickedButton()
         if clicked is btn_keep:
