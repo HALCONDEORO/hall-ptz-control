@@ -629,11 +629,15 @@ class LoginScreen(QWidget):
                 self.is_locked = False
                 self.login_btn.setEnabled(True)
                 self._set_status('✓ Unlock complete — retry', 'success')
+                # El campo de contraseña se reactiva al terminar el bloqueo en
+                # cualquier modo: si el bloqueo acaba en Operador y luego se
+                # vuelve a Admin, _set_mode solo lo deshabilita cuando sigue
+                # is_locked; dejarlo apagado aquí lo bloqueaba hasta reiniciar.
+                self.password_input.setEnabled(True)
                 if self._operator_auto:
                     # El bloqueo pausó la cuenta atrás de Operador: reanudarla.
                     self._start_operator_countdown()
                 else:
-                    self.password_input.setEnabled(True)
                     self.password_input.setFocus()
                 # Detener timer
                 self.lockout_timer.stop()
