@@ -740,3 +740,11 @@ class TestMainCli:
         res = tmp_path / "result.json"
         rc = provision.main(["--request", str(req), "--result", str(res)])
         assert rc == 1
+
+
+def test_demo_profile_survives_wizard_privileged_handoff(isolated):
+    resolver, tmp_path = isolated
+    request = _write_request(tmp_path, installation_profile='demo')
+    result = provision.run_provision(request, tmp_path / 'result.json', resolver=resolver, do_system=False)
+    assert result['ok'] is True
+    assert load_config(resolver.config_dir / 'config.yaml').site.installation_profile == 'demo'
