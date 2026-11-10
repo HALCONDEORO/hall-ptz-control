@@ -11,6 +11,7 @@ def rig(response):
     mgr = CameraManager(SimpleNamespace(ip="192.0.2.1", cam_id="81"),
                         SimpleNamespace(ip="192.0.2.2", cam_id="82"))
     worker = Mock()
+    worker.is_connected = False
     worker.send_inquiry.return_value = response
     mgr._workers["192.0.2.2"] = worker
     return mgr, worker
@@ -44,3 +45,44 @@ def test_replaced_endpoint_cannot_publish_old_probe():
         return bytes.fromhex("a05002ff")
     worker.send_inquiry.side_effect = reply
     assert mgr.check_power_response(2) is False
+
+
+def test_connected_worker_with_inquiry_still_in_queue_is_not_offline():
+    mgr, worker = rig(b'')
+    worker.is_connected = True
+    assert mgr.check_power_response(2) is None
+    cmd = worker.send_inquiry.call_args.args[0]
+    assert cmd.priority is False
+
+
+def test_sent_but_unanswered_probe_is_offline():
+    mgr, worker = rig(b'')
+    worker.is_connected = True
+    def send(cmd, timeout):
+        cmd.sent_at = 1.0
+        return b''
+    worker.send_inquiry.side_effect = send
+    assert mgr.check_power_response(2) is False
+
+
+@pytest.mark.parametrize('cam_id', ['', None])
+def test_missing_visca_id_does_not_enqueue_invalid_inquiry(cam_id):
+    mgr, worker = rig(b'')
+    mgr._cam2_id = cam_id
+    assert mgr.check_power_response(2) is False
+    worker.send_inquiry.assert_not_called()
+
+
+def test_real_queued_inquiry_timeout_is_unknown_and_cancelled():
+    from ptz.visca.worker import CameraWorker
+    mgr, _ = rig(b'')
+    worker = object.__new__(CameraWorker)
+    worker.ip = '192.0.2.2'
+    worker._is_connected = True  # existing live control session
+    queued = []
+    worker.send = lambda command: queued.append(command) or True
+    mgr._workers[worker.ip] = worker
+    assert mgr.check_power_response(2, timeout=0.01) is None
+    assert queued[0].cancelled.is_set()
+    assert queued[0].sent_at == 0
+    assert worker._command_outdated(queued[0])

@@ -454,3 +454,15 @@ def test_assignment_result_is_written_only_on_gui_delivery(monkeypatch, discover
     config.CAM1.ip = '192.0.2.77'
     QApplication.processEvents()
     assert config.CAM1.check == 'Red', 'stale queued result recolored the replacement endpoint'
+
+
+def test_unsent_probe_does_not_paint_busy_connected_camera_offline(monkeypatch, discovery):
+    import config
+    from unittest.mock import Mock
+    dialog, mw, layout = build(monkeypatch)
+    mw._cameras.check_power_response = Mock(return_value=None)
+    dialog._set_online_badge = Mock()
+    button_named(layout, "Find and check cameras").click()
+    assign_buttons(dialog, "Platform")[0].click()
+    assert config.CAM1.check is None
+    dialog._set_online_badge.assert_called_with(dialog._cam_online_badges[1], None)

@@ -194,22 +194,22 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     # (the existing worker serializes the read-only inquiry; no second TCP
     # session is opened, and no network wait runs on the GUI thread).
     class _CamCheckSignal(QObject):
-        done = pyqtSignal(int, str, str, bool)  # endpoint-bound result
+        done = pyqtSignal(int, str, str, object)  # endpoint-bound result
 
     dialog._cam_check_sig = _CamCheckSignal()
 
-    def _apply_cam_check(cam_num: int, ip: str, cam_id: str, online: bool):
+    def _apply_cam_check(cam_num: int, ip: str, cam_id: str, online: bool | None):
         cam = CAM1 if cam_num == 1 else CAM2
         if not dialog.isVisible() or (cam.ip, cam.cam_id) != (ip, cam_id):
             return
-        cam.check = 'Green' if online else 'Red'
+        cam.check = None if online is None else ('Green' if online else 'Red')
         dialog._set_online_badge(dialog._cam_online_badges.get(cam_num), online)
         strip = getattr(dialog, '_strip_cam', {}).get(cam_num)
         if strip:
             dot, val, role = strip
             try:
-                dialog._set_led(dot, 'green' if online else 'red')
-                val.setText(role if online else 'Offline')
+                dialog._set_led(dot, 'amber' if online is None else ('green' if online else 'red'))
+                val.setText('Not checked' if online is None else (role if online else 'Offline'))
             except RuntimeError:
                 pass
 
@@ -219,7 +219,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         cam = CAM1 if cam_num == 1 else CAM2
         ip, cam_id = cam.ip, cam.cam_id
         try:
-            ok = bool(mw._cameras.check_power_response(cam_num))
+            ok = mw._cameras.check_power_response(cam_num)
         except Exception:  # noqa: BLE001
             ok = False
         dialog._cam_check_sig.done.emit(cam_num, ip, cam_id, ok)

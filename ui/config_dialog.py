@@ -677,7 +677,7 @@ class ConfigDialog(QDialog):
         return lbl
 
     @staticmethod
-    def _set_online_badge(badge: Optional[QLabel], online: bool) -> None:
+    def _set_online_badge(badge: Optional[QLabel], online: bool | None) -> None:
         """Re-style an existing camera Online/Offline badge in place.
 
         Mirrors the text and colours produced by ``_badge`` so a live
@@ -685,7 +685,7 @@ class ConfigDialog(QDialog):
         """
         if badge is None:
             return
-        text = 'Online' if online else 'Offline'
+        text = 'Not checked' if online is None else ('Online' if online else 'Offline')
         if online:
             style = (f'background: {_C_SUCCESS_BG}; color: {_C_SUCCESS};'
                      f' border: 1px solid {_C_SUCCESS_BD};')
