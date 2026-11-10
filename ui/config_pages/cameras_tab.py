@@ -202,6 +202,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         cam = CAM1 if cam_num == 1 else CAM2
         if not dialog.isVisible() or (cam.ip, cam.cam_id) != (ip, cam_id):
             return
+        cam.check = 'Green' if online else 'Red'
         dialog._set_online_badge(dialog._cam_online_badges.get(cam_num), online)
         strip = getattr(dialog, '_strip_cam', {}).get(cam_num)
         if strip:
@@ -221,9 +222,6 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
             ok = bool(mw._cameras.check_power_response(cam_num))
         except Exception:  # noqa: BLE001
             ok = False
-        if (cam.ip, cam.cam_id) != (ip, cam_id):
-            return
-        cam.check = 'Green' if ok else 'Red'
         dialog._cam_check_sig.done.emit(cam_num, ip, cam_id, ok)
 
     def _apply_ip(ip: str, cam_num: int):

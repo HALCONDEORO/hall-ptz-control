@@ -424,3 +424,33 @@ def test_failed_assignment_never_marks_candidate_as_assigned(monkeypatch, discov
     assert btn.text() == '→ Platform'
     assert dialog._cam_ip_labels[1].text() == '172.16.1.11'
     assert has_text(layout, '172.16.1.21')
+
+
+def test_assignment_result_is_written_only_on_gui_delivery(monkeypatch, discovery):
+    import config
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtWidgets import QApplication
+    from unittest.mock import Mock
+    dialog, mw, layout = build(monkeypatch)
+    mw._cameras.check_power_response = Mock(return_value=True)
+    # Force queued delivery even with the test's inline worker, so a result
+    # can be pending while the GUI changes to a new endpoint.
+    signal = dialog._cam_check_sig.done
+    signal.disconnect()
+    # Recover the production slot from the build function's signal wiring.
+    import ast
+    from pathlib import Path
+    source = Path('ui/config_pages/cameras_tab.py').read_text()
+    tree = ast.parse(source)
+    builder = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'build_cameras_tab')
+    slot = next(n for n in builder.body if isinstance(n, ast.FunctionDef) and n.name == '_apply_cam_check')
+    ns = {'CAM1': config.CAM1, 'CAM2': config.CAM2, 'dialog': dialog}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[slot], type_ignores=[])), '<production-slot>', 'exec'), ns)
+    signal.connect(ns['_apply_cam_check'], Qt.QueuedConnection)
+    config.CAM1.check = 'Red'
+    button_named(layout, 'Find and check cameras').click()
+    assign_buttons(dialog, 'Platform')[0].click()
+    assert config.CAM1.check == 'Red', 'worker thread wrote GUI-visible state before delivery'
+    config.CAM1.ip = '192.0.2.77'
+    QApplication.processEvents()
+    assert config.CAM1.check == 'Red', 'stale queued result recolored the replacement endpoint'
