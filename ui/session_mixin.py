@@ -112,7 +112,7 @@ class SessionController:
                     and self._session_generation == generation):
                 self.shutdown("manual")
 
-    def shutdown(self, reason: str = "manual") -> None:
+    def shutdown(self, reason: str = "manual", *, power_off: bool = True) -> None:
         """Cancel preset polls, power off cameras, and update session state/UI.
 
         Single shutdown path shared by manual End Session and inactivity auto
@@ -127,7 +127,10 @@ class SessionController:
             self._w._exit_seat_selection(save=False)
 
         # Standby via bus → Controller → SessionService.end(reason)
-        self._w._bus.emit(EventType.SESSION_END, reason=reason)
+        if power_off:
+            self._w._bus.emit(EventType.SESSION_END, reason=reason)
+        else:
+            self._w._bus.emit(EventType.SESSION_END, reason=reason, power_off=False)
 
         self._w.Cam1.set_powered(False)
         self._w.Cam2.set_powered(False)
