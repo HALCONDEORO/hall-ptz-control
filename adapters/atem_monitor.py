@@ -63,6 +63,10 @@ class ATEMMonitor(QThread):
     input_names_ready  = pyqtSignal(dict)    # {input_id: name} tras conectar al ATEM real
     pip_changed        = pyqtSignal(object)  # ATEMPiPState — PiP activado/desactivado
 
+    # Class-level default (tests build monitors without __init__): False once
+    # the library is found to expose no PiP state.
+    _pip_supported: bool = True
+
     def __init__(
         self,
         ip: str,
@@ -75,6 +79,11 @@ class ATEMMonitor(QThread):
         self.last_error: str = ""
         self._store = runtime_state_store  # #793 — fuente unica de verdad
         self._pip_enabled: bool | None = None  # None = estado aún desconocido
+
+    @property
+    def pip_supported(self) -> bool:
+        """False when PyATEMMax exposes no PiP state (PiP automation inert)."""
+        return self._pip_supported
 
     @property
     def state(self) -> ATEMState | None:
@@ -281,8 +290,22 @@ class ATEMMonitor(QThread):
         Los atributos relevantes son ``enabled`` (bool) y ``source`` (int-like).
         No lanza — cualquier fallo del API se ignora para no interrumpir el hilo.
         """
+        if not self._pip_supported:
+            return
         try:
-            pip_block = atem.pictureInPicture[0]
+            try:
+                pip_state_list = atem.pictureInPicture
+            except AttributeError:
+                # PyATEMMax 1.0b9 has no pictureInPicture state at all, so on
+                # real hardware PiP automation can never fire. Say so once
+                # instead of failing silently on every 100 ms poll.
+                self._pip_supported = False
+                logger.warning(
+                    "ATEM PiP: la librería PyATEMMax no expone pictureInPicture; "
+                    "la detección de PiP no está disponible con este ATEM/librería"
+                )
+                return
+            pip_block = pip_state_list[0]
             enabled = bool(getattr(pip_block, "enabled", False))
             source_raw = getattr(pip_block, "source", None)
             try:
