@@ -289,7 +289,7 @@ quarantine_user_services() {
 }
 
 disable_system_services() {
-    local unit details fragment destination
+    local unit details fragment destination disabled
     while IFS=$' \t' read -r unit _; do
         [[ -n "${unit}" ]] || continue
         case "${unit}" in khptz-control.service|khptz-display-ready.service|khptz-provision.service) continue ;; esac
@@ -302,13 +302,31 @@ disable_system_services() {
         else
             fragment="$(systemctl show "${unit}" -p FragmentPath --value 2>/dev/null || true)"
             [[ -n "${fragment}" ]] && backup "${fragment}"
-            systemctl disable --now "${unit}" >/dev/null 2>&1 || warn "Could not stop ${unit}."
-            if [[ "${fragment}" == /etc/systemd/system/* && -f "${fragment}" ]]; then
-                destination="${fragment}.disabled-by-khptz-${TIMESTAMP}"; mv -- "${fragment}" "${destination}"
-            else
-                systemctl mask "${unit}" >/dev/null 2>&1 || warn "Could not mask ${unit}."
+            # The report must not claim success on failure: an operator reading
+            # "Disabled system service" would reboot believing the legacy
+            # controller is gone while it still starts at boot.
+            disabled=true
+            if ! systemctl disable --now "${unit}" >/dev/null 2>&1; then
+                warn "Could not stop ${unit}."
+                disabled=false
             fi
-            record "Disabled system service: ${unit}"
+            if [[ "${fragment}" == /etc/systemd/system/* && -f "${fragment}" ]]; then
+                destination="${fragment}.disabled-by-khptz-${TIMESTAMP}"
+                if ! mv -- "${fragment}" "${destination}"; then
+                    warn "Could not quarantine ${fragment}."
+                    disabled=false
+                fi
+            else
+                if ! systemctl mask "${unit}" >/dev/null 2>&1; then
+                    warn "Could not mask ${unit}."
+                    disabled=false
+                fi
+            fi
+            if [[ "${disabled}" == "true" ]]; then
+                record "Disabled system service: ${unit}"
+            else
+                record "REVIEW MANUALLY - could not fully disable system service: ${unit}"
+            fi
         fi
     # IFS must include a space here: the script runs with IFS=$'\n\t', under
     # which `read` does not split list-unit-files' space-separated columns and

@@ -20,6 +20,8 @@ This project uses a simple versioning approach while it is still in early produc
 - The config/layout fingerprint no longer aborts with UnicodeDecodeError on
   invalid-encoding files; it reports "invalid" and keeps the identity
   computable.
+- cleanup_legacy_rpi_autostart.sh no longer records "Disabled" when the
+  disable/mask/quarantine step failed; failures are reported as failures.
 - Diagnostics no longer reference a non-existent Status.WARN, which crashed
   `khptz doctor` in user mode when a credential was unreadable.
 - An active password lockout now survives Operator/Admin mode toggles:

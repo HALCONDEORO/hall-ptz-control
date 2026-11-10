@@ -154,16 +154,22 @@ class TestClassifierBehaviour:
         assert "classification checks passed" in result.stdout
 
 
-class TestDisableSystemServicesParsing:
-    """Regression: disable_system_services must pass the bare unit name to
-    systemctl. The script sets IFS=$'\\n\\t' globally, and the unit loop
-    inherited it, so `read -r unit _` never split list-unit-files'
-    space-separated columns: ${unit} became "hallptz.service  enabled", every
-    systemctl call rejected the name, and the legacy service survived the
-    migration while the report claimed it was disabled."""
+class _DisableSystemServicesDriver:
+    """Shared scaffolding for disable_system_services behaviour tests.
 
-    def test_systemctl_receives_bare_unit_name(self, tmp_path):
+    Extracts the real function from the script with awk, stubs systemctl and
+    runs the function in bash. The driver sets the same global IFS=$'\\n\\t'
+    the script uses, so the tests exercise production splitting rules.
+    """
+
+    @staticmethod
+    def run(tmp_path, units: str, fail_disable=frozenset(), fail_mask=frozenset()):
+        """Run disable_system_services against stubbed units.
+
+        Returns (systemctl_calls_log, report_text).
+        """
         calls = tmp_path / "systemctl-calls.log"
+        report = tmp_path / "report.txt"
         bin_dir = tmp_path / "bin"
         bin_dir.mkdir()
         stub = bin_dir / "systemctl"
@@ -171,17 +177,19 @@ class TestDisableSystemServicesParsing:
             "#!/usr/bin/env bash\n"
             f'printf \'%s\\n\' "$*" >> "{calls}"\n'
             'case "$1" in\n'
-            '  list-unit-files) printf "hallptz.service  enabled\\nunrelated.service  disabled\\n" ;;&\n'
+            f'  list-unit-files) printf "{units}" ;;&\n'
             '  show) case "$2" in *\\ *) exit 1;; esac\n'
-            '        if [[ "$*" == *FragmentPath* ]]; then printf "/etc/systemd/system/hallptz.service\\n";\n'
-            '        else printf "Description=Hall PTZ\\nExecStart=/home/pi/hallptz/main.py\\n"; fi ;;&\n'
-            '  cat) printf "[Unit]\\nDescription=Hall PTZ\\n" ;;&\n'
-            '  disable|mask) exit 0 ;;&\n'
+            '        if [[ "$*" == *FragmentPath* ]]; then\n'
+            '          [[ "$2" == "hallptz.service" ]] && printf "/etc/systemd/system/hallptz.service\\n"\n'
+            '        else printf "Description=X\\nExecStart=/home/pi/x/main.py\\n"; fi ;;&\n'
+            '  cat) printf "[Unit]\\nDescription=X\\n" ;;&\n'
+            '  disable) [[ " DISABLE_FAIL " == *" $3 "* ]] && exit 1 ;;&\n'
+            '  mask) [[ " MASK_FAIL " == *" $2 "* ]] && exit 1 ;;&\n'
             'esac\n'
-            'exit 0\n'
+            'exit 0\n'.replace("DISABLE_FAIL", " ".join(sorted(fail_disable)))
+                          .replace("MASK_FAIL", " ".join(sorted(fail_mask)))
         )
         stub.chmod(0o755)
-
         driver = tmp_path / "driver.sh"
         driver.write_text(f"""#!/usr/bin/env bash
 set -uo pipefail
@@ -191,13 +199,14 @@ MATCHES=0
 DRY_RUN=false
 TIMESTAMP=20261110
 BACKUP_DIR="{tmp_path}"
-REPORT="{tmp_path}/report.txt"
+REPORT="{report}"
+: > "${{REPORT}}"
 info() {{ :; }}
 warn() {{ :; }}
-record() {{ :; }}
+record() {{ printf '%s\\n' "$*" >> "${{REPORT}}"; }}
 backup() {{ return 0; }}
 mv() {{ return 0; }}
-is_conflict() {{ case "$1" in *hallptz*) return 0;; *) return 1;; esac }}
+is_conflict() {{ case "$1" in *hallptz*|*stubborn*) return 0;; *) return 1;; esac }}
 awk '/^disable_system_services\\(\\)/ , /^\\}}/' "{SCRIPT}" > "{tmp_path}/fn.sh"
 source "{tmp_path}/fn.sh"
 disable_system_services
@@ -207,10 +216,42 @@ disable_system_services
             ["bash", str(driver)], capture_output=True, text=True, timeout=30,
         )
         assert proc.returncode == 0, proc.stderr
-        log = calls.read_text(encoding="utf-8")
+        return calls.read_text(encoding="utf-8"), report.read_text(encoding="utf-8")
+
+
+class TestDisableSystemServicesParsing:
+    """Regression: disable_system_services must pass the bare unit name to
+    systemctl. The script sets IFS=$'\\n\\t' globally, and the unit loop
+    inherited it, so `read -r unit _` never split list-unit-files'
+    space-separated columns: ${unit} became "hallptz.service  enabled", every
+    systemctl call rejected the name, and the legacy service survived the
+    migration while the report claimed it was disabled."""
+
+    def test_systemctl_receives_bare_unit_name(self, tmp_path):
+        log, _report = _DisableSystemServicesDriver.run(
+            tmp_path,
+            "hallptz.service  enabled\\nunrelated.service  disabled\\n",
+        )
         assert "disable --now hallptz.service" in log, (
             f"systemctl never got the bare unit name; calls were:\n{log}"
         )
         assert "enabled" not in [
             line.split()[-1] for line in log.splitlines() if line.startswith("disable ")
         ], f"disable received a unit name with state suffix:\n{log}"
+
+
+class TestDisableSystemServicesReporting:
+    """The migration report must not claim a service was disabled when the
+    disable/mask/quarantine step failed — an operator trusting the report
+    would reboot with the legacy controller still active."""
+
+    def test_success_and_failure_reported_honestly(self, tmp_path):
+        _log, report = _DisableSystemServicesDriver.run(
+            tmp_path,
+            "hallptz.service  enabled\\nstubborn.service  enabled\\n",
+            fail_disable={"stubborn.service"},
+            fail_mask={"stubborn.service"},
+        )
+        assert "Disabled system service: hallptz.service" in report
+        assert "Disabled system service: stubborn.service" not in report
+        assert "REVIEW MANUALLY - could not fully disable system service: stubborn.service" in report
