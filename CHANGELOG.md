@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Splash TCP scan no longer flags healthy installs as failed (red TCP chip
+  on every startup since 8c8e8a6).
 - The config/layout fingerprint no longer aborts with UnicodeDecodeError on
   invalid-encoding files; it reports "invalid" and keeps the identity
   computable.
