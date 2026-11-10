@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Test setup preloads real Qt and shared UI modules so later tests do not
+  inherit partial stubs installed during collection.
 - Startup loads the saved ATEM address from effective settings before the
   monitor starts, instead of requiring it to be entered again in Settings.
 - ATEM polling detects a dropped link instead of continuing to report
