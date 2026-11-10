@@ -722,7 +722,9 @@ class CameraWorker:
                 except Exception:
                     pass
                 self._sock = None
-        self._set_connected(False)
+            # Serialize state with socket publication: a concurrent fresh
+            # session must not be overwritten by this retired socket's False.
+            self._set_connected(False)
 
     # Cuerpos VISCA de STOP (sin cam_id ni 0xFF final): pan/tilt stop y zoom
     # stop. Son idempotentes: repetirlos nunca mueve la cámara.
