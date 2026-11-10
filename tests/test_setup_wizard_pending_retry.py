@@ -65,7 +65,8 @@ w.reject();sip.delete(w);app.processEvents()
 
 def test_unreadable_handoff_result_does_not_establish_failure(tmp_path):
     from application.provision_handoff import ProvisionHandoff
-    request=tmp_path/'request.json';result=tmp_path/'result.json'
+    request = tmp_path / 'request.json'
+    result = tmp_path / 'result.json'
     result.write_text('{unfinished')
     observed=ProvisionHandoff(request,result).poll()
     assert observed is not None and not observed.ok
@@ -76,7 +77,8 @@ def test_unreadable_handoff_result_does_not_establish_failure(tmp_path):
 
 def test_definitive_handoff_failure_is_retryable(tmp_path):
     from application.provision_handoff import ProvisionHandoff
-    result=tmp_path/'result.json';result.write_text('{"ok":false,"error":"invalid configuration"}')
+    result = tmp_path / 'result.json'
+    result.write_text('{"ok":false,"error":"invalid configuration"}')
     observed=ProvisionHandoff(tmp_path/'request.json',result).poll()
     assert observed is not None and not observed.ok
     assert observed.outcome_unknown is False
