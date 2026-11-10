@@ -276,60 +276,57 @@ class TestAssignment:
 
 
 class TestConnectivityRecheck:
-    def test_a_real_assignment_rechecks_the_link(self, monkeypatch, discovery):
+    def test_assignment_uses_existing_worker_and_never_direct_probe(self, monkeypatch, discovery):
         import config
-        seen = []
-        monkeypatch.setattr(
-            config, "check_camera",
-            lambda ip, cam_id: seen.append(ip) or True, raising=False,
-        )
+        from unittest.mock import Mock
+        forbidden = Mock(side_effect=AssertionError("no parallel TCP probe"))
+        monkeypatch.setattr(config, "check_camera", forbidden)
         dialog, mw, layout = build(monkeypatch)
+        mw._cameras.check_power_response = Mock(return_value=True)
         button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
-        assert seen == ["172.16.1.21"]
-
-    def test_the_recheck_result_is_recorded_on_the_camera(self, monkeypatch, discovery):
-        import config
-        monkeypatch.setattr(config, "check_camera", lambda ip, cam_id: True, raising=False)
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Find and check cameras").click()
-        assign_buttons(dialog, "Platform")[0].click()
+        mw._cameras.check_power_response.assert_called_once_with(1)
+        forbidden.assert_not_called()
         assert config.CAM1.check == "Green"
 
-    def test_an_unreachable_camera_is_recorded_as_red(self, monkeypatch, discovery):
+    @pytest.mark.parametrize("reachable", [True, False])
+    def test_recheck_result_is_recorded(self, monkeypatch, discovery, reachable):
         import config
-        monkeypatch.setattr(config, "check_camera", lambda ip, cam_id: False, raising=False)
+        from unittest.mock import Mock
         dialog, mw, layout = build(monkeypatch)
+        mw._cameras.check_power_response = Mock(return_value=reachable)
+        button_named(layout, "Find and check cameras").click()
+        assign_buttons(dialog, "Platform")[0].click()
+        assert config.CAM1.check == ("Green" if reachable else "Red")
+
+    def test_raising_worker_check_counts_as_offline(self, monkeypatch, discovery):
+        import config
+        from unittest.mock import Mock
+        dialog, mw, layout = build(monkeypatch)
+        mw._cameras.check_power_response = Mock(side_effect=OSError("unavailable"))
         button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Red"
 
-    def test_a_raising_probe_counts_as_offline(self, monkeypatch, discovery):
+    def test_reconfigured_camera_discards_stale_result(self, monkeypatch, discovery):
         import config
-
-        def _boom(ip, cam_id):
-            raise OSError("no route to host")
-
-        monkeypatch.setattr(config, "check_camera", _boom, raising=False)
         dialog, mw, layout = build(monkeypatch)
+        def check(key):
+            config.CAM1.ip = "192.0.2.77"
+            config.CAM1.check = "Red"
+            return True
+        mw._cameras.check_power_response = check
         button_named(layout, "Find and check cameras").click()
         assign_buttons(dialog, "Platform")[0].click()
         assert config.CAM1.check == "Red"
 
-    def test_simulation_never_touches_the_network(self, monkeypatch, discovery):
-        """In simulation the link is up by definition; probing a fake IP would
-        just add a timeout to every assignment."""
-        import config
-        seen = []
-        monkeypatch.setattr(
-            config, "check_camera",
-            lambda ip, cam_id: seen.append(ip) or True, raising=False,
-        )
+    def test_simulation_never_probes_worker(self, monkeypatch, discovery):
+        from unittest.mock import Mock
         dialog, mw, layout = build(monkeypatch, sim_active=True)
+        mw._cameras.check_power_response = Mock()
         button_named(layout, "Find and check cameras").click()
         assert assign_buttons(dialog, "Platform") == []
-        assert not button_named(layout, "Find and check cameras").isEnabled()
-        assert seen == []
+        mw._cameras.check_power_response.assert_not_called()
 
 
 class TestReconnect:

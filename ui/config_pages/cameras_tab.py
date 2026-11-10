@@ -191,15 +191,16 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     # ── Helpers de asignación ─────────────────────────────────────────
 
     # Cross-thread bridge for the post-assignment connectivity re-check
-    # (check_camera does a blocking socket connect — must run off the GUI
-    # thread, result marshalled back here).
+    # (the existing worker serializes the read-only inquiry; no second TCP
+    # session is opened, and no network wait runs on the GUI thread).
     class _CamCheckSignal(QObject):
-        done = pyqtSignal(int, bool)   # (cam_num, online)
+        done = pyqtSignal(int, str, str, bool)  # endpoint-bound result
 
     dialog._cam_check_sig = _CamCheckSignal()
 
-    def _apply_cam_check(cam_num: int, online: bool):
-        if not dialog.isVisible():
+    def _apply_cam_check(cam_num: int, ip: str, cam_id: str, online: bool):
+        cam = CAM1 if cam_num == 1 else CAM2
+        if not dialog.isVisible() or (cam.ip, cam.cam_id) != (ip, cam_id):
             return
         dialog._set_online_badge(dialog._cam_online_badges.get(cam_num), online)
         strip = getattr(dialog, '_strip_cam', {}).get(cam_num)
@@ -214,15 +215,16 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
     dialog._cam_check_sig.done.connect(_apply_cam_check)
 
     def _recheck_camera(cam_num: int):
-        import config as _cfg
-        from config import check_camera
-        cam = _cfg.CAM1 if cam_num == 1 else _cfg.CAM2
+        cam = CAM1 if cam_num == 1 else CAM2
+        ip, cam_id = cam.ip, cam.cam_id
         try:
-            ok = bool(check_camera(cam.ip, cam.cam_id))
+            ok = bool(mw._cameras.check_power_response(cam_num))
         except Exception:  # noqa: BLE001
             ok = False
+        if (cam.ip, cam.cam_id) != (ip, cam_id):
+            return
         cam.check = 'Green' if ok else 'Red'
-        dialog._cam_check_sig.done.emit(cam_num, ok)
+        dialog._cam_check_sig.done.emit(cam_num, ip, cam_id, ok)
 
     def _apply_ip(ip: str, cam_num: int):
         """Assign a discovered IP: update memory, live link, config.yaml and UI.
@@ -258,7 +260,7 @@ def build_cameras_tab(dialog, cameras_layout, mw, is_on, sim_active, panel_layou
         # Refresh the connectivity badges. In simulation the link is always
         # up; otherwise re-check off the GUI thread.
         if sim_active:
-            dialog._cam_check_sig.done.emit(cam_num, True)
+            dialog._cam_check_sig.done.emit(cam_num, ip, (CAM1 if cam_num == 1 else CAM2).cam_id, True)
         else:
             threading.Thread(
                 target=_recheck_camera, args=(cam_num,), daemon=True
