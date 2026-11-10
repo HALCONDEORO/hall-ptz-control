@@ -144,7 +144,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self.session_active  = False
         self._seat_pending: Optional[int] = None
         self._seat_pending_camera: Optional[int] = None
-        self._last_activity: float = time.time()
+        self._last_activity: float = time.monotonic()
         self._pan_cap:        int = PAN_SPEED_MAX   # 24 — watchdog lo reduce en error move
         self._tilt_cap:       int = TILT_SPEED_MAX  # 20 — watchdog lo reduce en error move
         self._zoom_drive_cap: int = ZOOM_DRIVE_MAX  # 7  — watchdog lo reduce en error zoom_drive
@@ -1569,14 +1569,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
                 logger.debug("ATEM signal already disconnected from slot %s", slot)
 
     def _record_activity(self):
-        self._last_activity = time.time()
+        self._last_activity = time.monotonic()
 
     _INACTIVITY_TIMEOUT = 2 * 3600  # 2 horas en segundos
 
     def _check_inactivity(self):
         if not self.session_active:
             return
-        if time.time() - self._last_activity < self._INACTIVITY_TIMEOUT:
+        if time.monotonic() - self._last_activity < self._INACTIVITY_TIMEOUT:
             return
         logger.info("Auto power-off: 2 horas sin actividad")
         self._session.shutdown("inactivity")
