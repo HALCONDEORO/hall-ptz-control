@@ -222,7 +222,13 @@ class RestoreService:
                     skipped.append(arc_name)
                     continue
                 try:
-                    self._atomic_write(zf.read(arc_name), dest)
+                    payload = zf.read(arc_name)
+                    self._atomic_write(payload, dest)
+                    # load_json recovers a corrupt primary from this sibling.
+                    # A pre-restore copy must not resurrect discarded state.
+                    recovery_copy = dest.with_suffix('.bak')
+                    if dest.suffix == '.json' and recovery_copy.exists():
+                        self._atomic_write(payload, recovery_copy)
                     restored.append(arc_name)
                 except OSError as exc:
                     failed.append(f"{arc_name} ({exc})")
