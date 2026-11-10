@@ -170,6 +170,22 @@ class TestAdminAuthVerification:
         reloaded = load_config(resolver.config_dir / "config.yaml")
         assert reloaded.site.name == "Repaired Legit"
 
+    @pytest.mark.parametrize('password,accepted', [('the-real-admin-pw', True), ('wrong', False)])
+    def test_user_gui_install_repair_authenticates_in_privileged_unit(self, isolated, monkeypatch, password, accepted):
+        resolver, tmp_path = isolated
+        self._provision_once(tmp_path, resolver)
+        # Model the root oneshot's environment after install-state.env is read.
+        monkeypatch.setenv('KHPTZ_GUI_MODE', 'user')
+        unit = (Path(__file__).resolve().parents[1] /
+                'runtime/systemd/khptz-provision.service').read_text()
+        for line in unit.splitlines():
+            if line.startswith('UnsetEnvironment='):
+                for name in line.partition('=')[2].split():
+                    monkeypatch.delenv(name, raising=False)
+        req = _write_request(tmp_path, site_name='User GUI repaired', current_admin_password=password)
+        result = provision.run_provision(req, tmp_path / 'r2.json', resolver=resolver, do_system=False)
+        assert result['ok'] is accepted
+
     def test_raw_request_cannot_bypass_via_missing_current_password(self, isolated):
         """The exact bypass this closes: a request built without ever going
         through AdminAuthPage (current_admin_password left at its default

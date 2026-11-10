@@ -26,6 +26,10 @@ Environment=LC_ALL=C.UTF-8
 Environment=PYTHONUTF8=1
 Environment=PYTHONIOENCODING=utf-8
 EnvironmentFile=-/etc/khptz/install-state.env
+# This root oneshot is not the session-owned GUI. Keep its repair password
+# check enabled even when the installed GUI runs in user mode. GUI auth stays
+# fail-closed until its own privileged verification broker exists.
+UnsetEnvironment=KHPTZ_GUI_MODE
 
 StandardOutput=journal
 StandardError=journal
