@@ -188,3 +188,19 @@ def test_diagnostic_tcp_scan_never_probes_configured_camera_sessions():
          patch.object(ss, 'tcp_scan', return_value=['192.0.2.20']) as scan:
         assert ss.SplashScreen._test_tcp_scan(stub) is True
     scan.assert_called_once_with('192.0.2', exclude_ips={'192.0.2.11', '192.0.2.12'})
+
+
+def test_diagnostic_tcp_scan_passes_when_only_managed_cameras_exist():
+    """Regresión: tras excluir las cámaras gestionadas del escaneo (8c8e8a6),
+    una instalación sana (solo las 2 cámaras configuradas) encontraba cero
+    hosts y el test fallaba, mostrando en cada arranque "8/9 tests passed"
+    y el chip TCP en rojo. Un escaneo completado sin hallazgos es un éxito:
+    los hallazgos son informativos y se registran en el log.
+    """
+    stub = MagicMock()
+    with patch.object(ss._sim_mode, 'is_active', return_value=False), \
+         patch.object(ss, 'get_camera_subnet', return_value='192.0.2'), \
+         patch.object(ss, 'CAM1', types.SimpleNamespace(ip='192.0.2.11')), \
+         patch.object(ss, 'CAM2', types.SimpleNamespace(ip='192.0.2.12')), \
+         patch.object(ss, 'tcp_scan', return_value=[]):
+        assert ss.SplashScreen._test_tcp_scan(stub) is True

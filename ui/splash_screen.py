@@ -1176,7 +1176,10 @@ class SplashScreen(QWidget):
             self._update_log(f"  VISCA found: {', '.join(found)}")
         else:
             self._update_log(f"  No VISCA devices on {subnet}.x")
-        return bool(found)
+        # El escaneo es informativo: haberlo completado ya es un éxito.
+        # Un resultado vacío es lo normal en una instalación sana (las dos
+        # cámaras gestionadas están excluidas), así que no puede ser fallo.
+        return True
 
     def _test_arp_table(self) -> bool:
         """
