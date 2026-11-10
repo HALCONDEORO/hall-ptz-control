@@ -708,13 +708,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         logger.info("Watchdog VISCA: estado y caps restablecidos al inicio de sesión")
 
     def _on_worker_ready(self, worker) -> None:
-        worker.signals.visca_error.connect(self._on_visca_speed_error)
-        worker.signals.connection_changed.connect(
-            lambda ok, _ip=worker.ip: self._on_cam_connected(ok, _ip))
-        worker.signals.connection_changed.connect(
-            lambda ok, _ip=worker.ip: self._on_cam_connection_changed(ok, _ip))
-        from ui.camera_led_wiring import wire_connecting_led
-        wire_connecting_led(self, worker)
+        from ui.camera_led_wiring import wire_camera_worker
+        wire_camera_worker(self, worker)
 
     def _on_cam_connection_changed(self, ok: bool, ip: str) -> None:
         """Refleja el estado de conexión del worker en el LED de la cámara.
@@ -727,6 +722,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
             cam_key = self._cameras.cam_key(ip)
         except ValueError:
             return
+        ok = self._cameras.is_connected(ip)  # delivery-time transport snapshot
         (self.Cam1 if cam_key == 1 else self.Cam2).set_connected(ok)
         self._update_controls_visibility()
 
@@ -1735,8 +1731,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._right_panel.set_exposure_level(self._cameras.exposure_level[cam_key])
 
     def _update_controls_visibility(self):
-        connected = self.Cam1._connected if self.Cam1.isChecked() else self.Cam2._connected
-        self._right_panel.show_camera_controls(connected and self.session_active)
+        from ui.camera_controls_visibility import update_camera_controls_visibility
+        update_camera_controls_visibility(self)
 
     @pyqtSlot()
     def _update_backlight_ui(self):
