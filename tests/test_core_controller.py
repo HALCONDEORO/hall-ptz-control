@@ -478,6 +478,7 @@ def test_move_command_result_controls_state_commit():
             expected = (5, 4) if accepted else (0, 0)
             assert (h.state.cam1.pan_speed, h.state.cam1.tilt_speed) == expected
 
+
 def test_chairman_missing_preset_logs_without_formatting_error(caplog):
     from core.events import Event
 
