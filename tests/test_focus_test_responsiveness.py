@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 
 def test_focus_test_uses_worker_and_stops_after_dialog_finishes():
     script = r'''
@@ -112,4 +114,73 @@ port2.first.assert_not_called()
         cwd=Path(__file__).resolve().parents[1],
         env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
         capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+@pytest.mark.parametrize("change", ["end", "restart", "shutdown"])
+def test_focus_test_stops_when_session_changes_with_dialog_open(change):
+    script = r'''
+import threading
+import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+from PyQt5.QtWidgets import QApplication, QPushButton
+from PyQt5.QtCore import QTimer
+import adapters.sim_mode as sim
+with TemporaryDirectory() as root:
+    sim._APP_DIR = Path(root)
+    sim.BACKUP = Path(root) / 'backup.json'
+    sim.activate()
+    app = QApplication([])
+    from ui.main_window import MainWindow
+    from ui.config_dialog import ConfigDialog
+    window = MainWindow()
+    entered, release = threading.Event(), threading.Event()
+    calls = []
+    def operation(cam):
+        calls.append((cam, threading.current_thread()))
+        entered.set()
+        release.wait(.3)
+        return SimpleNamespace(ok=True)
+    port = Mock()
+    port.focus_auto = operation
+    window._camera_port = port
+    dialog = ConfigDialog(window)
+    run = next(b for b in dialog.findChildren(QPushButton) if b.text() == 'Run Test')
+    run.click()
+    deadline = time.monotonic() + 1
+    while not entered.is_set() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(.005)
+    assert entered.is_set()
+    assert calls[0][1] is not threading.current_thread(), 'Focus command blocked Qt thread'
+    seen = []
+    QTimer.singleShot(0, lambda: seen.append(True))
+    app.processEvents()
+    assert seen == [True]
+    # CHANGE_SESSION
+    release.set()
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(.005)
+    port.one_push_af.assert_not_called()
+    port.focus_manual.assert_not_called()
+    port.brightness_down.assert_not_called()
+    assert run.isEnabled()
+    assert run.text() == 'Run Test'
+    window.hide()
+    sim.deactivate()
+'''
+    changes = {
+        'end': 'window._session._session_generation += 1; window.session_active = False',
+        'restart': 'window._session._session_generation += 2; window.session_active = True',
+        'shutdown': 'window._shutting_down = True',
+    }
+    script = script.replace('# CHANGE_SESSION', changes[change])
+    result = subprocess.run([sys.executable, '-c', script],
+        cwd=Path(__file__).resolve().parents[1],
+        env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+        capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr

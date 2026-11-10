@@ -47,13 +47,21 @@ CHAIRMAN_GENERIC_PRESET = PRESET_CHAIRMAN_GENERIC
 def load_chairman_presets() -> dict[str, int]:
     """
     Carga el mapa nombre→número_de_preset desde chairman_presets.json.
-    Devuelve dict vacío si el archivo no existe o está corrupto.
+    Si falta el archivo principal, intenta el .bak antes de usar un dict vacío.
 
     Si el JSON contiene dos personas con el mismo número de preset (duplicado),
     se mantiene la primera aparición y se descarta la segunda, registrando
     un warning para que el administrador pueda corregirlo manualmente.
     """
-    data = load_json(CHAIRMAN_PRESETS_FILE, default={})
+    source = CHAIRMAN_PRESETS_FILE
+    if not source.exists() and source.with_suffix('.bak').is_file():
+        # A missing primary is not evidence of a new install. Preserve any
+        # recoverable slot reservations, instead of reusing physical VISCA slots.
+        # Do not restore over an explicitly empty primary or write during load.
+        source = source.with_suffix('.bak')
+        logger.warning("%s missing; loading previous chairman mapping from %s. "
+                       "Verify saved camera positions before use.", CHAIRMAN_PRESETS_FILE, source)
+    data = load_json(source, default={})
     if not isinstance(data, dict):
         logger.warning("%s: formato inesperado — iniciando sin presets personales", CHAIRMAN_PRESETS_FILE)
         return {}

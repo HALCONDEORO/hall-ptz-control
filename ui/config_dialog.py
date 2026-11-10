@@ -513,7 +513,18 @@ class ConfigDialog(QDialog):
 
             from ui.camera_diagnostic_runner import CameraDiagnosticRunner
 
-            runner = CameraDiagnosticRunner(self, port, cam_id, test_cmds)
+            generation = mw._session._session_generation
+
+            def _same_session():
+                return (not getattr(mw, '_shutting_down', False)
+                        and mw._session._session_generation == generation)
+
+            runner = CameraDiagnosticRunner(
+                self, port, cam_id, test_cmds, is_current=_same_session,
+            )
+            runner.interrupted.connect(
+                lambda: (btn_run_test.setEnabled(True), btn_run_test.setText('Run Test'))
+            )
             self._camera_diagnostic_runner = runner
             runner.result.connect(
                 lambda idx, ok: self._set_led(test_indicators[idx], 'green' if ok else 'red')
