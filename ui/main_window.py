@@ -353,7 +353,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
 
         import adapters.sim_mode as _sm
         if _sm.is_active():
-            self._session.ToggleSession()
+            if not getattr(self, 'session_active', False):
+                self._session.ToggleSession()
             return
 
         # Producción: ofrecer encender las cámaras al arrancar. El contrato de
@@ -363,36 +364,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._maybe_prompt_power_on()
 
     def _maybe_prompt_power_on(self) -> None:
-        """Preguntar al arrancar si encender las cámaras (elección del operador).
-
-        Conforme al contrato: la sesión solo arranca si el operador confirma;
-        al rechazar, las cámaras quedan como están (sin arranque automático).
-        No se muestra si ya hay sesión activa o si no hay ninguna cámara con IP
-        válida configurada (no habría nada que encender).
-        """
-        if getattr(self, 'session_active', False):
-            return
-        from config import CAM1, CAM2, is_valid_ip
-        if not (is_valid_ip(CAM1.ip) or is_valid_ip(CAM2.ip)):
-            return
-
-        from PyQt5.QtWidgets import QMessageBox
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle('Start-up')
-        box.setText('Power on the cameras now?')
-        box.setInformativeText(
-            'Choose "Power on cameras" to switch both cameras on and send them '
-            'home, or "Leave as they are" to start without powering the cameras. '
-            'You can always start later with the session button.'
-        )
-        yes_btn = box.addButton('Power on cameras', QMessageBox.AcceptRole)
-        box.addButton('Leave as they are', QMessageBox.RejectRole)
-        box.setDefaultButton(yes_btn)
-        fit_message_box_buttons(box)
-        box.exec_()
-        if box.clickedButton() is yes_btn:
-            self._session.ToggleSession()
+        from ui.startup_power_prompt import maybe_prompt_power_on
+        maybe_prompt_power_on(self)
 
     # ─────────────────────────────────────────────────────────────────────
     # Construcción de la UI

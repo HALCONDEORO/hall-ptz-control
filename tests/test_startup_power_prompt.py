@@ -1,128 +1,120 @@
-#!/usr/bin/env python3
-# Copyright (c) 2026 MACD Adaptive Limited.
-# Licensed under the MIT License. See LICENSE in the repository root.
-"""Tests for the startup "power on cameras?" prompt (MainWindow._maybe_prompt_power_on).
+"""Run Qt-sensitive checks in a fresh interpreter, away from suite stubs."""
+import os
+from pathlib import Path
+import subprocess
+import sys
 
-The lifecycle contract forbids AUTOMATIC session start on boot but allows an
-explicit operator action via a confirmed dialog. These tests exercise the
-method's decision logic without constructing a full MainWindow or a real Qt
-event loop: the method is called with a lightweight fake ``self`` and
-``QMessageBox`` is replaced with a stub that returns a chosen button.
-"""
-
-from __future__ import annotations
-
-
-import pytest
-
-from ui.main_window import MainWindow
-
-
-class _FakeSession:
-    def __init__(self):
-        self.toggled = 0
-
-    def ToggleSession(self):
-        self.toggled += 1
+if os.environ.get('KHPTZ_ISOLATED_TEST_STARTUP_POWER_PROMPT_PY') != '1':
+    def test_isolated_qt_regressions():
+        env = dict(os.environ, KHPTZ_ISOLATED_TEST_STARTUP_POWER_PROMPT_PY='1', QT_QPA_PLATFORM='offscreen')
+        result = subprocess.run(
+            [sys.executable, '-m', 'pytest', str(Path(__file__).resolve()),
+             '-q', '-o', 'addopts='], env=env, capture_output=True, text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+else:
+    """Startup prompt is touch sized, asynchronous, and uses the session path."""
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    import pytest
 
 
-class _FakeSelf:
-    """Minimal stand-in exposing only what _maybe_prompt_power_on touches."""
-
-    def __init__(self, session_active=False):
-        self.session_active = session_active
-        self._session = _FakeSession()
-
-
-class _StubButton:
-    def __init__(self, role):
-        self.role = role
-
-
-class _StubMessageBox:
-    """Records construction and returns a preset clicked button from exec_()."""
-
-    Question = 4
-    AcceptRole = 0
-    RejectRole = 1
-
-    # Which role the operator "clicks"; set by each test before exec_.
-    click_role = AcceptRole
-
-    def __init__(self, *_a, **_kw):
-        self._buttons = {}
-        self._clicked = None
-
-    def setIcon(self, *_a):
-        pass
-
-    def setWindowTitle(self, *_a):
-        pass
-
-    def setText(self, *_a):
-        pass
-
-    def setInformativeText(self, *_a):
-        pass
-
-    def addButton(self, _label, role):
-        btn = _StubButton(role)
-        self._buttons[role] = btn
-        return btn
-
-    def setDefaultButton(self, *_a):
-        pass
-
-    def exec_(self):
-        self._clicked = self._buttons.get(type(self).click_role)
-
-    def clickedButton(self):
-        return self._clicked
+    @pytest.fixture
+    def window(monkeypatch):
+        from conftest import ensure_real_qt
+        ensure_real_qt()
+        from PyQt5.QtWidgets import QApplication, QWidget
+        import config
+        app = QApplication.instance() or QApplication([])
+        monkeypatch.setattr(config.CAM1, 'ip', '192.0.2.11')
+        monkeypatch.setattr(config.CAM2, 'ip', '192.0.2.12')
+        widget = QWidget()
+        widget.session_active = False
+        widget._session = SimpleNamespace(ToggleSession=Mock())
+        yield widget, app
+        widget.close()
+        app.processEvents()
 
 
-@pytest.fixture
-def patched_config(monkeypatch):
-    """Provide controllable CAM1/CAM2 IPs and a real is_valid_ip via config."""
-    import config
-
-    def _set(cam1_ip, cam2_ip):
-        monkeypatch.setattr(config.CAM1, "ip", cam1_ip, raising=False)
-        monkeypatch.setattr(config.CAM2, "ip", cam2_ip, raising=False)
-
-    return _set
+    def prompt(window):
+        from ui.main_window import MainWindow
+        MainWindow._maybe_prompt_power_on(window)
 
 
-def _run(monkeypatch, fake_self, click_role):
-    # Decision-only double: real Qt sizing is covered by test_message_box_layout.
-    monkeypatch.setattr("ui.main_window.fit_message_box_buttons", lambda _box: None)
-    _StubMessageBox.click_role = click_role
-    monkeypatch.setattr("PyQt5.QtWidgets.QMessageBox", _StubMessageBox)
-    MainWindow._maybe_prompt_power_on(fake_self)
+    def test_returns_without_nested_event_loop_and_has_full_touch_buttons(window):
+        from PyQt5.QtWidgets import QMessageBox
+        widget, app = window
+        with patch.object(QMessageBox, 'exec_', side_effect=AssertionError('blocking dialog')):
+            prompt(widget)
+        app.processEvents()
+        box = widget._startup_power_prompt
+        assert box.text() == 'Turn on the cameras now?'
+        assert [b.text() for b in box.buttons()] == ['Turn on cameras', 'Not now']
+        assert all(b.height() >= 52 for b in box.buttons())
+        widget._session.ToggleSession.assert_not_called()
+        box.reject()
 
 
-def test_no_prompt_when_no_camera_configured(monkeypatch, patched_config):
-    patched_config("", "")  # no valid IPs → nothing to power on
-    fake = _FakeSelf()
-    _run(monkeypatch, fake, _StubMessageBox.AcceptRole)
-    assert fake._session.toggled == 0
+    @pytest.mark.parametrize('accept', [True, False])
+    def test_yes_uses_existing_session_path_no_is_noop(window, accept):
+        widget, app = window
+        prompt(widget)
+        box = widget._startup_power_prompt
+        box.buttons()[0 if accept else 1].click()
+        app.processEvents()
+        assert widget._session.ToggleSession.call_count == int(accept)
+        assert widget._startup_power_prompt is None
 
 
-def test_no_prompt_when_session_already_active(monkeypatch, patched_config):
-    patched_config("172.16.1.11", "172.16.1.12")
-    fake = _FakeSelf(session_active=True)
-    _run(monkeypatch, fake, _StubMessageBox.AcceptRole)
-    assert fake._session.toggled == 0
+    def test_existing_session_or_existing_prompt_never_repeats(window):
+        widget, _ = window
+        widget.session_active = True
+        prompt(widget)
+        assert not hasattr(widget, '_startup_power_prompt')
+        widget.session_active = False
+        prompt(widget)
+        first = widget._startup_power_prompt
+        prompt(widget)
+        assert widget._startup_power_prompt is first
+        widget.session_active = True
+        first.buttons()[0].click()
+        widget._session.ToggleSession.assert_not_called()
 
 
-def test_accept_powers_on(monkeypatch, patched_config):
-    patched_config("172.16.1.11", "")  # one valid camera is enough
-    fake = _FakeSelf()
-    _run(monkeypatch, fake, _StubMessageBox.AcceptRole)
-    assert fake._session.toggled == 1
+    def test_no_camera_never_prompts(window, monkeypatch):
+        import config
+        widget, _ = window
+        monkeypatch.setattr(config.CAM1, 'ip', '')
+        monkeypatch.setattr(config.CAM2, 'ip', '')
+        prompt(widget)
+        assert not hasattr(widget, '_startup_power_prompt')
 
 
-def test_decline_leaves_cameras_off(monkeypatch, patched_config):
-    patched_config("172.16.1.11", "172.16.1.12")
-    fake = _FakeSelf()
-    _run(monkeypatch, fake, _StubMessageBox.RejectRole)
-    assert fake._session.toggled == 0
+    def test_startup_done_reaches_prompt_after_login_splash(window):
+        from ui.main_window import MainWindow
+        widget, _ = window
+        widget._splash_overlay = Mock()
+        widget._refresh_zoom = Mock()
+        widget._right_panel = Mock()
+        widget._maybe_prompt_power_on = Mock()
+        with patch('adapters.sim_mode.is_active', return_value=False):
+            MainWindow._on_startup_done(widget)
+        widget._splash_overlay.hide.assert_called_once()
+        widget._maybe_prompt_power_on.assert_called_once()
+        widget._session.ToggleSession.assert_not_called()
+
+
+    def test_simulation_preserves_existing_startup_path_without_duplicate_session(window):
+        from ui.main_window import MainWindow
+        widget, _ = window
+        widget._splash_overlay = Mock()
+        widget._refresh_zoom = Mock()
+        widget._right_panel = Mock()
+        widget._maybe_prompt_power_on = Mock()
+        with patch('adapters.sim_mode.is_active', return_value=True):
+            MainWindow._on_startup_done(widget)
+            widget.session_active = True
+            MainWindow._on_startup_done(widget)
+        widget._session.ToggleSession.assert_called_once()
+        widget._maybe_prompt_power_on.assert_not_called()
