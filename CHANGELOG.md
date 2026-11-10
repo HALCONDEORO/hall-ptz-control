@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Report unsupported ATEM PiP state once instead of failing silently on
+  every monitor poll, and expose the unsupported capability.
 - Each logging handler receives its own repeat filter so file logs do not
   lose records already seen by the console; startup tests isolate filter state.
 - Test setup preloads real Qt and shared UI modules so later tests do not

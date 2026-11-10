@@ -301,8 +301,8 @@ class ATEMMonitor(QThread):
                 # instead of failing silently on every 100 ms poll.
                 self._pip_supported = False
                 logger.warning(
-                    "ATEM PiP: la librería PyATEMMax no expone pictureInPicture; "
-                    "la detección de PiP no está disponible con este ATEM/librería"
+                    "ATEM PiP: PyATEMMax does not expose pictureInPicture; "
+                    "PiP detection is unavailable with this ATEM/library"
                 )
                 return
             pip_block = pip_state_list[0]
