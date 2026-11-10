@@ -31,7 +31,7 @@ from typing import Callable, Optional, Protocol, cast
 
 import config as _config
 from config import is_valid_ip
-from config.writer import patch_config_yaml
+from config.effective import patch_runtime_config as patch_config_yaml
 from domain.supportability import OperationCode, OperationResult
 
 logger = logging.getLogger(__name__)
@@ -157,6 +157,12 @@ class CameraConfigService:
         path = self._config_path()
         if path is None or not path.exists():
             return ""
+        try:
+            from config.effective import load_effective_config
+            saved = load_effective_config(path).cameras[camera - 1]
+            return self._nonempty_string(getattr(saved, field, ""))
+        except (OSError, ValueError, IndexError):
+            pass
         try:
             raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except (OSError, yaml.YAMLError):

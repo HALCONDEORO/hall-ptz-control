@@ -159,9 +159,15 @@ class _CamEditDialog(QDialog):
         svc = getattr(self._mw, '_camera_config', None)
         if svc is not None:
             if self._config_type == 'ip':
-                svc.set_camera_ip(self._cam_num, text)
+                result = svc.set_camera_ip(self._cam_num, text)
             else:
-                svc.set_camera_visca_id(self._cam_num, text)
+                result = svc.set_camera_visca_id(self._cam_num, text)
+            if result.code != "OK":
+                self._err.setText(result.message or 'Not saved. Check configuration permissions.')
+                return
+        else:
+            self._err.setText('Configuration service unavailable. Nothing saved.')
+            return
 
         self.accept()
 
@@ -264,6 +270,12 @@ class _ATEMEditDialog(QDialog):
         # ATEM IP write goes through CameraConfigService (ADR-006).
         svc = getattr(self._mw, '_camera_config', None)
         if svc is not None:
-            svc.set_atem_ip(text)
+            result = svc.set_atem_ip(text)
+            if result.code != "OK":
+                self._err.setText(result.message or 'Not saved. Check configuration permissions.')
+                return
+        else:
+            self._err.setText('Configuration service unavailable. Nothing saved.')
+            return
 
         self.accept()

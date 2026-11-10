@@ -226,6 +226,14 @@ class RestoreService:
                     restored.append(arc_name)
                 except OSError as exc:
                     failed.append(f"{arc_name} ({exc})")
+            # An older backup has no overrides. Do not let stale endpoints
+            # defeat its restored YAML; the safety backup above retains them.
+            if (CONFIG_ARCHIVE_NAME in restored and "camera_overrides.json" not in to_restore
+                    and not failed):
+                try:
+                    (self._data_dir / "camera_overrides.json").unlink(missing_ok=True)
+                except OSError as exc:
+                    failed.append(f"camera_overrides.json reset ({exc})")
 
         return RestoreResult(
             pre_restore_backup=pre_backup,

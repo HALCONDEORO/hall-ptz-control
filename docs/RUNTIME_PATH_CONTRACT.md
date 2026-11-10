@@ -339,3 +339,24 @@ updating this document and getting a review comment acknowledging the change.
 
 If khptz doctor does not report the correct path layout, the installation is
 not customer-ready.
+
+## Runtime camera endpoint overrides
+
+The system GUI cannot atomically replace root-owned `/etc/khptz/config.yaml`.
+Do not grant it write access to that directory, its markers or its secrets.
+On product installs endpoint edits are stored in
+`/var/lib/khptz/camera_overrides.json`. Only camera IP/VISCA ID (keyed by the
+existing camera ID), ATEM IP and PiP nudge settings are allowed. Roles, feature
+flags, credentials and installation identity remain in the base configuration.
+
+Runtime consumers use `load_effective_config`: base YAML plus the validated
+non-secret overrides. Missing/corrupt overrides leave the base YAML active and
+log a warning. An invalid save or an unwritable data directory is reported as
+not saved; the UI must not claim persistence. Source configurations keep their
+existing writable-YAML path unless an override already exists.
+
+Backups include this file. Restoring an older backup containing config.yaml but
+no override removes stale overrides after making the normal safety backup.
+Wizard Repair pre-fills effective values and removes old overrides after writing
+the new base configuration. Its integration rollback snapshot includes the
+previous overrides. This change never widens permissions on `/etc/khptz`.

@@ -25,6 +25,7 @@ readonly RC_DIAGNOSTICS_FATAL=40
 
 ROLLBACK_TARGETS=(
     "/etc/khptz/config.yaml"
+    "/var/lib/khptz/camera_overrides.json"
     "/var/lib/khptz/password.enc"
     "/etc/khptz/secrets/admin.enc"
     "${PROVISIONED_MARKER}"

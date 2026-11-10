@@ -45,6 +45,7 @@ DATA_ARCHIVE_NAMES: Final[Tuple[str, ...]] = (
     # hardware, so a restore that omitted it would silently drop the ATEM
     # action mapping and the PiP-automation setting.
     "atem_mapping.json",
+    "camera_overrides.json",
 )
 
 #: Every archive member a valid backup may contain, including the manifest.

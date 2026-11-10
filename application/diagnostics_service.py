@@ -368,8 +368,8 @@ class DiagnosticsService:
         if not self._config_path.exists():
             return None
         try:
-            from config.loader import load_config
-            return load_config(self._config_path)
+            from config.effective import load_effective_config as load_config
+            return load_config(self._config_path, self._data_dir / "camera_overrides.json")
         except Exception:  # noqa: BLE001
             return None
 
@@ -544,8 +544,8 @@ class DiagnosticsService:
             )
         if settings is None:
             try:
-                from config.loader import load_config
-                load_config(self._config_path)
+                from config.effective import load_effective_config as load_config
+                load_config(self._config_path, self._data_dir / "camera_overrides.json")
             except Exception as exc:  # noqa: BLE001
                 return CheckResult("config", Status.FAIL, f"config.yaml invalid: {exc}")
         return CheckResult("config", Status.OK, f"config.yaml loaded OK ({self._config_path})")

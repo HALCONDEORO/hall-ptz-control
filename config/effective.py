@@ -1,0 +1,106 @@
+"""Validated, non-secret runtime overrides without writable /etc configuration.
+
+The base YAML remains root-owned. Only endpoint and PiP nudge fields may be
+changed by the running service; credentials, roles and feature flags never are.
+"""
+from __future__ import annotations
+
+from dataclasses import asdict
+import json
+import logging
+from pathlib import Path
+
+from config.loader import build_settings, load_config
+from core.atomic_write import write_text_atomic
+from runtime.path_resolver import RuntimePathResolver
+
+OVERLAY_NAME = 'camera_overrides.json'
+logger = logging.getLogger(__name__)
+
+
+def overlay_file() -> Path:
+    return RuntimePathResolver().data_dir / OVERLAY_NAME
+
+
+def _merge(base, raw):
+    if not isinstance(raw, dict) or set(raw) - {'schema_version', 'cameras', 'atem'}:
+        raise ValueError('Invalid runtime override fields')
+    if type(raw.get('schema_version')) is not int or raw['schema_version'] != 1:
+        raise ValueError('Unsupported runtime override version')
+    merged = asdict(base)
+    by_id = {cam['id']: cam for cam in merged['cameras']}
+    cameras = raw.get('cameras', {})
+    if not isinstance(cameras, dict):
+        raise ValueError('Camera overrides must be a mapping')
+    for cam_id, changes in cameras.items():
+        if cam_id not in by_id or not isinstance(changes, dict) or set(changes) - {'ip', 'visca_id'}:
+            raise ValueError('Unknown camera or override field')
+        if not all(isinstance(v, str) and v for v in changes.values()):
+            raise ValueError('Camera endpoints must be strings')
+        by_id[cam_id].update(changes)
+    atem = raw.get('atem', {})
+    if not isinstance(atem, dict) or set(atem) - {'ip', 'pip_nudge'}:
+        raise ValueError('Invalid ATEM override fields')
+    if 'ip' in atem and not isinstance(atem['ip'], str):
+        raise ValueError('ATEM IP must be a string')
+    if 'pip_nudge' in atem:
+        nudge = atem['pip_nudge']
+        if not isinstance(nudge, dict) or set(nudge) - {'camera_role', 'pan_speed', 'direction', 'duration_ms'}:
+            raise ValueError('Invalid PiP nudge override fields')
+        merged['atem']['pip_nudge'].update(nudge)
+    if 'ip' in atem:
+        merged['atem']['ip'] = atem['ip']
+    for cam in merged['cameras']:
+        cam['visca_id'] = cam['visca_id'].upper()
+    return build_settings(merged)
+
+
+def _read(path: Path):
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def load_effective_config(config_path: Path, overlay_path: Path | None = None):
+    """Load base YAML and valid endpoint overrides, falling back on corruption."""
+    base = load_config(config_path)
+    path = overlay_path if overlay_path is not None else overlay_file()
+    if not path.exists():
+        return base
+    try:
+        return _merge(base, _read(path))
+    except (OSError, ValueError, TypeError, KeyError):
+        logger.warning('Runtime camera overrides invalid or unreadable; using base YAML')
+        return base
+
+
+def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
+                         cam_index=None, cam_ip=None, cam_visca_id=None,
+                         atem_ip=None, atem_pip_nudge=None):
+    """Persist validated endpoint updates atomically; never widen /etc permissions.
+
+    Non-product/source configurations retain their existing YAML write contract.
+    Explicit overlay_path supports tests and controlled non-product deployments.
+    """
+    path = overlay_path if overlay_path is not None else overlay_file()
+    if overlay_path is None and config_path.parent != Path('/etc/khptz') and not path.exists():
+        from config.writer import patch_config_yaml
+        return patch_config_yaml(config_path, cam_index=cam_index, cam_ip=cam_ip,
+                                 cam_visca_id=cam_visca_id, atem_ip=atem_ip,
+                                 atem_pip_nudge=atem_pip_nudge)
+    base = load_config(config_path)
+    raw = _read(path) if path.exists() else {'schema_version': 1}
+    # Do not silently erase corrupt overrides while claiming an update succeeded.
+    _merge(base, raw)
+    if cam_ip is not None or cam_visca_id is not None:
+        if type(cam_index) is not int or not 0 <= cam_index < len(base.cameras):
+            raise ValueError('Unknown camera index')
+        entry = raw.setdefault('cameras', {}).setdefault(base.cameras[cam_index].id, {})
+        if cam_ip is not None:
+            entry['ip'] = cam_ip
+        if cam_visca_id is not None:
+            entry['visca_id'] = cam_visca_id
+    if atem_ip is not None:
+        raw.setdefault('atem', {})['ip'] = atem_ip
+    if atem_pip_nudge is not None:
+        raw.setdefault('atem', {}).setdefault('pip_nudge', {}).update(atem_pip_nudge)
+    _merge(base, raw)
+    write_text_atomic(path, json.dumps(raw, indent=2) + '\n')
