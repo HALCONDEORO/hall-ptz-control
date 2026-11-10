@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Login mode toggle (Operator/Admin) no longer resets the failed-attempt
+  counter, so the progressive lockout cannot be bypassed by switching modes.
 - Restore rejects a backup whose manifest declares a hash for a member
   missing from the archive, before any write, in both normal and dry-run mode.
 - Support bundle: collector errors and content are redacted before the ZIP is
