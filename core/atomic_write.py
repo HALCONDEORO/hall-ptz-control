@@ -12,7 +12,7 @@ Policy implemented:
   1. Parent directory is created if it does not exist.
   2. Content is written to a temporary file in the same directory (same FS,
      guaranteeing that os.replace is atomic at the filesystem level).
-  3. The temp file is created privately (0600) via os.open, so secrets never
+  3. A unique temp file is created privately (0600) via mkstemp/O_EXCL, so secrets never
      have a world-readable window before the final mode is applied.
   4. The temp file is fsync'd before the rename, and the parent directory is
      fsync'd after, so a completed write survives power loss (best-effort:
@@ -105,9 +105,8 @@ def write_bytes_atomic(dest: Path, data: bytes, *, mode: "int | None" = None) ->
     # specific mode (secrets pass 0o600) are honoured exactly as before.
     if mode is None:
         mode = group_shared_mode(dest.parent)
-    # Remove only the legacy fixed-name orphan, never another current writer's
-    # temporary file. mkstemp uses exclusive creation and a private 0600 mode.
-    dest.with_suffix(dest.suffix + ".tmp").unlink(missing_ok=True)
+    # A writer owns only its unique temporary file, never a legacy fixed-name
+    # orphan or another writer's file. mkstemp is exclusive and private (0600).
     fd, tmp_name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".tmp", dir=dest.parent)
     tmp = Path(tmp_name)
     try:

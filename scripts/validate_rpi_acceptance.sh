@@ -353,7 +353,7 @@ fi
 # administrator password to every account in the khptz group, and the key is
 # derived from the world-readable /etc/machine-id.
 _secret_findings=0
-for _secret in /var/lib/khptz/password.enc /var/lib/khptz/admin.enc; do
+for _secret in /var/lib/khptz/password.enc /etc/khptz/secrets/admin.enc; do
     [[ -e "${_secret}" ]] || continue
     _mode="$(stat -c '%a' "${_secret}" 2>/dev/null || true)"
     if [[ "${_mode}" == "600" ]]; then
@@ -363,7 +363,7 @@ for _secret in /var/lib/khptz/password.enc /var/lib/khptz/admin.enc; do
         _secret_findings=$((_secret_findings + 1))
     fi
 done
-[[ ${_secret_findings} -eq 0 ]] || say "         fix with: sudo chmod 600 /var/lib/khptz/*.enc"
+[[ ${_secret_findings} -eq 0 ]] || say "         inspect secret ownership and permissions; see docs/HARDENING2.md"
 
 # ── Boot journal: the errors #890 says must not return ───────────────────────
 
