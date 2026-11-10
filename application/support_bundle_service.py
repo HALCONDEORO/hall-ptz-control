@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import zipfile
+import uuid
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,9 @@ class SupportBundleService:
         stamp    = _utc_stamp()
         id_short = self._installation_id[:8] if len(self._installation_id) >= 8 \
                    else self._installation_id
-        bundle_id = f"support-{stamp}-{id_short}"
+        # Multiple clicks/threads in one second must not replace a previous
+        # snapshot or share its temporary ZIP while it is being written.
+        bundle_id = f"support-{stamp}-{id_short}-{uuid.uuid4().hex}"
         out_path  = self._output_dir / f"{bundle_id}.zip"
 
         events, events_status   = self._collect_events()
