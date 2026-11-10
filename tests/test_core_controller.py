@@ -454,3 +454,16 @@ class TestSystemStateValidation:
         s = SystemState()
         with pytest.raises(ValueError):
             s.camera(3)
+
+
+def test_chairman_missing_preset_logs_without_formatting_error(caplog):
+    from core.events import Event
+
+    with _Harness() as h:
+        h.presets.map['Missing'] = None
+        h.camera.recall_ok = False
+        with caplog.at_level('WARNING', logger='core.controller'):
+            h.controller._on_chairman_assigned(
+                Event(EventType.CHAIRMAN_ASSIGNED, {'name': 'Missing'})
+            )
+        assert 'fallo al hacer recall preset' in caplog.text
