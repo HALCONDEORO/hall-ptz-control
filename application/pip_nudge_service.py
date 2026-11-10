@@ -66,6 +66,7 @@ class PiPNudgeService:
         self._cfg = settings
         self._session_provider = session_provider or (lambda: True)
         self._nudge_active = False
+        self._observed_enabled: bool | None = None
         self._return_nudge: tuple[int, int] | None = None
         self._pending_stop: threading.Timer | None = None
         self._generation = 0  # incrementado en cada _apply(); evita stop tardío
@@ -82,10 +83,15 @@ class PiPNudgeService:
         if not self._session_provider():
             logger.debug("[PiPNudge] pip_changed ignorado: sesión inactiva")
             return
-        if pip_state.enabled:
-            self.on_pip_on()
-        else:
-            self.on_pip_off()
+        with self._lock:
+            enabled = pip_state.enabled
+            if enabled == self._observed_enabled:
+                return
+            self._observed_enabled = enabled
+            if enabled:
+                self.on_pip_on()
+            else:
+                self.on_pip_off()
 
     def on_pip_on(self) -> None:
         """Aplica el desplazamiento lateral al activarse el PiP."""
