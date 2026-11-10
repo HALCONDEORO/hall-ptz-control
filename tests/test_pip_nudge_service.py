@@ -105,9 +105,14 @@ class TestPiPNudgeService:
     def test_stop_move_called_after_duration(self):
         """stop_move se llama al expirar el timer."""
         svc, port = _svc(pan_speed=5, duration_ms=80)
-        svc.on_pip_on()
-        time.sleep(0.2)   # espera 200ms > 80ms
-        port.stop_move.assert_called_with("cam1")
+        stopped = threading.Event()
+        port.stop_move.side_effect = lambda *_: stopped.set()
+        try:
+            svc.on_pip_on()
+            assert stopped.wait(5), "duration timer never delivered STOP"
+            port.stop_move.assert_called_once_with("cam1")
+        finally:
+            svc.cancel()
 
     def test_stop_move_not_called_if_cancelled_before_timer(self):
         """Si el timer se cancela antes de disparar, stop_move no se llama."""
@@ -117,14 +122,52 @@ class TestPiPNudgeService:
         time.sleep(0.1)   # espera para dar tiempo al timer (si no fue cancelado)
         port.stop_move.assert_not_called()
 
-    def test_generation_counter_prevents_stale_stop(self):
-        """Un stop tardío de pip_on no interrumpe el movimiento de pip_off."""
+    def test_generation_counter_prevents_stale_stop(self, monkeypatch):
+        """An already-started old callback cannot stop the newer movement."""
+        timers = []
+
+        class ControlledTimer:
+            def __init__(self, interval, callback, args):
+                self.callback, self.args = callback, args
+                self.cancelled = False
+                timers.append(self)
+
+            def start(self):
+                pass  # The test releases callbacks in a specified order.
+
+            def cancel(self):
+                self.cancelled = True
+
+        monkeypatch.setattr('application.pip_nudge_service.threading.Timer', ControlledTimer)
         svc, port = _svc(pan_speed=5, duration_ms=50)
+        entered, release, finished = (threading.Event() for _ in range(3))
         svc.on_pip_on()
-        svc.on_pip_off()   # nuevo _apply → incrementa generación
-        time.sleep(0.15)
-        # Solo debe haber un stop_move (del pip_off), no dos
-        assert port.stop_move.call_count == 1
+        old_timer = timers[0]
+
+        def stale_callback():
+            entered.set()
+            if release.wait(5):
+                old_timer.callback(*old_timer.args)
+            finished.set()
+
+        stale = threading.Thread(target=stale_callback)
+        stale.start()
+        try:
+            assert entered.wait(5), "old timer callback did not start"
+            svc.on_pip_off()  # A new generation owns the compensation movement.
+            assert old_timer.cancelled
+            release.set()
+            assert finished.wait(5), "old callback did not finish"
+            stale.join(5)
+            port.stop_move.assert_not_called()
+            current_timer = timers[1]
+            current_timer.callback(*current_timer.args)
+            port.stop_move.assert_called_once_with("cam1")
+        finally:
+            release.set()
+            stale.join(5)
+            svc.cancel()
+
 
 
 # ── on_pip_changed (con session_provider) ────────────────────────────────────

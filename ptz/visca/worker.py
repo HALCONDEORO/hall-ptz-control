@@ -436,13 +436,15 @@ class CameraWorker:
         """
         Detiene el worker de forma limpia: interrumpe la lectura en vuelo,
         cierra el socket y espera a que el thread termine.
-        Idempotente: no hace nada si el thread ya está muerto.
+        Idempotente: cierra la sesión incluso si el thread ya está muerto.
         """
-        if not self._thread.is_alive():
-            return
         self._shutdown.set()
         self._interrupt.set()
         self._close_socket()
+        # Thread death is not transport cleanup. An unexpected exit may leave
+        # its socket alive; retirement must release it and close admission.
+        if not self._thread.is_alive():
+            return
         if not getattr(self, "_sentinel_pending", False):
             # Un solo sentinel por episodio de parada: si el hilo no llega a
             # consumirlo (join fallido), un restart posterior lo drena antes
@@ -622,8 +624,11 @@ class CameraWorker:
         IMPORTANTE: si connect() lanza excepción, el socket se cierra
         explícitamente para evitar file descriptor leak.
         """
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s = None
         try:
+            # Descriptor/buffer exhaustion can fail before connect itself.
+            # Keep that failure in the same bounded recovery path.
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(CAMERA_CONNECT_TIMEOUT)
             s.connect((self.ip, self.port))
             logger.info("CameraWorker: conectado a %s:%s", self.ip, self.port)
@@ -633,7 +638,8 @@ class CameraWorker:
             # [WARN] y no [ERROR]: fallo de conexión en arranque es esperado
             # si las cámaras aún no están encendidas o alcanzables en desarrollo.
             logger.warning("CameraWorker: no se pudo conectar a %s: %s", self.ip, exc)
-            s.close()  # Cierre explícito: evita leak de file descriptors
+            if s is not None:
+                s.close()  # Cierre explícito: evita leak de file descriptors
             self._set_connected(False)
             return None
 

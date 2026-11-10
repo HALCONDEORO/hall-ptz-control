@@ -1,4 +1,10 @@
-# Primera instalación supervisada: lista corta
+# Primera instalación supervisada: referencia histórica
+
+Esta página conserva el procedimiento de la primera prueba del 10 de noviembre
+de 2026. **No es la guía vigente ni autoriza instalar el SHA histórico de abajo.**
+Ese código es anterior a las correcciones posteriores de cámaras y STOP.
+Para instalar o actualizar, sigue [INSTALL_RPI_ES.md](INSTALL_RPI_ES.md) y usa
+solo la etiqueta y el SHA que el responsable de la entrega haya aprobado.
 
 Esto prepara una prueba, no certifica el equipo para una reunión. No mover cámaras
 ni cambiar el sistema que usa la sala sin permiso del responsable del equipo.
@@ -16,11 +22,13 @@ ni cambiar el sistema que usa la sala sin permiso del responsable del equipo.
 
 ## Versión y comprobación
 
-El SHA aprobado para esta prueba es `20e0deff0355987c9fe458a7d7bc8ebe971afc77`
+El SHA histórico que se aprobó para aquella primera prueba fue `20e0deff0355987c9fe458a7d7bc8ebe971afc77`
 (merge de la PR #16 en `main`, revisión independiente y CI verde del 2026-11-10).
-No usar v1.0.1 para esta prueba ni instalar un commit distinto por comodidad.
+Los comandos de esta sección se conservan como registro, no como instrucciones
+para una nueva instalación. No reutilizar este SHA para la entrega vigente.
 
-```bash
+```text
+# HISTÓRICO: NO EJECUTAR PARA LA ENTREGA VIGENTE
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
 git checkout --detach 20e0deff0355987c9fe458a7d7bc8ebe971afc77

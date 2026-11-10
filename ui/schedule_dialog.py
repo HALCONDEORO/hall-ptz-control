@@ -260,8 +260,6 @@ class ScheduleDialog(QDialog):
         schedule = load_schedule()
 
         self._always_bypass = bool(schedule.get('always_bypass', False))
-        self._refresh_always_ui()
-
         for day, (chk, t_start, t_end) in self._rows.items():
             entry = schedule.get(day, {})
             enabled = entry.get("enabled", False)
@@ -281,6 +279,10 @@ class ScheduleDialog(QDialog):
 
             t_start.setTime(QTime(sh, sm))
             t_end.setTime(QTime(eh, em))
+
+        # setChecked emits stateChanged and can re-enable saved weekly times.
+        # Apply the always-open lock last, after all rows have been populated.
+        self._refresh_always_ui()
 
     def _save(self):
         """Guardar configuración y cerrar."""

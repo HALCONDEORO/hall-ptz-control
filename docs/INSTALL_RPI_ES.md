@@ -2,11 +2,18 @@
 
 Esta guía resume el flujo en español. La referencia detallada es
 [INSTALL_RPI.md](INSTALL_RPI.md). No autoriza un despliegue: hacen falta permiso
-para el equipo concreto y una versión aprobada. Para la primera prueba puede
-ser el commit exacto de `main` revisado y con CI verde: anota su SHA completo,
-no uses un `main` que siga cambiando. La release v1.0.1 no contiene todas las
-correcciones posteriores. Consulta [INSTALL_TODAY_ES.md](INSTALL_TODAY_ES.md). No hay un PASS de hardware por
-el hecho de que CI esté en verde.
+para el equipo concreto y una versión aprobada.
+
+## Versión de la entrega
+
+Usa la etiqueta y el SHA exacto de la release vigente que confirme el responsable
+de la entrega. Comprueba que ambos coinciden antes de instalar. No uses un `main`
+que siga cambiando ni copies el SHA de una prueba anterior. Si todavía no se ha
+publicado la etiqueta de la entrega, espera a su confirmación.
+
+[INSTALL_TODAY_ES.md](INSTALL_TODAY_ES.md) es un registro histórico de la primera
+prueba; sus comandos y su SHA no son la versión vigente. CI verde y una release
+publicada no equivalen a PASS físico de Pi, pantalla o cámaras.
 
 ## Antes de tocar el equipo
 
