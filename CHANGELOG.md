@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 - The shutdown intent dialog is extracted from the main window with
   focused regression tests, keeping its existing choices and behavior.
+- Startup loads the saved ATEM address from effective settings before the
+  monitor starts, instead of requiring it to be entered again in Settings.
+- ATEM polling detects a dropped link instead of continuing to report
+  cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
   before startup logging and crash handling can be installed.
 - Restore rejects malformed manifest structures with a controlled error before
