@@ -32,6 +32,11 @@ def wired(monkeypatch):
         ip_for_key=Mock(side_effect={1: "camera-one", 2: "camera-two"}.__getitem__),
         worker=Mock(side_effect=workers.__getitem__),
     )
+    cameras.worker_is_healthy = Mock(side_effect=lambda key, age: (
+        cameras.worker(cameras.ip_for_key(key))._thread.is_alive()
+        and cameras.worker(cameras.ip_for_key(key)).progress_age() < age))
+    cameras.restart_worker = Mock(side_effect=lambda key:
+        cameras.worker(cameras.ip_for_key(key)).restart())
     window = SimpleNamespace(
         _cameras=cameras,
         _atem_monitor=SimpleNamespace(healthy=True),
@@ -49,8 +54,8 @@ def test_registers_each_worker_and_starts_once(wired):
     assert list(registrations) == [
         "camera_worker_cam1", "camera_worker_cam2", "atem_monitor"
     ]
-    assert window._cameras.ip_for_key.call_args_list == [((1,),), ((2,),)]
-    assert window._cameras.worker.call_args_list == [(("camera-one",),), (("camera-two",),)]
+    window._cameras.worker.assert_not_called()
+    window._cameras.ip_for_key.assert_not_called()
     supervisor.start.assert_called_once_with()
     assert supervisor.mock_calls[-1][0] == "start"
 
@@ -96,3 +101,19 @@ def test_atem_health_uses_current_monitor_and_own_restart(wired):
     window._restart_atem_monitor.assert_called_once_with()
     for worker in workers.values():
         worker.restart.assert_not_called()
+
+
+@pytest.mark.parametrize("camera", [1, 2])
+def test_reassigned_camera_is_supervised_instead_of_retired_worker(wired, camera):
+    _, _, _, registrations, workers, window = wired
+    old = workers["camera-one" if camera == 1 else "camera-two"]
+    old._thread.is_alive.return_value = False
+    current = SimpleNamespace(_thread=Mock(), progress_age=Mock(return_value=0), restart=Mock())
+    current._thread.is_alive.return_value = True
+    window._cameras.worker.side_effect = lambda ip: current if ip == "replacement" else workers[ip]
+    window._cameras.ip_for_key.side_effect = lambda key: "replacement" if key == camera else ("camera-one" if key == 1 else "camera-two")
+    healthy, restart = registrations[f"camera_worker_cam{camera}"]
+    assert healthy() is True
+    restart()
+    current.restart.assert_called_once_with()
+    old.restart.assert_not_called()
