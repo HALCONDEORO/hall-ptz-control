@@ -216,8 +216,8 @@ class NetworkHandoverReportService:
 
     def _populate_from_config(self, report: NetworkHandoverReport) -> None:
         """Fill report fields from config.yaml. Raises on load failure."""
-        from config.loader import load_config
-        settings = load_config(self._config_path)
+        from config.effective import load_effective_config
+        settings = load_effective_config(self._config_path)
 
         report.site_name = getattr(settings.site, "name", "unknown") or "unknown"
         report.installation_id = getattr(settings.site, "installation_id", "unknown") or "unknown"

@@ -240,3 +240,32 @@ def test_concurrent_processes_preserve_both_updates(paths):
             if worker.is_alive():
                 worker.terminate()
                 worker.join(5)
+
+
+def test_network_handover_reports_saved_effective_camera_ip(paths, monkeypatch):
+    from application.network_handover_report import NetworkHandoverReportService
+    config, overlay = paths
+    monkeypatch.setenv('KHPTZ_DATA_DIR', str(overlay.parent))
+    patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
+    report = NetworkHandoverReportService(config_path=config).generate()
+    assert report.errors == []
+    assert report.cameras[0].ip == '192.0.2.21'
+    assert load_config(config).cameras[0].ip == '192.0.2.11'
+
+
+def test_repair_preserves_nudge_saved_only_in_runtime_overlay(paths, monkeypatch):
+    from application.provisioning_service import ProvisioningService, ProvisioningAnswers
+    from runtime.path_resolver import RuntimePathResolver
+    config, overlay = paths
+    monkeypatch.setenv('KHPTZ_CONFIG_DIR', str(config.parent))
+    monkeypatch.setenv('KHPTZ_DATA_DIR', str(overlay.parent))
+    patch_runtime_config(config, overlay_path=overlay,
+                         atem_pip_nudge={'pan_speed': 2, 'duration_ms': 100,
+                                         'direction': 'left'})
+    assert load_config(config).atem.pip_nudge.pan_speed == 0
+    answers = ProvisioningAnswers(entry_password='test-op', admin_password='test-admin')
+    with patch('application.provisioning_service.secret_manager.encrypt_secret'):
+        ProvisioningService().apply_files(answers, RuntimePathResolver())
+    assert not overlay.exists()
+    restored = load_config(config).atem.pip_nudge
+    assert (restored.pan_speed, restored.duration_ms, restored.direction) == (2, 100, 'left')

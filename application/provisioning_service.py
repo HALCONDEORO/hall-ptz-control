@@ -441,8 +441,9 @@ class ProvisioningService:
         config_path = r.config_dir / "config.yaml"
         if config_path.exists():
             try:
-                from config.loader import load_config
-                settings = self._merge_onto_existing(settings, load_config(config_path))
+                from config.effective import load_effective_config
+                settings = self._merge_onto_existing(settings, load_effective_config(
+                    config_path, r.data_dir / "camera_overrides.json"))
             except Exception:
                 # Corrupt/unreadable existing config — can't merge the full
                 # tree, but the identity fields (installation_id especially)
