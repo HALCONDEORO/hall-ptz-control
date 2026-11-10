@@ -12,6 +12,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Added
 
+- A separate CI contract checks the pinned ATEM library on loopback,
+  including its unsupported PiP API without guessing keyer writes.
 - Offline camera and panel self-test (`python -m runtime.cli selftest --json`)
   built on the scripted VISCA simulator, run in CI before the unit tests.
 
