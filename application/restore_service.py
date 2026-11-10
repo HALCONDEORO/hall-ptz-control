@@ -271,7 +271,16 @@ class RestoreService:
         if not file_records:
             return  # old-format backup — no hashes to verify
 
-        hash_map = {rec["path"]: rec["sha256"] for rec in file_records if "sha256" in rec}
+        if not isinstance(file_records, list):
+            raise RestoreError("Manifest files must be a list. Restore aborted.")
+        hash_map = {}
+        for rec in file_records:
+            if not isinstance(rec, dict) or not isinstance(rec.get("path"), str):
+                raise RestoreError("Manifest file record has no valid path. Restore aborted.")
+            if "sha256" in rec:
+                if not isinstance(rec["sha256"], str):
+                    raise RestoreError("Manifest file hash must be text. Restore aborted.")
+                hash_map[rec["path"]] = rec["sha256"]
         if not hash_map:
             return  # nothing to verify
 

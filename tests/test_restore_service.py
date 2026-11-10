@@ -504,3 +504,18 @@ def test_restore_chowns_temp_before_replacement_when_owner_differs(tmp_path):
          patch('core.atomic_write.os.fchown') as chown:
         RestoreService._atomic_write(b'new', dest)
     assert chown.call_args.args[1:] == (dest.stat().st_uid, dest.stat().st_gid)
+
+
+@pytest.mark.parametrize('records', [[{'sha256': '0' * 64}], [None], ['sha256'], {'bad': 'record'},
+                                   [{'path': [], 'sha256': '0' * 64}]])
+def test_malformed_hash_records_fail_as_restore_error_before_write(tmp_path, records):
+    _, service = _make_services(tmp_path)
+    original = service._data_dir / 'seat_names.json'
+    original.write_bytes(b'original')
+    archive = tmp_path / 'bad-record.zip'
+    with zipfile.ZipFile(archive, 'w') as zf:
+        zf.writestr('manifest.json', json.dumps({'files': records, 'included': ['seat_names.json']}))
+        zf.writestr('seat_names.json', 'replacement')
+    with pytest.raises(RestoreError, match='[Mm]anifest'):
+        service.restore(archive)
+    assert original.read_bytes() == b'original'
