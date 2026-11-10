@@ -11,9 +11,11 @@ def camera_ui():
     ensure_real_qt()
     import ui.main_window as mw
     before = [(cam.ip, cam.cam_id, cam.check) for cam in (mw.CAM1, mw.CAM2)]
+    atem_before = mw.ATEM.ip
     yield mw
     for cam, saved in zip((mw.CAM1, mw.CAM2), before):
         cam.ip, cam.cam_id, cam.check = saved
+    mw.ATEM.ip = atem_before
 
 
 def settings():
@@ -21,6 +23,12 @@ def settings():
         SimpleNamespace(role='platform', ip='192.0.2.11', visca_id='81'),
         SimpleNamespace(role='comments', ip='192.0.2.12', visca_id='82'),
     ])
+
+
+def settings_with_atem(ip='192.0.2.30'):
+    saved = settings()
+    saved.atem = SimpleNamespace(ip=ip)
+    return saved
 
 
 def test_hydrates_shared_objects_before_ui_consumes_them(camera_ui):
@@ -61,6 +69,38 @@ def test_reload_updates_previously_imported_references(camera_ui):
     assert first is first_ref
     assert second is second_ref
     assert (second_ref.ip, second_ref.cam_id) == ('192.0.2.22', '83')
+
+
+def test_hydrates_atem_ip_from_effective_config(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = ''
+    with patch('config.effective.load_effective_config', return_value=settings_with_atem()), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM.ip == '192.0.2.30'
+
+
+def test_atem_ip_is_stripped_on_hydration(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = ''
+    with patch('config.effective.load_effective_config', return_value=settings_with_atem('  192.0.2.30  ')), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM.ip == '192.0.2.30'
+
+
+def test_missing_atem_section_clears_stale_ip(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = '192.0.2.30'
+    with patch('config.effective.load_effective_config', return_value=settings()), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM.ip == ''
+
+
+def test_unreadable_config_preserves_atem_ip(camera_ui):
+    mw = camera_ui
+    mw.ATEM.ip = '192.0.2.30'
+    with patch('config.effective.load_effective_config', side_effect=OSError('unreadable')), patch('adapters.sim_mode.is_active', return_value=False):
+        mw._load_cam_configs_from_yaml()
+    assert mw.ATEM.ip == '192.0.2.30'
 
 
 def test_reversed_saved_order_hydrates_by_role(camera_ui):
