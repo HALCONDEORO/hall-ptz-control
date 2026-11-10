@@ -160,27 +160,29 @@ class SessionService:
         return t
 
     def _power_on_all(self, session_id: Optional[str] = None) -> None:
-        """Power ON secuencial de todas las cámaras (logging por fallo).
+        """Attempt each camera independently; ending/replacing the session cancels.
 
-        Contrato de cancelación del arranque: un STOP del operador (o un fallo
-        de encendido) CANCELA el resto de la secuencia — si cam1 no enciende,
-        cam2 no recibe órdenes a ciegas. La sesión permanece activa (el
-        operador la ve y puede reintentar o terminarla), pero no se acumulan
-        comandos de encendido sobre una cámara en estado desconocido.
+        One unreachable camera must not prevent the other from powering on.
+        Keep the generation check and power lock for each separate attempt.
         """
         for cam_id in self._camera_ids:
-            with self._power_command_lock:
-                if not self._active or (session_id is not None and self._session_id != session_id):
-                    logger.info("SessionService: arranque cancelado antes de %s", cam_id)
-                    return
-                # Any already-dispatched old standby completes before new ON.
-                result = self._port.power_on(cam_id)
+            try:
+                with self._power_command_lock:
+                    if not self._active or (session_id is not None and self._session_id != session_id):
+                        logger.info("SessionService: arranque cancelado antes de %s", cam_id)
+                        return
+                    # Any already-dispatched old standby completes before new ON.
+                    result = self._port.power_on(cam_id)
+            except Exception:
+                logger.exception("SessionService: power_on raised for %s", cam_id)
+                continue
             if result is not None and hasattr(result, "ok") and not result.ok:
                 logger.warning(
-                    "SessionService: power_on falló en %s: %s — secuencia de arranque abortada",
+                    "SessionService: power_on falló en %s: %s",
                     cam_id, getattr(result, "message", "unknown"),
                 )
-                return
+                continue
+            logger.info("SessionService: Power ON completed for %s", cam_id)
 
     def _power_on_all_async(self) -> threading.Thread:
         """Lanza _power_on_all en un hilo daemon y lo devuelve.
