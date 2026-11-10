@@ -38,6 +38,11 @@ try:
     import PyQt5.QtCore  # noqa: F401
     import PyQt5.QtGui  # noqa: F401
     import PyQt5.QtWidgets  # noqa: F401
+    # QtSvg needs the same protection: several test files stub
+    # sys.modules["PyQt5.QtSvg"].QSvgRenderer when it is not already loaded,
+    # and the fake renderer then breaks every later real svg_icon() call in
+    # the process (ui/styles.py::_render_icon -> renderer.render).
+    import PyQt5.QtSvg  # noqa: F401
 except ImportError:
     pass
 
