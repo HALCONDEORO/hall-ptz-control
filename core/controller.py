@@ -179,7 +179,9 @@ class Controller:
         cam  = event.payload["camera"]
         pan  = event.payload["pan_speed"]
         tilt = event.payload["tilt_speed"]
-        self._camera_port.move(self._cam_id(cam), pan, tilt)
+        result = self._camera_port.move(self._cam_id(cam), pan, tilt)
+        if not self._result_ok(result):
+            return
         def update():
             cam_state = self._state.camera(cam)
             cam_state.pan_speed = pan
