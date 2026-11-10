@@ -1,26 +1,23 @@
-"""Synthetic UI checks. Run standalone to avoid unrelated suite fixtures."""
-import sys
-from pathlib import Path
+"""Synthetic visibility checks using the real-Qt collection guard."""
 from types import SimpleNamespace
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-pytest.importorskip('PyQt5')
-from PyQt5.QtCore import Qt
-from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication, QLineEdit
-from ui.setup_wizard.pages import PasswordsPage
-
 
 @pytest.fixture
 def page():
+    from conftest import ensure_real_qt, is_poisoned_by_qt_stub
+    ensure_real_qt()
+    from PyQt5.QtWidgets import QApplication
+    from ui.setup_wizard.pages import PasswordsPage
+    if is_poisoned_by_qt_stub(PasswordsPage):
+        pytest.skip("PasswordsPage was imported under a Qt stub; run in isolation")
     app = QApplication.instance() or QApplication([])
-    page = PasswordsPage(SimpleNamespace(answers=SimpleNamespace()))
-    page.show()
+    widget = PasswordsPage(SimpleNamespace(answers=SimpleNamespace()))
+    widget.show()
     app.processEvents()
-    yield page
-    page.close()
+    yield widget
+    widget.close()
 
 
 def fields(page):
@@ -28,6 +25,9 @@ def fields(page):
 
 
 def test_independent_keyboard_toggles_and_reset(page):
+    from PyQt5.QtCore import Qt
+    from PyQt5.QtTest import QTest
+    from PyQt5.QtWidgets import QLineEdit
     widgets = fields(page)
     assert all(f.echoMode() == QLineEdit.Password for f in widgets)
     for index, button in enumerate(page.visibility_buttons):
