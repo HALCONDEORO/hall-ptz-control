@@ -229,9 +229,20 @@ def cmd_cameras(args) -> int:
     except Exception:
         port = 5678
 
+    # A raw connect to the VISCA port is a second control session: on
+    # single-session cameras it evicts the app's worker, so running this
+    # diagnostic on a live appliance would cause the very disconnects it is
+    # meant to explain. Probe only when the app is definitively not running.
+    from application.network_diagnostics import app_may_be_running
+    probe_allowed = not app_may_be_running()
+
     for cam in settings.cameras:
         ip = cam.ip
         name = cam.id
+        if not probe_allowed:
+            print(f"  [INFO]  Camera '{name}' ({ip}): configured — VISCA probe not run "
+                  "while the app may own the camera session (a second connection can evict it)")
+            continue
         try:
             t0 = time.monotonic()
             with socket.create_connection((ip, port), timeout=1.0):
