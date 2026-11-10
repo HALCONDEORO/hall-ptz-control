@@ -152,3 +152,65 @@ class TestClassifierBehaviour:
         ], capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         assert "classification checks passed" in result.stdout
+
+
+class TestDisableSystemServicesParsing:
+    """Regression: disable_system_services must pass the bare unit name to
+    systemctl. The script sets IFS=$'\\n\\t' globally, and the unit loop
+    inherited it, so `read -r unit _` never split list-unit-files'
+    space-separated columns: ${unit} became "hallptz.service  enabled", every
+    systemctl call rejected the name, and the legacy service survived the
+    migration while the report claimed it was disabled."""
+
+    def test_systemctl_receives_bare_unit_name(self, tmp_path):
+        calls = tmp_path / "systemctl-calls.log"
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        stub = bin_dir / "systemctl"
+        stub.write_text(
+            "#!/usr/bin/env bash\n"
+            f'printf \'%s\\n\' "$*" >> "{calls}"\n'
+            'case "$1" in\n'
+            '  list-unit-files) printf "hallptz.service  enabled\\nunrelated.service  disabled\\n" ;;&\n'
+            '  show) case "$2" in *\\ *) exit 1;; esac\n'
+            '        if [[ "$*" == *FragmentPath* ]]; then printf "/etc/systemd/system/hallptz.service\\n";\n'
+            '        else printf "Description=Hall PTZ\\nExecStart=/home/pi/hallptz/main.py\\n"; fi ;;&\n'
+            '  cat) printf "[Unit]\\nDescription=Hall PTZ\\n" ;;&\n'
+            '  disable|mask) exit 0 ;;&\n'
+            'esac\n'
+            'exit 0\n'
+        )
+        stub.chmod(0o755)
+
+        driver = tmp_path / "driver.sh"
+        driver.write_text(f"""#!/usr/bin/env bash
+set -uo pipefail
+export PATH="{bin_dir}:$PATH"
+IFS=$'\\n\\t'
+MATCHES=0
+DRY_RUN=false
+TIMESTAMP=20261110
+BACKUP_DIR="{tmp_path}"
+REPORT="{tmp_path}/report.txt"
+info() {{ :; }}
+warn() {{ :; }}
+record() {{ :; }}
+backup() {{ return 0; }}
+mv() {{ return 0; }}
+is_conflict() {{ case "$1" in *hallptz*) return 0;; *) return 1;; esac }}
+awk '/^disable_system_services\\(\\)/ , /^\\}}/' "{SCRIPT}" > "{tmp_path}/fn.sh"
+source "{tmp_path}/fn.sh"
+disable_system_services
+""")
+        driver.chmod(0o755)
+        proc = subprocess.run(
+            ["bash", str(driver)], capture_output=True, text=True, timeout=30,
+        )
+        assert proc.returncode == 0, proc.stderr
+        log = calls.read_text(encoding="utf-8")
+        assert "disable --now hallptz.service" in log, (
+            f"systemctl never got the bare unit name; calls were:\n{log}"
+        )
+        assert "enabled" not in [
+            line.split()[-1] for line in log.splitlines() if line.startswith("disable ")
+        ], f"disable received a unit name with state suffix:\n{log}"
