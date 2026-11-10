@@ -88,6 +88,12 @@ class QueueWorker(CameraWorker):
             self.history.append(cmd.payload)
         return ok
 
+    def _send_stop_batch_admitted(self, commands, **kwargs):
+        ok = super()._send_stop_batch_admitted(commands, **kwargs)
+        if ok:
+            self.stopped.set()
+        return ok
+
     def finish_late(self):
         self.hold_recall = False
         if self.inflight is not None:

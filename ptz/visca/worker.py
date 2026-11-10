@@ -294,6 +294,50 @@ class CameraWorker:
                      CameraWorker._classify_payload(cmd.payload))
         return True
 
+    def _send_stop_batch_admitted(self, commands, *, deferred_failures=None) -> bool:
+        """Publish a STOP pair with one interrupt and one queue wakeup.
+
+        Frames remain separate commands with separate response validation.
+        No consumer can take the first half before the second is queued.
+        """
+        commands = tuple(commands)
+        if (not commands or len(commands) > 2
+                or any(not self._is_stop_payload(c.payload) for c in commands)
+                or len({c.payload for c in commands}) != len(commands)):
+            return False
+        payloads = {c.payload for c in commands}
+        dropped = []
+        with self._queue.not_full:
+            q = self._queue.queue
+            kept = [c for c in q if c is None or (
+                c.priority and self._is_stop_payload(c.payload)
+                and c.payload not in payloads)]
+            # No half-admission or discarded sentinel if the entire pair cannot fit.
+            if self._queue.maxsize > 0 and len(kept) + len(commands) > self._queue.maxsize:
+                return False
+            dropped = [c for c in q if c is not None and not (
+                c.priority and self._is_stop_payload(c.payload)
+                and c.payload not in payloads)]
+            now = time.monotonic()
+            for cmd in commands:
+                cmd.priority = True
+                cmd.queued_at = now
+            self._interrupt.set()
+            q.clear()
+            q.extend(kept)
+            q.extend(commands)
+            self._queue.not_empty.notify()
+        for cmd in dropped:
+            if cmd.on_failure is not None:
+                if deferred_failures is not None:
+                    deferred_failures.append(cmd.on_failure)
+                else:
+                    try:
+                        cmd.on_failure()
+                    except Exception:
+                        logger.exception("Dropped STOP-batch command callback raised")
+        return True
+
     def heartbeat_age(self) -> float:
         """Segundos transcurridos desde la última iteración del bucle; útil para diagnóstico."""
         return time.monotonic() - self._last_heartbeat
