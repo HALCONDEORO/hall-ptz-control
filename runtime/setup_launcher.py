@@ -59,6 +59,8 @@ def run_setup_wizard(
 
     app = QApplication.instance() or QApplication(sys.argv)
     assert app is not None
+    from ui.styles import touch_scrollbar_qss
+    app.setStyleSheet(app.styleSheet() + touch_scrollbar_qss())
 
     if wizard_factory is None:
         from ui.setup_wizard.wizard import SetupWizard
