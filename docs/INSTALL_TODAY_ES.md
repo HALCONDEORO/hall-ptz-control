@@ -81,7 +81,7 @@ sudo bash scripts/validate_rpi_deployment.sh --wizard-user "$USER"
 - [ ] Inicio/final de sesión y ambas opciones de salida, sin acciones inesperadas.
 - [ ] Dos reinicios limpios: una sola GUI, configuración y presets conservados.
 - [ ] Backup/restauración solo de datos de prueba y recuperación verificadas.
-- [ ] Anotar PASS/FAIL/SKIP y SHA en `MVP_VALIDATION_REPORT.md`. Un FAIL no resuelto
+- [ ] Anotar PASS/FAIL/SKIP y SHA en `docs/MVP_VALIDATION_REPORT.md`. Un FAIL no resuelto
   impide usarlo como sistema de reunión; mantener el sistema anterior disponible.
 
 ## Si algo falla
