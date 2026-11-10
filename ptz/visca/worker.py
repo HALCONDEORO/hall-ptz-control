@@ -424,12 +424,18 @@ class CameraWorker:
             # pueda descartar un STOP.
             with self._queue.not_full:
                 _q = self._queue.queue
-                _kept = [c for c in _q if c is not None]
-                if len(_kept) != len(_q):
-                    self._sentinel_pending = False
+                _kept = [c for c in _q if c is not None
+                         and c.priority and self._is_stop_payload(c.payload)]
+                _dropped = [c for c in _q if c is not None
+                            and not (c.priority and self._is_stop_payload(c.payload))]
+                self._sentinel_pending = False
                 _q.clear()
                 _q.extend(_kept)
                 self._queue.not_full.notify_all()
+            # Only idempotent STOPs survive a stalled session. Mark discarded
+            # requests before starting the successor; notify outside all locks.
+            for stale in _dropped:
+                stale.cancelled.set()
             # Relanzar implica seguir operando, no honrar un stop() previo: ambas
             # señales deben limpiarse, o el hilo nuevo descartaría todo comando
             # no prioritario (_interrupt) y toda reconexión (_shutdown) de inmediato.
@@ -443,7 +449,13 @@ class CameraWorker:
                 target=self._run, daemon=True, name=f"CamWorker-{self.ip}")
             self._thread.start()
             logger.info("CameraWorker %s: thread relanzado por el supervisor", self.ip)
-            return True
+        for stale in _dropped:
+            if stale.on_failure is not None:
+                try:
+                    stale.on_failure()
+                except Exception:
+                    logger.exception("CameraWorker %s: discarded callback failed", self.ip)
+        return True
 
     def _set_state(self, state: CameraConnectionState) -> None:
         """Actualiza el estado de conexión y emite señales si cambian."""
