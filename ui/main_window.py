@@ -45,7 +45,6 @@ from config import (
     CAM1, CAM2,
     ATEM,
     load_names_data,
-    check_all_cameras,
     PAN_SPEED_MAX,
     TILT_SPEED_MAX,
     ZOOM_DRIVE_MAX,
@@ -1027,7 +1026,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin):
         self._update_exposure_ui()
 
     def _open_config_dialog(self):
-        check_all_cameras()
+        # Reuse existing transport state; a second TCP probe can evict the worker.
+        for cam in (CAM1, CAM2):
+            cam.check = "Green" if self._cameras.is_connected(cam.ip) else "Red"
         dlg = ConfigDialog(parent=self)
         dlg.exec_()
         self._right_panel._update_mode_buttons()

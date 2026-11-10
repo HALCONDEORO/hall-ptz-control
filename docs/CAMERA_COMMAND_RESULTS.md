@@ -15,3 +15,11 @@ recovery from a stuck old worker. This preserves the existing safety contract;
 it is not a guarantee that an offline camera received STOP.
 
 No camera firmware, hardware, live network or deployment was tested in this PR.
+
+Opening Settings reads the existing CameraManager connection snapshot instead
+of opening extra TCP probe sessions. The displayed online/offline state is
+transport state, not proof of VISCA command success or physical camera health.
+This avoids blocking the GUI on network connect/join and avoids evicting a
+single-session camera's persistent worker merely by opening Settings.
+Explicit discovery and post-assignment checks are separate paths; this fix
+makes no claim that every external diagnostic has been serialized yet.
