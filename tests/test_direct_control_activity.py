@@ -64,8 +64,11 @@ with TemporaryDirectory() as root:
     window = MainWindow()
     window._record_activity = Mock()
     window._zoom_feedback = False
+    window._right_panel._motion_widget.setEnabled(False)
+    window._zoom_timer.stop()
     window.ZoomSlider.setValue(37)
     window._record_activity.assert_called_once_with()
+    assert not window._zoom_timer.isActive(), "offline activity must not dispatch zoom"
     window._record_activity.reset_mock()
     window._zoom_feedback = True
     window.ZoomSlider.setValue(49)
