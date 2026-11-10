@@ -8,9 +8,28 @@ This project uses a simple versioning approach while it is still in early produc
 - Minor version: new features or significant refactors.
 - Major version: breaking changes for installation, configuration or customer deployments.
 
-## Unreleased
+## 1.1.0 - 2026-11-10
+
+First supervised-installation candidate. Automatic tests and container
+installer rehearsals do not validate Pi/ARM hardware, the touch screen, real
+systemd or physical cameras: this release is `not pilot-ready` until the
+supervised install records its results in `docs/MVP_VALIDATION_REPORT.md`.
 
 ### Added
+
+- **Provisioning, admin secret storage and restore hardening (PR #16).**
+  Production `admin.enc` moves out of the shared data directory into
+  `/etc/khptz/secrets` (parent `root:khptz` 0750); missing, corrupt or
+  unreadable administrator credentials deny access with no implicit fallback
+  to the operator password; root-side cleanup no longer follows symlinks or
+  FIFOs and temporary writes use unique `O_EXCL` files; the wizard rollback
+  tracks the protected admin store; the acceptance validator checks
+  `admin.enc` at its protected path.
+- **Supervised installation documentation (PR #128).** `docs/INSTALL_TODAY_ES.md`
+  checklist pins the exact reviewed commit for the supervised install;
+  `docs/INSTALL_RPI_ES.md` aligns the Spanish guide with the post-hardening
+  state.
+
 
 - **VISCA robustness: bounded command retries, no-response watchdog and a visible reconnecting state.**
   Fire-and-forget camera commands (moves, zoom drives, preset recalls) are
