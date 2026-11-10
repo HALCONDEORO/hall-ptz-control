@@ -7,8 +7,9 @@ Raspberry Pi. The operator taps a seat on a visual layout of the auditorium and 
 cameras frame that person, so friends commenting from the audience can be seen on the
 hall's displays and on the video stream during the meeting.
 
-Free and open-source (MIT). Built for a real hall and tested in live meetings; the
-Raspberry Pi installation is still pending. The original application code is
+Free and open-source (MIT). This is an installable application under active camera
+stability work. Automated tests and a successful install do not replace physical validation
+of both cameras, saved framing, STOP and recovery on your own equipment. The original application code is
 MIT-licensed. Required GUI dependencies and optional components have separate
 licences; see [third-party notices](THIRD_PARTY_NOTICES.md) and the
 [ATEM dependency gate](docs/ATEM_DEPENDENCY_DECISION.md) before sharing an installed
@@ -23,8 +24,9 @@ system or deploying ATEM support.
 - **Two cameras.** A "Platform" camera and a "Comments" camera, selected on screen.
 - **Presets per seat.** Call mode for live operation; Set mode to store or update the
   framing for any seat in seconds.
-- **Session awareness.** The app knows the meeting schedule and arms itself for the
-  session; operators just log in and serve.
+- **Session controls.** Meeting schedules and explicit session controls keep normal
+  operation separate from setup and shutdown. Check the on-screen session state
+  before using camera controls.
 - **Operator login.** A simple on-screen password protects the controls; an admin role
   unlocks configuration.
 - **ATEM integration (optional).** Camera status can follow the video switcher.
@@ -57,7 +59,7 @@ wins:
 ## Requirements
 
 - Raspberry Pi hardware with Raspberry Pi OS. Two software targets, both with
-  physical validation pending:
+  physical validation required on the target equipment:
   - **Pi 4 or 5 / Bookworm (Debian 12) 64-bit Desktop with Python 3.11** - the installation
     target, rehearsed in a container. Bookworm boots to Wayland by default and the
     GUI requires X11: switch the session with `sudo raspi-config` -> Advanced
@@ -70,7 +72,7 @@ wins:
   [docs/RPI_RUNTIME_BASELINE.md](docs/RPI_RUNTIME_BASELINE.md).
 - A touchscreen (the UI is designed for touch) and network access to the cameras.
 - One or two VISCA-over-IP PTZ cameras (designed for common AV/PTZ heads; not yet
-  validated on real cameras).
+  universally validated across camera models).
 - The system Python of the chosen target (3.11 on Bookworm, 3.9.2 on Bullseye;
   other versions are not supported targets) with PyQt5 (installed from `apt` on
   Raspberry Pi OS).
@@ -86,7 +88,7 @@ cd khptz
 bash install_khptz_rpi.sh --guide
 ```
 
-Follow the guide / Sigue la guia. Manual check and install / Comprobacion e instalacion manual:
+The guide explains the steps. For the manual readiness check and installation:
 
 ```bash
 sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
@@ -125,6 +127,133 @@ Use a disposable development checkout, not a live hall configuration. Follow the
 
 ![Simulation mode: both simulated cameras connected](docs/screenshots/07-simulator.png)
 
+## Camera operation and presets
+
+1. Check the selected camera and session state before recalling a position. Keep
+   one controller process connected to each camera. A second app, simulator,
+   discovery tool or standalone network probe can displace a persistent VISCA
+   connection on single-session camera models.
+2. Use **CALL** to recall framing. Use **SET** only when you intend to overwrite
+   the camera's saved position, with the required access and confirmation.
+   Test each stored position outside a live meeting, with someone watching the
+   physical result. See [CALL/SET](docs/CALL_SET_CONTRACT.md).
+3. Treat a green connection indicator as transport information. Queue admission
+   is not a physical motion confirmation. A timeout or failed save is not success;
+   do not repeatedly press SET to make the indicator change.
+4. Learn [STOP, STOP ALL and the close options](docs/OPERATOR_GUIDE.md) before
+   relying on them. If a camera keeps moving without a network connection, use
+   the venue's physical fallback rather than assuming software STOP arrived.
+
+VISCA presets are stored in camera memory. `chairman_presets.json` maps names to
+personal preset slots; `room_layout.json` stores the seating layout. A backup of
+these files does not copy the physical camera's preset memory. If a map is missing
+or corrupt, preserve the data directory and backups before saving new positions:
+reusing a slot can overwrite a person's previous framing.
+
+## Update and rollback
+
+Do this outside a live session, with a current backup and an approved target tag
+or full commit SHA. Keep the original source checkout: `/opt/khptz` is a deployed
+copy, not the place to run `git pull`.
+
+1. Record `khptz version` and `khptz status`. Run `khptz backup`, check that it
+   succeeded and retain the resulting ZIP outside the device before changing it.
+   Backups can contain private site data; do not attach them to public issues.
+2. Close the GUI cleanly. Stop the installed GUI unit: the system service or the
+   desktop user's service, according to the installation mode. Do not start both.
+3. In the source checkout, fetch and select the approved build, then use the
+   [installation wrapper](docs/INSTALL_RPI.md#install-the-runtime-service).
+   Preserve the desktop user and GUI mode. Do not update a live system with an
+   unreviewed `main` checkout or repair permissions with recursive `chmod`/`chown`.
+4. Before reopening the GUI, run `khptz verify-install`. With the GUI stopped,
+   run `khptz doctor` and inspect its result. Then rehearse CALL, STOP and recovery
+   on both cameras. A software check does not certify physical operation.
+
+For a product install, preview the recorded rollback target first:
+
+```bash
+sudo bash /opt/khptz/runtime/installer/rollback.sh --dry-run
+```
+
+Only after checking the target, backup and downtime window:
+
+```bash
+sudo bash /opt/khptz/runtime/installer/rollback.sh
+```
+
+Rollback re-deploys code from the retained source checkout. It is not the same as
+restoring a data backup. Use [Update and rollback](docs/UPDATE_ROLLBACK.md) for
+explicit `--source` / `--to` targets and GUI-mode details. Do not restore an old
+layout or reset the setup wizard merely to undo a code update.
+
+## Camera troubleshooting
+
+Start with the symptom, not a factory reset. Preserve the build SHA, time of the
+failure and a short log excerpt. Redact site addresses, names and credentials
+before sharing anything publicly.
+
+| Symptom | Checks and next step |
+|---|---|
+| Camera 1 or 2 flickers between connected and disconnected | Check for another GUI/controller and verify the configured endpoint. Stop the session safely before opening new network probes. Check cable, switch port, camera power and whether the camera accepts only one TCP client. A green badge alone does not prove a completed command. |
+| `Connection refused`, empty response or ACK without completion | Refused means the connection was rejected, not that the requested movement completed. Check the endpoint, camera listener and competing controllers. Keep the bytes and timestamps; do not loop reconnects or raise timeouts blindly. |
+| A white seat grid or disappearing controls after tapping a seat | Preserve logs and note camera, session state, CALL/SET mode and action. Check for a Python traceback and a simultaneous camera-state change. Do not erase the layout, overwrite presets or run Repair as a guess. |
+| GUI missing or dark after desktop login | Check which GUI service owns the window and whether the desktop session is X11. See the [dark-screen checklist](docs/INSTALL_RPI.md#the-gui-never-appears-after-login-dark-screen). Do not start a second GUI to cover a failed one. |
+| Address or preset changes disappear after restart | Check whether the UI reported a save failure. Preserve `config.yaml`, any runtime camera override and preset mapping backups. Do not make `/etc/khptz` writable to bypass a failed save. |
+
+A field response can contain a direct-IP ACK followed by an addressed completion,
+for example `9041ff` + `a051ff`, or `9042ff` + `a052ff`. Preserve the complete byte
+sequence, not just the ACK. These examples are not a rule that any two frames
+prove success: address, command socket, terminal error and timeout still matter.
+See [camera command results](docs/CAMERA_COMMAND_RESULTS.md).
+
+`khptz verify-install` checks installation state without hardware access.
+By contrast, do not run `khptz cameras` or `khptz doctor` alongside a live GUI:
+these standalone diagnostics can open additional camera connections. Stop the
+GUI first and arrange a safe test window. A support bundle is sanitized, but
+review it before sharing; see [support bundle scope](docs/SUPPORT_BUNDLE_CONTRACT.md).
+
+For system GUI installations:
+
+```bash
+khptz version
+khptz status
+sudo systemctl status khptz-control.service --no-pager
+journalctl -u khptz-control.service -n 100 --no-pager
+```
+
+For a session-owned GUI, run these as its desktop user instead:
+
+```bash
+systemctl --user status khptz-gui.service --no-pager
+journalctl --user -u khptz-gui.service -n 100 --no-pager
+```
+
+Do not post raw logs without checking them for private information. For the
+longer checklist, start at [installation troubleshooting](docs/INSTALL_RPI.md).
+
+## Repository map
+
+Keep application code separate from configuration and recorded site data:
+
+| Path | Responsibility |
+|---|---|
+| `main.py`, `bootstrap.py` | Entry point and dependency wiring |
+| `domain/`, `application/` | Models, validation and use cases |
+| `ports/`, `adapters/` | Interfaces and their hardware/storage implementations |
+| `ptz/visca/` | VISCA framing, parsing, workers and connection ownership |
+| `core/` | Event handling, runtime state and supervision |
+| `ui/` | PyQt windows, controls and layout rendering |
+| `runtime/`, `install_khptz_rpi.sh` | CLI, deployment, systemd and installation checks |
+| `config/` | Configuration schema and bundled templates, not live site data |
+| `simulation/`, `tests/` | Simulated equipment and regression tests |
+| `docs/` | Operator, installation, support and developer guides |
+
+Product installs keep configuration in `/etc/khptz`, runtime data in
+`/var/lib/khptz`, logs in `/var/log/khptz` and backups in `/var/backups/khptz`.
+Do not move these into the source checkout. See the
+[documentation index](docs/DOCS_INDEX.md), [architecture](docs/ARCHITECTURE.md) and
+[runtime path contract](docs/RUNTIME_PATH_CONTRACT.md) before reorganizing code.
+
 ## Status
 
 Working application, installable MVP candidate. Validate it on your own hardware
@@ -154,8 +283,9 @@ una Raspberry Pi. El operador toca un asiento en un plano visual del auditorio y
 cámaras encuadran a esa persona, para que los hermanos que comentan desde el público se
 vean en las pantallas del salón y en la transmisión durante la reunión.
 
-Libre y de código abierto (MIT). Construido para un salón real y probado en reuniones
-en directo; la instalación en la Raspberry Pi aún está pendiente. Cualquier salón puede
+Libre y de código abierto (MIT). Aplicación instalable en fase activa de trabajo sobre
+la estabilidad de las cámaras. Las pruebas automáticas no sustituyen la validación
+física de ambas cámaras, los encuadres, STOP y la recuperación en tu equipo. Cualquier salón puede
 usar el código original bajo MIT. Las dependencias de interfaz y las opcionales
 tienen licencias propias; consulta [los avisos](THIRD_PARTY_NOTICES.md) y el [gate de ATEM](docs/ATEM_DEPENDENCY_DECISION.md) antes de distribuir o
 desplegar ese componente.
@@ -168,8 +298,8 @@ desplegar ese componente.
   pantalla.
 - **Presets por asiento.** Modo Call para operar en directo; modo Set para guardar o
   actualizar el encuadre de cualquier asiento en segundos.
-- **Sesiones.** La aplicación conoce el horario de las reuniones y se prepara para cada
-  sesión; el operador solo inicia sesión y sirve.
+- **Sesiones.** El horario y los controles explícitos separan la operación normal de
+  la configuración y el cierre. Comprueba el estado de sesión antes de operar.
 - **Acceso de operador.** Una contraseña en pantalla protege los controles; un rol de
   administrador desbloquea la configuración.
 - **Integración ATEM (opcional).** El estado de las cámaras puede seguir al mezclador.
@@ -260,6 +390,10 @@ locales y guarda una copia para restaurarlas con `python3 adapters/sim_mode.py o
 No inicia el simulador ni demuestra que ATEM u otras integraciones estén aisladas.
 Úsala en un clon de desarrollo desechable, no sobre la configuración de una sala
 en uso. Consulta los [límites del ensayo](docs/FOR_KINGDOM_HALLS.md#training-without-live-equipment).
+
+Consulta también las secciones en inglés sobre [cámaras y presets](#camera-operation-and-presets),
+[actualización y rollback](#update-and-rollback), [diagnóstico](#camera-troubleshooting)
+y [mapa del repositorio](#repository-map).
 
 ## Estado
 
