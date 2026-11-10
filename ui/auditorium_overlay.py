@@ -55,10 +55,16 @@ class AuditoriumOverlay(QWidget):
         """'call' → puntos blancos  |  'set' → relleno blanco claro"""
         if mode == self._mode:
             return
-        self._prev_mode = self._mode
-        self._mode      = mode
-        self._blend     = 0.0
+        if self._blend < 1.0 and mode == self._prev_mode:
+            # Reverse the same fade without jumping to a fully painted mode.
+            self._prev_mode, self._mode = self._mode, mode
+            self._blend = 1.0 - self._blend
+        else:
+            self._prev_mode = self._mode
+            self._mode = mode
+            self._blend = 0.0
         self._timer.start()
+        self.update()
 
     def _tick(self):
         self._blend = min(1.0, self._blend + _ANIM_STEP)
