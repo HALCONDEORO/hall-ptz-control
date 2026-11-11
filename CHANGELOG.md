@@ -23,6 +23,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Make the website installation instructions select an approved tag or full
+  commit SHA in detached HEAD and show the resolved SHA before installation.
+
 - Correct website/README setup scope to room details, camera addresses and
   login settings. Label the older UI walkthrough as historical, captured
   before the current STOP ALL button, rather than showing it as current UI.

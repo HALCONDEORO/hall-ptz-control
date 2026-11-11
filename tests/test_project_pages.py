@@ -125,3 +125,14 @@ def test_setup_scope_and_demo_age_are_visible():
     assert 'room details, camera addresses and login settings' in page
     assert 'Captured 10 November 2026' in page
     assert 'Historical UI states' in page
+
+
+def test_install_requires_reviewed_revision_before_privileged_steps():
+    page = (ROOT / 'docs/index.html').read_text()
+    install = page.split('id="install"', 1)[1].split('id="operate"', 1)[0]
+    commands = '\n'.join(re.findall(r'<pre><code>(.*?)</code></pre>', install, re.S))
+    before_install = commands.split('sudo bash install_khptz_rpi.sh', 1)[0]
+    assert 'git checkout --detach "$APPROVED_REVISION"' in before_install
+    assert 'git rev-parse HEAD' in before_install
+    assert 'read -r -p' in before_install
+    assert 'Do not continue if checkout fails' in install
