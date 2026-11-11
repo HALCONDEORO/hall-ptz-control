@@ -10,6 +10,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+### Changed
+
+- Explain the project, room-operator audience and pending hardware validation
+  on the first screen. Remove the repeated feature-summary band.
+
 ## 1.2.1 - Release candidate
 
 Prepared for validation on 2026-11-11. Not yet certified on the target Pi.
