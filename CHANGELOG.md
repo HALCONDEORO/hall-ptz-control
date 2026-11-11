@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Warranty assessment stays UNKNOWN when doctor diagnostics cannot run.
+  Support hints request a diagnostic retry rather than falsely claiming
+  the validated baseline is missing or encouraging a replacement mark.
+
 - Write known-good and maintenance state through the atomic file writer.
   Contract change: maintenance `mark_complete` raises on disk failure instead
   of returning an unsaved record; the CLI reports failure and exits 1. Newly

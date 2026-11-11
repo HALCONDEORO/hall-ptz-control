@@ -139,11 +139,17 @@ class WarrantyStateService:
             has_fail = any(c.status == Status.FAIL for c in report.checks)
             has_warning = any(c.status == Status.WARNING for c in report.checks)
             fail_names = [c.name for c in report.checks if c.status == Status.FAIL]
-        except Exception:
-            has_blocking_fail = False
-            has_fail = False
-            has_warning = False
-            fail_names = []
+        except Exception as exc:
+            logger.warning("Warranty diagnostics unavailable: %s", exc)
+            return WarrantyStateResult(
+                state=WarrantyState.UNKNOWN,
+                reason="Diagnostic assessment unavailable",
+                evidence={"diagnostics_available": False},
+                customer_message=(
+                    "The system could not check the current diagnostic state. "
+                    "Run 'khptz doctor' before considering the installation validated."
+                ),
+            )
 
         # Check known-good state
         try:
@@ -412,12 +418,20 @@ class SupportHintEngine:
 
         # Warranty state hints
         if warranty_state.state == WarrantyState.UNKNOWN:
-            hints.append(SupportHint(
-                priority=3,
-                hint="No validated baseline recorded for this installation.",
-                trigger="warranty_state:unknown",
-                action="Run 'khptz doctor' and then 'khptz known-good mark --after-doctor-pass'.",
-            ))
+            if warranty_state.evidence.get("diagnostics_available") is False:
+                hints.append(SupportHint(
+                    priority=3,
+                    hint="The current diagnostic state could not be checked.",
+                    trigger="warranty_state:diagnostics_unavailable",
+                    action="Run 'khptz doctor' and retry the support assessment.",
+                ))
+            else:
+                hints.append(SupportHint(
+                    priority=3,
+                    hint="No validated baseline recorded for this installation.",
+                    trigger="warranty_state:unknown",
+                    action="Run 'khptz doctor' and then 'khptz known-good mark --after-doctor-pass'.",
+                ))
         elif warranty_state.state == WarrantyState.CHANGED_SINCE_VALIDATION:
             hints.append(SupportHint(
                 priority=2,
