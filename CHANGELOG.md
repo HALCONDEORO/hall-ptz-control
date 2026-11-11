@@ -23,6 +23,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Use body-text ink for the historical video disclaimer so its small text
+  meets the 4.5:1 contrast threshold against the walkthrough background.
+
 - Correct website/README setup scope to room details, camera addresses and
   login settings. Label the older UI walkthrough as historical, captured
   before the current STOP ALL button, rather than showing it as current UI.
