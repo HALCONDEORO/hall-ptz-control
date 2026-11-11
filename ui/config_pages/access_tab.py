@@ -129,6 +129,10 @@ def build_access_tab(dialog, access_layout, mw, panel_layout):
 
     if _svc:
         _svc.subscribe(_refresh_mode_ui)
+        # ConfigDialog is rebuilt on every Settings open and never destroyed
+        # (parented to MainWindow); without this, the process-lifetime service
+        # would accumulate one dead observer per open.
+        dialog.finished.connect(lambda *_: _svc.unsubscribe(_refresh_mode_ui))
 
     # ── 2-column grid: Authentication (left) + Schedule (right) ───────
     # El Operador entra sin contraseña solo dentro del horario configurado
