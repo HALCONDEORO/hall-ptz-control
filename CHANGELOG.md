@@ -28,6 +28,10 @@ See `docs/releases/1.2.1.md` for release gates and known limitations.
 
 ### Fixed
 
+- Correct website/README setup scope to room details, camera addresses and
+  login settings. Label the older UI walkthrough as historical, captured
+  before the current STOP ALL button, rather than showing it as current UI.
+
 - Preserve runtime-directory group-write permissions until session GUI
   quiescence succeeds, so an aborted pre-copy guard does not revoke access
   from a desktop controller that is still running.
