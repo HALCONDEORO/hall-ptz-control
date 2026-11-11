@@ -97,6 +97,13 @@ def main_module(monkeypatch):
     try:
         module = importlib.import_module("main")
         module._test_calls = calls
+        # Never let the real install_repeated_message_filter run: it attaches
+        # stateful filters to whatever handlers are on the root logger RIGHT
+        # NOW — including pytest's own session-long capture handlers — and the
+        # accumulated instances then drop or summarise later tests' records
+        # (main_startup -> session_service/support_bundle interference).
+        monkeypatch.setattr(
+            module, "install_repeated_message_filter", lambda: None)
         module._test_sim_mode = sim_mode
         monkeypatch.setattr(module.sys, "exit", lambda code=0: (_ for _ in ()).throw(_ExitCalled(code)))
         yield module
@@ -174,6 +181,13 @@ def failing_main_module(monkeypatch):
     try:
         module = importlib.import_module("main")
         module._test_calls = calls
+        # Never let the real install_repeated_message_filter run: it attaches
+        # stateful filters to whatever handlers are on the root logger RIGHT
+        # NOW — including pytest's own session-long capture handlers — and the
+        # accumulated instances then drop or summarise later tests' records
+        # (main_startup -> session_service/support_bundle interference).
+        monkeypatch.setattr(
+            module, "install_repeated_message_filter", lambda: None)
         monkeypatch.setattr(module.sys, "exit", lambda code=0: (_ for _ in ()).throw(_ExitCalled(code)))
         yield module
     finally:
