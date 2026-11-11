@@ -6,3 +6,5 @@
 .walkthrough{margin-top:35px;border-top:1px solid var(--line);padding-top:25px}.walkthrough>p{margin-top:10px}.walkthrough video{display:block;width:100%;height:auto;margin-top:20px;border:1px solid #263f44;border-radius:var(--radius);background:var(--ink)}.walkthrough h4{color:var(--ink);font-size:15px;margin:22px 0 12px}.walkthrough ol{font-size:14px;padding-left:22px}.walkthrough li{padding-left:4px;margin-bottom:9px}.walkthrough #demo-transcript>p{font-size:13px;max-width:850px}.walkthrough strong{color:var(--ink)}
 
 .walkthrough>p.muted{color:var(--body)}
+
+.hero-actions .hero-status{font-size:14px;line-height:1.5;max-width:340px;margin:0 0 16px;color:var(--body)}
