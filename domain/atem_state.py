@@ -25,6 +25,12 @@ ATEM_SUPERVISOR_TERMINAL_OK = frozenset({
     ATEMState.DISCONNECTED,
 })
 
+#: Tiempo que el supervisor tolera un DISCONNECTED terminal antes de reiniciar
+#: el monitor. El switcher puede estar apagado o arrancando cuando la app
+#: agota sus intentos (backoffs 2/5/15 s): sin este reintento lento el ATEM
+#: quedaba muerto hasta reiniciar la app entera.
+ATEM_DISCONNECTED_RETRY_AFTER_S = 30.0
+
 
 @dataclass(frozen=True)
 class ATEMPiPState:
@@ -60,8 +66,18 @@ def is_atem_supervisor_healthy(
     is_running: bool,
     restart_pending: bool,
     state: ATEMState | None,
+    disconnected_elapsed_s: float | None = None,
 ) -> bool:
-    """Devuelve si el supervisor debe considerar sano el monitor ATEM."""
+    """Devuelve si el supervisor debe considerar sano el monitor ATEM.
+
+    DISCONNECTED es terminal pero recuperable: pasado
+    ATEM_DISCONNECTED_RETRY_AFTER_S el supervisor debe reiniciar el monitor
+    para reintentar la conexión (el switcher pudo encenderse después).
+    Sin dato temporal (``disconnected_elapsed_s=None``) se conserva el
+    comportamiento histórico y se considera sano.
+    """
     if is_running or restart_pending:
         return True
+    if state is ATEMState.DISCONNECTED and disconnected_elapsed_s is not None:
+        return disconnected_elapsed_s < ATEM_DISCONNECTED_RETRY_AFTER_S
     return state in ATEM_SUPERVISOR_TERMINAL_OK

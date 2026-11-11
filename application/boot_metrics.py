@@ -48,7 +48,7 @@ class TestResult:
 
     def __init__(self, name: str):
         self.name = name
-        self.start_time = time.time()
+        self.start_time = time.monotonic()  # NTP-safe: wall clock can jump mid-boot
         self.success = False
         self.error_msg: Optional[str] = None
         self.duration_ms = 0
@@ -57,7 +57,7 @@ class TestResult:
     def finish(self, success: bool, error: Optional[str] = None):
         self.success = success
         self.error_msg = error
-        self.duration_ms = int((time.time() - self.start_time) * 1000)
+        self.duration_ms = int((time.monotonic() - self.start_time) * 1000)
         self._finished_at = datetime.now().isoformat()
 
     def to_dict(self) -> dict:
