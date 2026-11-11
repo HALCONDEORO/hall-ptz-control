@@ -183,6 +183,8 @@ def export_backup(dest_zip: Path, app_dir: Path | None = None) -> list[str]:
 
 def import_backup(zip_path: Path, app_dir: Path | None = None) -> list[str]:
     """
+    Raises ValueError for duplicate archive member names before restoring files.
+
     Restaura archivos de datos y configuración desde un ZIP de backup.
 
     - Archivos JSON (raíz del ZIP): se validan como JSON y se restauran a CONFIG_DIR.
@@ -203,6 +205,8 @@ def import_backup(zip_path: Path, app_dir: Path | None = None) -> list[str]:
 
     with zipfile.ZipFile(zip_path, 'r') as zf:
         namelist = zf.namelist()
+        if len(namelist) != len(set(namelist)):
+            raise ValueError("The ZIP contains duplicate names; no files have been restored.")
 
         # Identificar qué archivos reconocidos hay en el ZIP
         json_found = [n for n in namelist if n in valid_json]
