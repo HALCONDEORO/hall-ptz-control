@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from application.layout_service import LayoutService
     from application.runtime_state_store import RuntimeStateStore
     from application.runtime_audit_log import RuntimeAuditLog
+    from application.runtime_safety_service import RuntimeSafetyService
 
 
 @dataclass
@@ -39,3 +40,4 @@ class AppContext:
     camera_target_resolver: Optional[object] = field(default=None)
     runtime_state_store: "Optional[RuntimeStateStore]" = field(default=None)
     runtime_audit_log: "Optional[RuntimeAuditLog]" = field(default=None)
+    runtime_safety_svc: "Optional[RuntimeSafetyService]" = field(default=None)
