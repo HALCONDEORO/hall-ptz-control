@@ -12,6 +12,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Documentation
 
+- Add a short version/symptom/checks support-report checklist, keeping private
+  site data out of public issues and physical fallback ahead of reporting.
+
+### Documentation
+
 - Link the live Pages site and sync README/installation guides with the four
   installation stages. Record the active publishing source, ADMIN-only STOP ALL
   rehearsal and USER stopping limits without certifying pending hardware tests.

@@ -201,3 +201,11 @@ def test_readme_and_publication_notes_match_live_project():
     assert '## Live GitHub Pages' in pages
     assert 'branch `main`, folder **/docs**' in pages
     assert 'USER has no dedicated' in (ROOT / 'docs/MVP_VALIDATION_REPORT.md').read_text()
+
+
+def test_support_report_is_actionable_and_private():
+    text = (ROOT / 'docs/index.html').read_text()
+    report = text.split('id="report"', 1)[1].split('</aside>', 1)[0]
+    for required in ('khptz version', 'expected result and actual result', 'simulation or real equipment', 'Review and redact logs', 'physical fallback first'):
+        assert required in report
+    assert 'https://github.com/HALCONDEORO/kh-ptz-control/issues' in report
