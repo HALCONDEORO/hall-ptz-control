@@ -7,7 +7,7 @@ Goal: avoid bringing unvalidated code into a real installation.
 Current target:
 
 ```text
-v0.1.0-installable-mvp
+v1.2.1 (candidate; target Pi acceptance pending)
 ```
 
 > Rule: customer installs should use tagged releases or approved release-candidate branches, not random commits from `main`.
