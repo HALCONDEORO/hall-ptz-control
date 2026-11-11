@@ -184,3 +184,29 @@ class TestDemoCheckOrdering:
             assert "password" not in msg
             assert "api_key" not in msg
             assert "bearer" not in msg
+
+
+class TestDemoProductionServiceDir:
+    """The protection check must cover /var/lib/khptz, not just the legacy dir."""
+
+    def test_production_protected_fail_when_using_service_dir(self, tmp_path):
+        install_dir = tmp_path / "app"
+        install_dir.mkdir()
+        (install_dir / "VERSION").write_text("1.0.0", encoding="utf-8")
+        svc = DiagnosticsService(
+            install_dir=install_dir,
+            data_dir=Path("/var/lib/khptz"),
+            config_path=install_dir / "config.yaml",
+            mode=RuntimeMode.DEMO,
+        )
+        report = svc.run()
+        r = _check(report, "demo_production_protected")
+        assert r.status == Status.FAIL
+        assert "not protected" in r.message.lower()
+        assert "/var/lib/khptz" in r.message
+
+    def test_production_protected_ok_message_names_service_dir(self, tmp_path):
+        report = _svc(tmp_path).run()
+        r = _check(report, "demo_production_protected")
+        assert r.status == Status.OK
+        assert "/var/lib/khptz" in r.message
