@@ -388,7 +388,11 @@ def cmd_maintenance(args) -> int:
     if sub == "mark-complete":
         completed_by = getattr(args, "by", "operator") or "operator"
         notes = getattr(args, "notes", "") or ""
-        record = svc.mark_complete(completed_by=completed_by, notes=notes)
+        try:
+            record = svc.mark_complete(completed_by=completed_by, notes=notes)
+        except OSError as exc:
+            print(f"  [FAIL] Maintenance record could not be saved: {exc}", file=sys.stderr)
+            return 1
         print(f"  [OK]   Maintenance recorded at {record.completed_at}")
         return 0
 

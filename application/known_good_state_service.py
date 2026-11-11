@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.atomic_write import write_text_atomic
 from runtime.path_resolver import RuntimePathResolver
 
 logger = logging.getLogger(__name__)
@@ -255,10 +256,9 @@ class KnownGoodStateService:
 
         # Write new snapshot
         try:
-            self._state_file.parent.mkdir(parents=True, exist_ok=True)
-            self._state_file.write_text(
+            write_text_atomic(
+                self._state_file,
                 json.dumps(snapshot.to_dict(), indent=2, sort_keys=True, ensure_ascii=False),
-                encoding="utf-8",
             )
         except OSError as exc:
             return MarkResult(

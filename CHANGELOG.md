@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Write known-good and maintenance state through the atomic file writer.
+  Contract change: maintenance `mark_complete` raises on disk failure instead
+  of returning an unsaved record; the CLI reports failure and exits 1. Newly
+  created files use mode 0600, or 0660 with a configured appliance group.
+
 - Refuse known-good marking when the doctor blocker scan cannot run,
   rather than treating a failed scan as an empty blocker list. The explicit
   `--force` override remains available.
