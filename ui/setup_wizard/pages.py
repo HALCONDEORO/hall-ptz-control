@@ -556,6 +556,11 @@ class InstallingPage(_BasePage):
         wizard.finished.connect(self._timer.stop)
         self._result = None
         self._done = False
+        # True from begin() until a result lands. Back + Next mid-install must
+        # NOT call begin() again: ProvisionHandoff.begin() states that a fresh
+        # begin does not make retries safe while an earlier operation is
+        # active — the pending result would be mis-attributed to new answers.
+        self._request_in_flight = False
 
     def initializePage(self) -> None:
         self._result = None
@@ -563,6 +568,14 @@ class InstallingPage(_BasePage):
         self._status.setText("Installing… please wait.")
         self.completeChanged.emit()
         handoff = self._wiz.handoff
+
+        if self._request_in_flight:
+            # Operator pressed Back while the privileged operation was still
+            # running and returned with Next. Resume polling for the in-flight
+            # result instead of submitting a competing request.
+            self._status.setText("Install already in progress — waiting for the result.")
+            self._start_polling()
+            return
 
         # begin() writes the request into /run/khptz, which the desktop user
         # cannot create itself. install.sh deliberately tolerates
@@ -585,6 +598,14 @@ class InstallingPage(_BasePage):
             ))
             return
 
+        self._request_in_flight = True
+        self._start_polling()
+
+    def _start_polling(self) -> None:
+        """Start the result poll timer. Kept out of initializePage so the
+        failed-begin path provably returns before any timer start (see
+        tests/test_wizard_failure_paths.py source assertions)."""
+        handoff = self._wiz.handoff
         self._timer.start(max(1, int(handoff.poll_interval_s * 1000)))
 
     def _poll_once(self) -> None:
@@ -597,6 +618,7 @@ class InstallingPage(_BasePage):
     def _apply_result(self, result) -> None:
         self._result = result
         self._done = True
+        self._request_in_flight = False
         self._status.setText(result.summary())
         self.completeChanged.emit()
 
