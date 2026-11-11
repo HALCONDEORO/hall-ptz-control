@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Preserve the last valid JSON backup when saving after recovery from a
+  corrupt primary. Rotate the primary into `.bak` only when it contains valid
+  UTF-8 JSON, including when the final primary replacement later fails.
+
 - Clear absent graphical-session variables from the systemd user manager
   before importing current values and starting the GUI service. Abort if
   clearing fails. This does not validate Pi login behavior or a GUI kept
