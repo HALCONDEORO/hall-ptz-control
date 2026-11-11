@@ -157,6 +157,12 @@ class DragDropButton:
         dist = (event.pos() - self._drag_start_pos).manhattanLength()
         if dist < QApplication.startDragDistance():
             return
+        # A drag is not a long press: QDrag.exec_() runs a nested event loop
+        # where the long-press QTimer would keep firing and dispatch a SET
+        # (preset overwrite) mid-drag.
+        cancel = getattr(self, '_cancel_long_press', None)
+        if callable(cancel):
+            cancel()
         self._on_drag_start()
         drag = QtGui.QDrag(self)
         mime = QtCore.QMimeData()
@@ -221,6 +227,13 @@ class PresetActionMixin:
         self._long_press_timer.timeout.connect(self._on_long_press)
         self._long_press_fired = False
         self._press_pos: Optional[QPoint] = None
+
+    def _cancel_long_press(self) -> None:
+        """Cancel any pending long-press SET (drag start, gesture interruption)."""
+        if hasattr(self, '_long_press_timer'):
+            self._long_press_timer.stop()
+        self._long_press_fired = False
+        self._press_pos = None
 
 # ── Qt event overrides ────────────────────────────────────────────────────
 

@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Starting a seat-name drag cancels its pending long-press preset SET
+  so moving a name does not overwrite a camera position.
 - Demo guards and diagnostics protect the service production directory
   as well as the legacy user directory.
 - PiP writes report network failures as NETWORK_ERROR and keep healthy
