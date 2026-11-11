@@ -305,6 +305,32 @@ class TestKnownGoodStateServiceMark:
             result = svc.mark(force=True)
         assert result.success
 
+    def test_mark_refused_when_blocker_scan_fails(self, tmp_path):
+        """The mark gate fails closed: if the doctor scan itself cannot run,
+        mark() must refuse instead of proceeding with no gate evaluated."""
+        paths = _make_paths(tmp_path)
+        svc = KnownGoodStateService(paths=paths)
+        with patch("application.diagnostics_service.DiagnosticsService.run",
+                   side_effect=OSError("disk gone")):
+            result = svc.mark()
+        assert not result.success
+        assert "doctor scan failed" in result.message
+        assert result.blocked_by, "refusal must name the scan failure"
+        assert "disk gone" in result.blocked_by[0]
+        assert not paths.known_good_state_file.exists(), "refused mark must not write state"
+
+    def test_mark_allowed_with_force_despite_scan_failure(self, tmp_path):
+        """force=True remains the deliberate bypass even when the scan errors."""
+        paths = _make_paths(tmp_path)
+        svc = KnownGoodStateService(paths=paths)
+        fp = _fake_fp()
+        with patch("application.diagnostics_service.DiagnosticsService.run",
+                   side_effect=OSError("disk gone")),\
+             patch("application.fingerprint_service.FingerprintService") as mock_svc:
+            mock_svc.return_value.generate.return_value = fp
+            result = svc.mark(force=True)
+        assert result.success
+
     def test_mark_attaches_note(self, tmp_path):
         paths = _make_paths(tmp_path)
         svc = KnownGoodStateService(paths=paths)

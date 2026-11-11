@@ -23,6 +23,14 @@ from runtime.path_resolver import RuntimePathResolver
 logger = logging.getLogger(__name__)
 
 
+class BlockerScanError(Exception):
+    """The doctor blocker scan could not run at all.
+
+    Raised by KnownGoodStateService._find_blockers so mark() can fail closed
+    instead of marking with its safety gate silently unevaluated.
+    """
+
+
 # ── KnownGoodSnapshot ─────────────────────────────────────────────────────────
 
 @dataclass
@@ -203,7 +211,17 @@ class KnownGoodStateService:
         """
         # Run diagnostics to check for blockers
         if not force:
-            blockers = self._find_blockers()
+            try:
+                blockers = self._find_blockers()
+            except BlockerScanError as exc:
+                # Fail closed: a gate that cannot be evaluated must not silently
+                # pass - that is exactly when the install is in an unexpected
+                # state. force=True remains the deliberate bypass.
+                return MarkResult(
+                    success=False,
+                    message="Mark refused - doctor scan failed; re-run or use --force to override",
+                    blocked_by=[str(exc)],
+                )
             if blockers:
                 return MarkResult(
                     success=False,
@@ -313,7 +331,13 @@ class KnownGoodStateService:
     # ── Private ───────────────────────────────────────────────────────────────
 
     def _find_blockers(self) -> list[str]:
-        """Return a list of blocking doctor check names, empty if none."""
+        """Return a list of blocking doctor check names, empty if none.
+
+        Raises BlockerScanError when the doctor scan itself cannot run:
+        swallowing the error here would let mark() proceed with no gate
+        evaluated at all (fail-open), defeating the documented contract that
+        blocking checks prevent marking.
+        """
         try:
             from application.diagnostics_service import DiagnosticsService, Status
             report = DiagnosticsService(data_dir=self._paths.data_dir).run()
@@ -323,7 +347,9 @@ class KnownGoodStateService:
             ]
         except Exception as exc:
             logger.warning("Could not run doctor checks for blocker scan: %s", exc)
-            return []
+            raise BlockerScanError(
+                f"doctor scan could not run: {exc}"
+            ) from exc
 
     def _backup_previous(self) -> bool:
         """Back up the existing state file with a timestamp suffix. Returns True if backed up."""
