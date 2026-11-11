@@ -380,7 +380,15 @@ class ATEMWriteAdapter:
         Never blocks or calls connect() — callers must use connect_async() first.
         """
         with self._lock:
-            return self._atem if self._connected else None
+            atem = self._atem if self._connected else None
+            if atem is not None and getattr(atem, "connected", True) is False:
+                # PyATEMMax drops the link silently and retries by itself; its
+                # exec*/set* calls then return without sending anything. Report
+                # DISCONNECTED instead of a false "success" for CUT/AUTO/...
+                # The instance is kept so the library's own reconnect recovers.
+                self._last_error = "ATEM link lost (switcher unreachable)"
+                return None
+            return atem
 
     def _mark_disconnected(self) -> None:
         with self._lock:
