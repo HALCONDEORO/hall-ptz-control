@@ -29,17 +29,19 @@ used; camera workers and timers were stopped before capture. STOP ALL is hidden
 in USER and visible after ADMIN elevation. This is not a physical camera test.
 Re-review replacements before committing them.
 
-## Publish on GitHub Pages
+## Live GitHub Pages
 
-The website is ready for GitHub Pages using **Deploy from a branch**, branch
-`main`, folder **/docs**. `docs/.nojekyll` keeps it a plain static site. No workflow
-or repository permission change is needed in this patch.
+The site is active at <https://halcondeoro.github.io/kh-ptz-control/>.
+Pages was enabled on 11 November 2026 with the owner's approval, using
+**Deploy from a branch**, branch `main`, folder **/docs**, with HTTPS enforced.
+`docs/.nojekyll` keeps it a plain static site. Reviewed merges to `main`
+automatically update this public site; no hardware deployment is involved.
 
-A repository administrator must approve and enable that setting separately after
-the reviewed PR is merged and CI passes. Do not enable Pages, change visibility,
-relax branch protection or grant new permissions as part of a documentation edit.
-Record the actual URL returned by GitHub after activation; do not report an assumed
-URL as a live website.
+For each update, require exact-head review and complete CI before merge, then
+check the Pages build commit, public HTTP result and actual desktop/mobile
+pixels. A successful build alone does not prove the right content is live.
+Do not change repository visibility, branch protection, permissions or the
+publishing source as part of a documentation edit.
 
 The public page links technical guides to their repository versions so it does
 not need to duplicate the installation documentation. Update the page's review

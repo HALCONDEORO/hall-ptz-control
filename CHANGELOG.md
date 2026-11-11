@@ -10,6 +10,12 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+### Documentation
+
+- Link the live Pages site and sync README/installation guides with the four
+  installation stages. Record the active publishing source, ADMIN-only STOP ALL
+  rehearsal and USER stopping limits without certifying pending hardware tests.
+
 ### Changed
 
 - Show STOP ALL only in ADMIN, including inline role changes. Keep underlying
