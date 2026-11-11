@@ -372,7 +372,11 @@ if [[ "$DRY_RUN" != "1" && "$GUI_MODE" != "user" ]]; then
         log "Service not running: this install has not been provisioned yet."
         log "Run the setup wizard (KHPTZ Setup in the applications menu) to finish setup."
     else
-        log "WARNING: Service did not start. Check: journalctl -u $SERVICE_NAME -n 50"
+        # systemctl start may return zero before the application crashes.
+        # Do not print "Rollback complete" or exit successfully with a
+        # provisioned appliance still down. The existing EXIT trap retains
+        # its bounded restart attempt when a running service was stopped.
+        fail "Service did not start. Check: journalctl -u $SERVICE_NAME -n 50"
     fi
 fi
 

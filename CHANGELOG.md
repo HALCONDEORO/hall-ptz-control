@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Recovery redeploy exits with an error instead of announcing completion
+  when a provisioned system-mode service stays down after start. This does
+  not imply automatic reversion of the redeployed files; the existing bounded
+  restart attempt remains unchanged.
+
 - Show unavailable disk-space and Pi-readiness probes as non-blocking
   warnings, not passed checks. Keep manual-check remediation visible.
 
