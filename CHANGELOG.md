@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Refuse known-good marking when the doctor blocker scan cannot run,
+  rather than treating a failed scan as an empty blocker list. The explicit
+  `--force` override remains available.
+
 - Blocked SET feedback now falls back to the existing admin-entry button
   instead of a missing attribute when the Settings gear is hidden.
 
