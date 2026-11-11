@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Network diagnostics no longer use a TCP probe to judge UDP ATEM health.
+  The default check reports advisory `not_run` and directs users to the app
+  monitor. A healthy ATEM can therefore still show a verification-not-run
+  warning; this is not evidence that the switcher is unreachable.
+
 - Disable automatic ATEM discovery and the TCP-based Scan action rather than
   treating TCP reachability as switcher detection. Both buttons remain visible
   but disabled; enter the IP manually and use Reconnect ATEM with monitor status.

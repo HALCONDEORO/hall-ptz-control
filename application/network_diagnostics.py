@@ -304,6 +304,21 @@ class NetworkDiagnosticsService:
                 ),
                 category=CheckCategory.CONFIGURATION,
             )
+        if not self._probe_fn_injected:
+            # ATEM control uses UDP. A TCP connect on the same port says
+            # nothing about its health, and an arbitrary UDP send is not a
+            # protocol verification either. Do not open a second ATEM session
+            # here: the app's monitor owns it and exposes the live state.
+            return CheckResult(
+                "atem_reachable",
+                Status.WARNING,
+                f"ATEM ({ip}): UDP control reachability not verified; "
+                "a TCP port check is not applicable",
+                evidence={"transport": "UDP", "port": ATEM_PORT,
+                          "verification_status": "not_run"},
+                suggested_action="Check the ATEM connection state in the app.",
+                category=CheckCategory.ADVISORY,
+            )
         reachable = self._probe(ip, ATEM_PORT)
         status = Status.OK if reachable else Status.WARNING
         verb = "reachable" if reachable else "unreachable"
