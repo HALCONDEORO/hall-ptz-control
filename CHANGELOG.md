@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Reject unrepresentable layout schema versions as failed imports rather
+  than raising OverflowError; existing layout and import-backup bytes remain
+  unchanged on this validation error.
+
 - Preserve the last valid JSON backup when saving after recovery from a
   corrupt primary. Rotate the primary into `.bak` only when it contains valid
   UTF-8 JSON, including when the final primary replacement later fails.

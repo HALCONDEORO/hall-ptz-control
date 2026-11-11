@@ -375,3 +375,22 @@ def test_successful_import_loads_without_runtime_recovery(tmp_path):
     assert reader.recovery_used is False
     assert layout.seats[0].id == "1"
     assert layout.seats[0].preset == 1
+
+
+@pytest.mark.parametrize('number', ['1e999', '-1e999', 'Infinity', '-Infinity'])
+def test_import_rejects_unrepresentable_schema_version_without_raising(tmp_path, number):
+    layout_path = tmp_path / 'room_layout.json'
+    _write(layout_path, _valid_layout())
+    original = layout_path.read_bytes()
+    backup = layout_path.with_suffix('.import.bak')
+    backup.write_bytes(b'previous recovery copy')
+    src = tmp_path / 'overflow-schema.json'
+    src.write_text('{"schema_version": ' + number + ', "seats": []}', encoding='utf-8')
+
+    result = _svc(layout_path).import_layout(src)
+
+    assert not result.imported
+    assert result.reason
+    assert result.pre_import_backup is None
+    assert layout_path.read_bytes() == original
+    assert backup.read_bytes() == b'previous recovery copy'
