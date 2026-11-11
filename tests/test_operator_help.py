@@ -7,11 +7,12 @@ import sys
 
 def test_user_help_flow_uses_full_stop_route_without_other_commands():
     script = r'''
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import Mock, patch
 from PyQt5.QtWidgets import QApplication, QPushButton, QMessageBox
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import QPoint, QRect, Qt
 from PyQt5.QtTest import QTest
 import adapters.sim_mode as sim
 with TemporaryDirectory() as root:
@@ -25,12 +26,32 @@ with TemporaryDirectory() as root:
     window = MainWindow()
     window._access_mode_svc.set_mode(OperatingMode.USER)
     window.show()
+    QTest.qWait(80)
     app.processEvents()
     entry = window._operator_help
     assert entry.button.width() >= 44 and entry.button.height() >= 44
     assert not entry.button.isHidden() and entry.button.isEnabled()
     admin = window._right_panel._btn_enter_admin
-    assert entry.button.y() > admin.y() + admin.height()
+    panel = window._right_panel._container
+    def settled_entry():
+        QTest.qWait(80)
+        app.processEvents()
+        help_rect = QRect(entry.button.mapTo(panel, QPoint(0, 0)), entry.button.size())
+        assert panel.rect().contains(help_rect)
+        for widget in panel.findChildren(QPushButton):
+            if widget is entry.button or not widget.isVisible():
+                continue
+            rect = QRect(widget.mapTo(panel, QPoint(0, 0)), widget.size())
+            assert not help_rect.intersects(rect), (widget.text(), help_rect, rect)
+        if admin.isVisible():
+            assert help_rect.top() > admin.mapTo(panel, QPoint(0, admin.height())).y()
+    for controls in (True, False, True):
+        window._right_panel.show_camera_controls(controls)
+        settled_entry()
+    window._access_mode_svc.set_mode(OperatingMode.ADMIN)
+    settled_entry()
+    window._access_mode_svc.set_mode(OperatingMode.USER)
+    settled_entry()
     calls = []
     window._bus = Mock()
     window._bus.emit.side_effect = lambda *a, **k: calls.append(('emit', a, k))
@@ -104,11 +125,13 @@ with TemporaryDirectory() as root:
     assert stop.isHidden()
     window.hide()
     sim.deactivate()
+    # Isolated Qt process avoids native polling-thread teardown races.
+    os._exit(0)
 '''
     result = subprocess.run(
         [sys.executable, '-c', script],
         cwd=Path(__file__).resolve().parents[1],
-        env=dict(os.environ, QT_QPA_PLATFORM='offscreen'),
+        env=dict(os.environ, QT_QPA_PLATFORM=os.environ.get('HELP_TEST_PLATFORM', 'offscreen')),
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 0, result.stdout + result.stderr

@@ -1,7 +1,7 @@
 """Offline operator help with the same full STOP route as ADMIN STOP ALL."""
 from html import escape
 
-from PyQt5.QtCore import QEvent, QObject, Qt
+from PyQt5.QtCore import QObject, Qt
 from PyQt5.QtWidgets import (
     QDialog, QGridLayout, QHBoxLayout, QLabel, QPushButton, QScrollArea,
     QStackedWidget, QVBoxLayout, QWidget,
@@ -154,17 +154,9 @@ class _HelpEntry(QObject):
             'QPushButton { color: #9b9796; font-size: 22px; background: transparent; border: none; }'
             'QPushButton:pressed { background: #eae9ea; border-radius: 8px; }')
         self.button.clicked.connect(self.open)
-        panel.installEventFilter(self)
-        self._position(panel)
-
-    def _position(self, panel):
-        self.button.move(max(0, panel.width() - 56), max(0, panel.height() - 56))
-        self.button.raise_()
-
-    def eventFilter(self, watched, event):
-        if event.type() in (QEvent.Resize, QEvent.Show):
-            self._position(watched)
-        return False
+        # Reserve an actual footer row. Absolute positioning can overlap the
+        # Admin Mode row after RightPanel's deferred layout pass.
+        panel.layout().addWidget(self.button, 0, Qt.AlignRight)
 
     def open(self):
         if self.dialog is None:
