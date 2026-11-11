@@ -145,7 +145,8 @@ def _apply_group_access(tmp_path: str, directory: Path) -> None:
 def save_json(path: Path | str, data: Any, indent: int = 2, *, create_backup: bool = True) -> bool:
     """
     Escribe `data` en `path` de forma atómica (temp-file + os.replace) con backup
-    y bloqueo por archivo. Si el archivo ya existe, crea `.bak` antes de reemplazarlo.
+    y bloqueo por archivo. Crea `.bak` antes de reemplazarlo solo si el primario
+    contiene JSON UTF-8 válido.
     Use create_backup=False when restoring a good backup over a corrupt primary.
     Devuelve True si tuvo éxito.
     """
@@ -160,9 +161,19 @@ def save_json(path: Path | str, data: Any, indent: int = 2, *, create_backup: bo
             if create_backup and p.exists():
                 bak = p.with_suffix('.bak')
                 try:
-                    shutil.copy2(p, bak)
+                    # load_json may have recovered from .bak without repairing
+                    # the primary. Never overwrite that last good recovery copy
+                    # with malformed JSON, even if the new save later fails.
+                    json.loads(p.read_text(encoding="utf-8"))
+                except ValueError:  # includes JSONDecodeError and UnicodeDecodeError
+                    logger.warning("Skipping corrupt primary backup for %s", p)
                 except OSError as exc:
-                    logger.warning("No se pudo crear backup de %s: %s", p, exc)
+                    logger.warning("Could not read primary for backup %s: %s", p, exc)
+                else:
+                    try:
+                        shutil.copy2(p, bak)
+                    except OSError as exc:
+                        logger.warning("No se pudo crear backup de %s: %s", p, exc)
 
             fd, tmp = tempfile.mkstemp(dir=dir_, prefix=".tmp_", suffix=".json")
             try:
