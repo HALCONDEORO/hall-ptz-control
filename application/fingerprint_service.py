@@ -221,7 +221,19 @@ class FingerprintService:
                     raw = path.read_text(encoding="utf-8")
                     # YAML parsed as text: apply text-level redaction, then hash
                     redacted = _guard.redact_text(raw)
-                    return hashlib.sha256(redacted.encode("utf-8")).hexdigest()
+                    base_hash = hashlib.sha256(redacted.encode("utf-8")).hexdigest()
+                    # Runtime endpoint edits live outside the root-owned YAML.
+                    # Keep the legacy hash when there is no overlay, but never
+                    # report a clean baseline after the effective endpoints change.
+                    from config.effective import OVERLAY_NAME
+                    overlay = self._paths.data_dir / OVERLAY_NAME
+                    if not overlay.exists():
+                        return base_hash
+                    combined = json.dumps({
+                        "base_config_hash": base_hash,
+                        "runtime_overrides_hash": _safe_json_hash(overlay),
+                    }, sort_keys=True, separators=(",", ":"))
+                    return hashlib.sha256(combined.encode("utf-8")).hexdigest()
                 except UnicodeDecodeError:
                     return "invalid"
                 except OSError:
