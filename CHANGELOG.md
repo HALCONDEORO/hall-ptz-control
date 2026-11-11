@@ -19,6 +19,7 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Runtime ATEM IP edits start or replace the monitor instead of polling a stale endpoint.
 - Legacy backup imports reject duplicate archive member names before
   overwriting current files or their recovery backups.
 - Report unsupported ATEM PiP state once instead of failing silently on
