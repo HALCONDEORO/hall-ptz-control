@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Setup keeps watching an unresolved provisioning request after timeout or
+  unreadable results and blocks Back until a definitive outcome allows retry.
 - Reject backup ZIP archives with duplicate member names before restoring
   files, including dry-run validation.
 - Add an always-available STOP ALL button that retires queued camera moves,

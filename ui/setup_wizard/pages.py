@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QVBoxLayout,
     QWidget,
+    QWizard,
     QWizardPage,
 )
 
@@ -556,26 +557,32 @@ class InstallingPage(_BasePage):
         wizard.finished.connect(self._timer.stop)
         self._result = None
         self._done = False
-        # True from begin() until a result lands. Back + Next mid-install must
-        # NOT call begin() again: ProvisionHandoff.begin() states that a fresh
-        # begin does not make retries safe while an earlier operation is
-        # active — the pending result would be mis-attributed to new answers.
-        self._request_in_flight = False
+        self._submission_started = False
+        wizard.currentIdChanged.connect(self._sync_navigation)
+
+    def _outcome_unknown(self) -> bool:
+        return self._submission_started and (
+            self._result is None or self._result.timed_out
+            or getattr(self._result, "outcome_unknown", False)
+        )
+
+    def _sync_navigation(self, *_args) -> None:
+        if self._wiz.currentPage() is self:
+            self._wiz.button(QWizard.BackButton).setEnabled(not self._outcome_unknown())
 
     def initializePage(self) -> None:
+        if self._outcome_unknown():
+            # Back/re-entry never overwrites a request whose privileged outcome
+            # is still unknown. Resume observing that same request instead.
+            self._done = False
+            self._timer.start(max(1, int(self._wiz.handoff.poll_interval_s * 1000)))
+            self._sync_navigation()
+            return
         self._result = None
         self._done = False
         self._status.setText("Installing… please wait.")
         self.completeChanged.emit()
         handoff = self._wiz.handoff
-
-        if self._request_in_flight:
-            # Operator pressed Back while the privileged operation was still
-            # running and returned with Next. Resume polling for the in-flight
-            # result instead of submitting a competing request.
-            self._status.setText("Install already in progress — waiting for the result.")
-            self._start_polling()
-            return
 
         # begin() writes the request into /run/khptz, which the desktop user
         # cannot create itself. install.sh deliberately tolerates
@@ -598,29 +605,24 @@ class InstallingPage(_BasePage):
             ))
             return
 
-        self._request_in_flight = True
-        self._start_polling()
-
-    def _start_polling(self) -> None:
-        """Start the result poll timer. Kept out of initializePage so the
-        failed-begin path provably returns before any timer start (see
-        tests/test_wizard_failure_paths.py source assertions)."""
-        handoff = self._wiz.handoff
+        self._submission_started = True
         self._timer.start(max(1, int(handoff.poll_interval_s * 1000)))
+        self._sync_navigation()
 
     def _poll_once(self) -> None:
         result = self._wiz.handoff.poll()
         if result is None:
             return
-        self._timer.stop()
         self._apply_result(result)
+        if not self._outcome_unknown():
+            self._timer.stop()
 
     def _apply_result(self, result) -> None:
         self._result = result
         self._done = True
-        self._request_in_flight = False
         self._status.setText(result.summary())
         self.completeChanged.emit()
+        self._sync_navigation()
 
     def isComplete(self) -> bool:
         return self._done and self._result is not None and self._result.ok
