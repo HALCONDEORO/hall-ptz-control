@@ -58,9 +58,25 @@ fi
 # XAUTHORITY in particular is absent on some Bullseye display-manager setups
 # (the cookie then lives under XDG_RUNTIME_DIR instead).
 _vars=()
+_unset_vars=()
 for _name in DISPLAY XAUTHORITY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS XDG_SESSION_TYPE XDG_CURRENT_DESKTOP; do
-    [[ -n "${!_name:-}" ]] && _vars+=("${_name}")
+    if [[ -n "${!_name:-}" ]]; then
+        _vars+=("${_name}")
+    else
+        _unset_vars+=("${_name}")
+    fi
 done
+
+# A user manager can outlive the previous graphical login. Importing only
+# present variables leaves old values behind, especially an XAUTHORITY path
+# whose cookie was removed at logout. Clear absent session values first so
+# Qt uses this login's normal authority lookup instead of a stale cookie.
+if [[ ${#_unset_vars[@]} -gt 0 ]]; then
+    if ! systemctl --user unset-environment "${_unset_vars[@]}"; then
+        log "Could not clear the previous session environment in the user manager."
+        exit 1
+    fi
+fi
 
 if ! systemctl --user import-environment "${_vars[@]}"; then
     log "Could not import the session environment into the user manager."
