@@ -498,3 +498,25 @@ def test_delayed_screen_sleep_belongs_to_ended_session(main_window, monkeypatch,
         sleep.assert_called_once_with()
     else:
         sleep.assert_not_called()
+
+
+def test_recall_blocked_set_flashes_gear_when_visible(main_window, monkeypatch):
+    """operator_no_set flashes the Settings gear while it is visible (ADMIN)."""
+    panel = main_window._right_panel
+    flashes = []
+    monkeypatch.setattr(main_window, "_flash_blocked", flashes.append)
+    monkeypatch.setattr(panel._btn_gear, "isVisible", lambda: True)
+    main_window._handle_recall_blocked("operator_no_set", 3)
+    assert flashes == [panel._btn_gear]
+
+
+def test_recall_blocked_set_flashes_admin_entry_when_gear_hidden(main_window, monkeypatch):
+    """operator_no_set with the gear hidden (USER) falls back to
+    _btn_enter_admin. Regression net: the fallback previously referenced
+    _btn_switch_admin, which never existed and raised AttributeError."""
+    panel = main_window._right_panel
+    flashes = []
+    monkeypatch.setattr(main_window, "_flash_blocked", flashes.append)
+    monkeypatch.setattr(panel._btn_gear, "isVisible", lambda: False)
+    main_window._handle_recall_blocked("operator_no_set", 3)
+    assert flashes == [panel._btn_enter_admin]

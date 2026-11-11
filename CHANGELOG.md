@@ -19,6 +19,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Blocked SET feedback now falls back to the existing admin-entry button
+  instead of a missing attribute when the Settings gear is hidden.
+
 - Legacy backup import now validates every recognized JSON/TXT payload before
   writing any files. Contract change: invalid later content no longer leaves
   earlier members partially restored. Existing files and backups stay intact

@@ -1189,7 +1189,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             btn_to_flash = (
                 self._right_panel._btn_gear
                 if self._right_panel._btn_gear.isVisible()
-                else self._right_panel._btn_switch_admin
+                else self._right_panel._btn_enter_admin
             )
             self._flash_blocked(btn_to_flash)
 
