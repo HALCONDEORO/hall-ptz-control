@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Report unsupported ATEM PiP state once instead of failing silently on
+  every monitor poll, and expose the unsupported capability.
 - Preserve corrupt runtime overlays for diagnosis and allow endpoint updates
   to recover from the base configuration.
 - Legacy autostart cleanup uses the intended NUL escape in its process guard.
