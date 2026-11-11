@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- The setup review plan scrolls on an 800x480 display while wizard
+  navigation buttons remain reachable.
 - Starting a seat-name drag cancels its pending long-press preset SET
   so moving a name does not overwrite a camera position.
 - Demo guards and diagnostics protect the service production directory
