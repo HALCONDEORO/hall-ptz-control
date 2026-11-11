@@ -19,6 +19,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Exclude exact canonical KHPTZ startup filenames from legacy readiness
+  warnings while continuing to detect legacy entries such as hallptz.desktop.
+
 - Recovery redeploy exits with an error instead of announcing completion
   when a provisioned system-mode service stays down after start. This does
   not imply automatic reversion of the redeployed files; the existing bounded

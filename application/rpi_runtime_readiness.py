@@ -15,6 +15,18 @@ from typing import Iterable, List, Mapping, Optional
 # Fixed location of the X server's UNIX domain sockets (X11 spec, not a tempdir).
 _X11_SOCKET_DIR = "/tmp/.X11-unix"  # nosec B108
 
+# Canonical startup files installed by KHPTZ itself (runtime/installer/install.sh).
+# The legacy scan must never flag them: they are the current startup chain,
+# not a previous controller. Exact names only - legacy installs used other
+# names (khptz_controls, hallptz, ...), which still match the pattern below.
+_CANONICAL_STARTUP_NAMES = frozenset({
+    "khptz-setup.desktop",
+    "khptz-gui.desktop",
+    "khptz-control.service",
+    "khptz-provision.service",
+    "khptz-provision.path",
+})
+
 
 @dataclass(frozen=True)
 class RpiSetupAdvisory:
@@ -160,6 +172,8 @@ def check_legacy_autostart(
             for path in location.rglob("*"):
                 if not path.is_file():
                     continue
+                if path.name in _CANONICAL_STARTUP_NAMES:
+                    continue  # our own canonical startup chain, not legacy
                 try:
                     text = path.read_text(encoding="utf-8", errors="replace")
                 except OSError:

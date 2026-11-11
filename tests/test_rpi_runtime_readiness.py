@@ -65,3 +65,25 @@ def test_commented_and_quarantined_entries_are_not_active(tmp_path: Path):
     )
     assert check_legacy_autostart(home=tmp_path).ok
 
+
+
+def test_canonical_khptz_startup_is_not_flagged_as_legacy(tmp_path: Path):
+    """The wizard readiness page runs while our own first-boot autostart exists."""
+    autostart = tmp_path / ".config" / "autostart"
+    autostart.mkdir(parents=True)
+    (autostart / "khptz-setup.desktop").write_text(
+        "[Desktop Entry]\nExec=khptz setup\n", encoding="utf-8"
+    )
+    (autostart / "khptz-gui.desktop").write_text(
+        "[Desktop Entry]\nExec=/usr/local/libexec/khptz-gui-session\n",
+        encoding="utf-8",
+    )
+    assert check_legacy_autostart(home=tmp_path).ok
+    # A genuine legacy entry next to them is still caught.
+    (autostart / "hallptz.desktop").write_text(
+        "[Desktop Entry]\nExec=/home/pi/hallptz_controls/main.py\n",
+        encoding="utf-8",
+    )
+    legacy = check_legacy_autostart(home=tmp_path)
+    assert not legacy.ok
+    assert "1" in legacy.detail
