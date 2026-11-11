@@ -20,6 +20,8 @@ This project uses a simple versioning approach while it is still in early produc
 ### Fixed
 
 - Simulated camera moves ignore arrivals superseded by a later recall or stop.
+- The setup wizard no longer suggests an address ending in .255 when
+  proposing the next camera address in the same subnet.
 - Installer mirrors preserve simulation state and saved production endpoints.
 - Boot duration metrics use a monotonic clock so wall-clock corrections
   do not corrupt measured startup durations.
