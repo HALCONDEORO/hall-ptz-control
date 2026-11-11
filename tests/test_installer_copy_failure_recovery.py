@@ -33,9 +33,16 @@ def run_copy(tmp_path, *, active=True, gui="system", stop_rc=0, copy_rc=0, resta
     script = r'''
 set -euo pipefail
 info() { echo "$*"; }
-for forbidden in sudo useradd install chown chmod find cp rm curl wget ssh; do
+for forbidden in sudo useradd chown chmod find cp rm curl wget ssh; do
     eval "$forbidden() { echo FORBIDDEN_HOST_COMMAND >&2; return 98; }"
 done
+install() {
+    # Runtime mkdir now follows the quiesce guard. Only these inert scratch
+    # targets are allowed here; directory-mode behavior has its own real test.
+    [[ "$*" == "-d -m 750 -o synthetic -g synthetic $DATA_DIR" ||
+       "$*" == "-d -m 750 -o synthetic -g synthetic $LOG_DIR" ||
+       "$*" == "-d -m 750 -o synthetic -g synthetic $BACKUP_DIR" ]] || return 98
+}
 systemctl() {
     # This harness covers system-service recovery, not live user managers.
     # The dedicated quiesce tests exercise enumeration and user stop failures.
@@ -68,6 +75,8 @@ trap - EXIT
     env = dict(os.environ, REPO_ROOT=str(source), INSTALL_DIR=str(target),
                DEV_MODE="true" if dev else "false", GUI_MODE=gui,
                SERVICE_NAME="synthetic-khptz-service", EVENTS=str(events),
+               APP_USER="synthetic", DATA_DIR=str(tmp_path / "data"),
+               LOG_DIR=str(tmp_path / "log"), BACKUP_DIR=str(tmp_path / "backup"),
                ACTIVE="1" if active else "0", STOP_RC=str(stop_rc),
                COPY_RC=str(copy_rc), RESTART_RC=str(restart_rc))
     result = subprocess.run(["bash", "-c", script], env=env,

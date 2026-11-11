@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize('mode', ['user', 'system'])
 @pytest.mark.parametrize('discovery', ['listed', 'socket_only', 'error'])
 @pytest.mark.parametrize('endpoint,unit_present', [('bus', True), ('systemd/private', True), ('bus', False), (None, False)])
-def test_quiesce_before_copy(tmp_path, state, stop_rc, after, show_rc, expected, mode, endpoint, unit_present, discovery):
+def test_quiesce_before_copy(tmp_path, state, stop_rc, after, show_rc, expected, mode, endpoint, unit_present, discovery, show_after=False):
     source = (ROOT / 'runtime/installer/install.sh').read_text()
     # RED on old code: no guard runs, so all unsafe cases reach COPY.
     start = source.find('_stop_session_guis() {')
@@ -60,7 +60,9 @@ sudo() {
     case " $* " in
         *' stop '*) touch "$STOPPED"; return "$STOP_RC" ;;
         *' show '*)
-            [[ "$SHOW_RC" == 0 ]] || return "$SHOW_RC"
+            if [[ "$SHOW_RC" != 0 && ( "$SHOW_AFTER" != true || -f "$STOPPED" ) ]]; then
+                return "$SHOW_RC"
+            fi
             if [[ -f "$STOPPED" ]]; then echo "$AFTER"; else echo "$STATE"; fi ;;
         *) exit 99 ;;
     esac
@@ -69,7 +71,7 @@ sudo() {
         env = dict(os.environ, UNIT_FILE=str(unit), RUNTIME=str(runtime),
                    CALLS=str(tmp_path / 'calls'), STOPPED=str(tmp_path / 'stopped'),
                    STATE=state, STOP_RC=str(stop_rc), AFTER=after, SHOW_RC=str(show_rc),
-                   GUI_MODE=mode, DISCOVERY=discovery)
+                   GUI_MODE=mode, DISCOVERY=discovery, SHOW_AFTER=str(show_after).lower())
         result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
         assert result.returncode == expected, result.stdout + result.stderr
         assert ('COPY' in result.stdout) == (expected == 0)
@@ -85,3 +87,10 @@ def test_guard_precedes_copy_and_is_after_readonly_checks():
     source = (ROOT / 'runtime/installer/install.sh').read_text()
     assert source.index('    _stop_session_guis /run/user') < source.index('    rsync -a --delete')
     assert source.index('    _stop_session_guis /run/user') > source.index('# ── Copy application')
+
+
+@pytest.mark.parametrize('mode', ['user', 'system'])
+@pytest.mark.parametrize('endpoint', ['bus', 'systemd/private'])
+def test_only_post_stop_verification_failure_blocks_copy(tmp_path, mode, endpoint):
+    test_quiesce_before_copy(tmp_path, 'active', 0, 'inactive', 7, 1,
+                            mode, endpoint, True, 'listed', show_after=True)

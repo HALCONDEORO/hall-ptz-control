@@ -28,6 +28,10 @@ See `docs/releases/1.2.1.md` for release gates and known limitations.
 
 ### Fixed
 
+- Preserve runtime-directory group-write permissions until session GUI
+  quiescence succeeds, so an aborted pre-copy guard does not revoke access
+  from a desktop controller that is still running.
+
 - Stop and verify session-owned GUIs in identified live user managers before
   product code replacement, including user-to-system mode changes. Refuse the
   copy if a manager or stop cannot be verified. GUIs stay stopped on success
