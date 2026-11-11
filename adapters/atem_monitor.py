@@ -43,6 +43,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Consecutive poll failures that mean "dead session", not a hiccup: 30 cycles
+#: at the 0.1 s poll cadence is about three seconds of solid failure, long
+#: enough that a network micro-outage never costs the session. On reaching
+#: it the poll loop returns so the monitor thread can end and be restarted.
+_MAX_CONSECUTIVE_POLL_FAILURES = 30
+
 
 class ATEMMonitor(QThread):
     """
@@ -63,6 +69,10 @@ class ATEMMonitor(QThread):
     input_names_ready  = pyqtSignal(dict)    # {input_id: name} tras conectar al ATEM real
     pip_changed        = pyqtSignal(object)  # ATEMPiPState — PiP activado/desactivado
 
+    # Class-level default (tests build monitors without __init__): False once
+    # the library is found to expose no PiP state.
+    _pip_supported: bool = True
+
     def __init__(
         self,
         ip: str,
@@ -75,6 +85,11 @@ class ATEMMonitor(QThread):
         self.last_error: str = ""
         self._store = runtime_state_store  # #793 — fuente unica de verdad
         self._pip_enabled: bool | None = None  # None = estado aún desconocido
+
+    @property
+    def pip_supported(self) -> bool:
+        """False when PyATEMMax exposes no PiP state (PiP automation inert)."""
+        return self._pip_supported
 
     @property
     def state(self) -> ATEMState | None:
@@ -239,6 +254,7 @@ class ATEMMonitor(QThread):
     def _poll_loop(self, atem) -> None:
         prev_input = None
         verified = False
+        consecutive_failures = 0
         while not self.isInterruptionRequested():
             try:
                 # PyATEMMax keeps the last programInput after the UDP link
@@ -251,6 +267,7 @@ class ATEMMonitor(QThread):
                 cur = source_number(atem.programInput[0].videoSource)
                 if cur < 0:
                     raise ValueError("ATEM program input must not be negative")
+                consecutive_failures = 0
                 if self._state == ATEMState.ERROR:
                     logger.info("ATEM: poll recovered from ERROR — marking CONNECTED")
                     self._emit_state(ATEMState.CONNECTED)
@@ -263,6 +280,7 @@ class ATEMMonitor(QThread):
                 prev_input = cur
             except Exception:
                 verified = False
+                consecutive_failures += 1
                 if isinstance(sys.exc_info()[1], ConnectionError):
                     logger.warning("ATEM poll: link lost, waiting for PyATEMMax to reconnect")
                     err = "link lost"
@@ -271,6 +289,18 @@ class ATEMMonitor(QThread):
                     err = "poll cycle failed"
                 if self._state != ATEMState.ERROR:
                     self._emit_state(ATEMState.ERROR, last_error=err)
+                if consecutive_failures >= _MAX_CONSECUTIVE_POLL_FAILURES:
+                    # The session is dead, not hiccuping. Returning here lets
+                    # _run_with_retry close the client and end the thread in
+                    # ERROR state, so the supervisor can start a fresh monitor
+                    # with a clean session. Spinning on a dead session kept
+                    # the thread "healthy" and the ATEM down until an app
+                    # restart, logging a traceback 10 times a second.
+                    logger.warning(
+                        "ATEM: %d consecutive poll failures — dropping the session to reconnect",
+                        consecutive_failures,
+                    )
+                    return
             self._poll_pip(atem)
             time.sleep(0.1)
 
@@ -281,8 +311,22 @@ class ATEMMonitor(QThread):
         Los atributos relevantes son ``enabled`` (bool) y ``source`` (int-like).
         No lanza — cualquier fallo del API se ignora para no interrumpir el hilo.
         """
+        if not self._pip_supported:
+            return
         try:
-            pip_block = atem.pictureInPicture[0]
+            try:
+                pip_state_list = atem.pictureInPicture
+            except AttributeError:
+                # PyATEMMax 1.0b9 has no pictureInPicture state at all, so on
+                # real hardware PiP automation can never fire. Say so once
+                # instead of failing silently on every 100 ms poll.
+                self._pip_supported = False
+                logger.warning(
+                    "ATEM PiP: PyATEMMax does not expose pictureInPicture; "
+                    "PiP detection is unavailable with this ATEM/library"
+                )
+                return
+            pip_block = pip_state_list[0]
             enabled = bool(getattr(pip_block, "enabled", False))
             source_raw = getattr(pip_block, "source", None)
             try:
