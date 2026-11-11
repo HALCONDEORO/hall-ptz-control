@@ -17,6 +17,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- PiP writes report network failures as NETWORK_ERROR and keep healthy
+  connections open after non-network library errors.
 - Boot duration metrics use a monotonic clock so wall-clock corrections
   do not corrupt measured startup durations.
 - The extracted main-window budget is capped at 1700 lines, below the
