@@ -213,6 +213,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         self._atem_state: ATEMState = ATEMState.NOT_CONFIGURED
         self._atem_restart_pending = False
+        # Marca temporal del DISCONNECTED terminal actual: el supervisor lo usa
+        # para reintentar el ATEM pasado ATEM_DISCONNECTED_RETRY_AFTER_S.
+        self._atem_disconnected_at: float | None = None
         self._atem_monitor = None
         self._fake_atem = None
         self._demo_atem_panel = None
@@ -1295,6 +1298,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         import adapters.sim_mode as _sim
         from domain.atem_runtime_policy import is_fake_atem_mode
         self._atem_state = None
+        self._atem_disconnected_at = None
         self._atem_verified_monitor = None
         self._atem_dispatcher.reset_input_tracking()
 
@@ -1343,6 +1347,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             return
         if state != ATEMState.CONNECTED:
             self._atem_verified_monitor = None
+        if state is ATEMState.DISCONNECTED:
+            if self._atem_state is not ATEMState.DISCONNECTED:
+                self._atem_disconnected_at = time.monotonic()
+        else:
+            self._atem_disconnected_at = None
         self._atem_state = state
         self._atem_dispatcher.on_atem_state_changed(state)
         self._right_panel.set_atem_state(state)
@@ -1405,10 +1414,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
     def _atem_monitor_is_healthy(self) -> bool:
         if self._atem_monitor is None:
             return True  # FakeATEM / no-ATEM path: never needs restart
+        elapsed = None
+        if self._atem_disconnected_at is not None:
+            elapsed = time.monotonic() - self._atem_disconnected_at
         return is_atem_supervisor_healthy(
             is_running=self._atem_monitor.isRunning(),
             restart_pending=self._atem_restart_pending,
             state=self._atem_state,
+            disconnected_elapsed_s=elapsed,
         )
 
     def _do_restart_atem_monitor(self):

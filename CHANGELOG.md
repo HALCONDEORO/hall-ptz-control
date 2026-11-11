@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- A disconnected ATEM monitor becomes eligible for a supervisor retry after
+  thirty seconds instead of remaining permanently treated as healthy.
 - ATEM writes report DISCONNECTED when the underlying link is down instead
   of claiming success for commands the library did not send.
 - The setup wizard no longer suggests an address ending in .255 when
