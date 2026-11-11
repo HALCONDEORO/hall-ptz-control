@@ -255,3 +255,28 @@ class TestDisableSystemServicesReporting:
         assert "Disabled system service: hallptz.service" in report
         assert "Disabled system service: stubborn.service" not in report
         assert "REVIEW MANUALLY - could not fully disable system service: stubborn.service" in report
+
+
+class TestScriptIsPureText:
+    """bash silently discards NUL bytes when reading a script file — verified:
+    a sourced `s='a<NUL>b'` becomes 'ab' with no warning. A raw NUL in a
+    shipped shell script therefore rewrites the program bash executes.
+    This file carried exactly one, inside the cgroup guard's `tr -d '<NUL>'`:
+    the executed command was `tr -d ''`, an accidental no-op whose success
+    depends on the local tr accepting an empty SET1. On a stricter tr the
+    `|| true` swallows the error, the cgroup read comes back empty and
+    _pid_is_khptz_managed always answers "not ours" — re-arming the
+    wizard-reopen GUI kill the guard exists to prevent."""
+
+    def test_no_nul_bytes_in_shipped_shell_scripts(self):
+        scripts = (
+            list((REPO_ROOT / "scripts").glob("*.sh"))
+            + list((REPO_ROOT / "runtime").rglob("*.sh"))
+            + list((REPO_ROOT / "tests" / "installer").glob("*.sh"))
+        )
+        assert scripts, "no shell scripts found — the scan is not protecting anything"
+        offenders = [str(p.relative_to(REPO_ROOT)) for p in scripts if b"\x00" in p.read_bytes()]
+        assert not offenders, (
+            "shell scripts containing raw NUL bytes (bash silently drops them, "
+            f"rewriting the executed program): {offenders}"
+        )
