@@ -113,3 +113,15 @@ def test_operator_entry_points_do_not_promise_unwired_safety_buttons():
         assert 'STOP ALL' in text, relative
         assert 'Learn STOP, STOP ALL' not in text, relative
         assert 'Learn [STOP, STOP ALL' not in text, relative
+
+
+def test_setup_scope_and_demo_age_are_visible():
+    """Setup has no layout editor; the older walkthrough is not current UI."""
+    readme = (ROOT / 'README.md').read_text()
+    page = (ROOT / 'docs/index.html').read_text()
+    assert 'wizard collects camera IPs, seat layout' not in readme
+    assert 'wizard collects camera configuration, the layout' not in page
+    assert 'room details, camera addresses and login settings' in readme
+    assert 'room details, camera addresses and login settings' in page
+    assert 'Captured 10 November 2026' in page
+    assert 'Historical UI states' in page

@@ -121,8 +121,7 @@ the failure. Keep the installer output and never paste passwords into reports.
 
 The installer creates the `khptz` service user, installs dependencies, sets up the
 systemd service and the autostart session, and prints the next action: reboot and log into the desktop, or run
-`khptz setup` there. The first-run wizard collects camera IPs, seat layout
-and login settings. Follow the current wizard prompts; do not use a default password.
+`khptz setup` there. The first-run wizard collects room details, camera addresses and login settings. Follow the current wizard prompts; do not use a default password.
 
 The full guide — prerequisites, validation, backup/restore, rollback and
 troubleshooting — is [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).
