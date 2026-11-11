@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- ATEM monitoring ends a session after thirty consecutive poll failures so
+  the supervisor can reconnect, including when the link drops with cached input.
 - A disconnected ATEM monitor becomes eligible for a supervisor retry after
   thirty seconds instead of remaining permanently treated as healthy.
 - ATEM writes report DISCONNECTED when the underlying link is down instead
