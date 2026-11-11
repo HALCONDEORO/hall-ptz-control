@@ -19,6 +19,7 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Installer mirrors preserve simulation state and saved production endpoints.
 - Boot duration metrics use a monotonic clock so wall-clock corrections
   do not corrupt measured startup durations.
 - The extracted main-window budget is capped at 1700 lines, below the
