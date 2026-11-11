@@ -250,7 +250,10 @@ class RestoreService:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _load_manifest(self, zf: zipfile.ZipFile) -> dict:
-        if "manifest.json" not in zf.namelist():
+        names = zf.namelist()
+        if len(names) != len(set(names)):
+            raise RestoreError("Duplicate archive member names. Restore aborted.")
+        if "manifest.json" not in names:
             raise RestoreError(
                 "Backup ZIP has no manifest.json — this backup may be from an older version "
                 "or may be corrupt. Restore aborted."

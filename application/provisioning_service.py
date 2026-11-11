@@ -176,7 +176,11 @@ def next_camera_answer(existing: List[CameraAnswer]) -> CameraAnswer:
             base, last = ".".join(parts[:3]), int(parts[3])
             for step in range(1, 255):
                 candidate = f"{base}.{(last + step) % 256}"
-                if candidate not in used_ips and not candidate.endswith(".0"):
+                # .0 = network, .255 = broadcast on the product's /24 flat_lan
+                # (same exclusion camera_discovery.apply uses).
+                if (candidate not in used_ips
+                        and not candidate.endswith(".0")
+                        and not candidate.endswith(".255")):
                     ip = candidate
                     break
     while ip in used_ips:

@@ -333,3 +333,45 @@ class TestUndoAfterRename:
             assert w._seat_names == {"6": "PersonD", "7": "PersonC"}
             ctrl.undo_last_assignment()
         assert w._seat_names == {"5": "PersonD", "7": "PersonC"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  _on_names_list_changed: warn when preset persistence fails
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestRenamePresetPersistWarning:
+    """Warn only if a preset existed and its disk save failed."""
+
+    def test_warns_when_preset_rename_persist_fails(self):
+        ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
+        w._preset_svc.has_preset.return_value = True
+        w._preset_svc.rename.return_value = False
+        with patch("PyQt5.QtWidgets.QMessageBox.warning") as warn:
+            SeatNamesController._on_names_list_changed(ctrl, "PersonA", "PersonB")
+        assert warn.call_count == 1
+
+    def test_no_warning_when_old_name_has_no_preset(self):
+        ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
+        w._preset_svc.has_preset.return_value = False
+        w._preset_svc.rename.return_value = False  # no preset existed
+        with patch("PyQt5.QtWidgets.QMessageBox.warning") as warn:
+            SeatNamesController._on_names_list_changed(ctrl, "PersonA", "PersonB")
+        warn.assert_not_called()
+
+    def test_no_warning_when_rename_persisted(self):
+        ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
+        w._preset_svc.has_preset.return_value = True
+        w._preset_svc.rename.return_value = True
+        with patch("PyQt5.QtWidgets.QMessageBox.warning") as warn:
+            SeatNamesController._on_names_list_changed(ctrl, "PersonA", "PersonB")
+        warn.assert_not_called()
+
+    def test_seat_rename_still_applied_on_persist_failure(self):
+        """Keep the seat rename in memory when saving its preset fails."""
+        ctrl, w = _ctrl_stub(seat_names={"3": "PersonA"}, names_list=["PersonA"])
+        w._preset_svc.has_preset.return_value = True
+        w._preset_svc.rename.return_value = False
+        with patch("PyQt5.QtWidgets.QMessageBox.warning"):
+            SeatNamesController._on_names_list_changed(ctrl, "PersonA", "PersonB")
+        assert w._seat_names["3"] == "PersonB"
+        w._preset_svc.rename.assert_called_once_with("PersonA", "PersonB")
