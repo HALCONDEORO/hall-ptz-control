@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- The setup review plan scrolls on an 800x480 display while wizard
+  navigation buttons remain reachable.
 - Setup keeps watching an unresolved provisioning request after timeout or
   unreadable results and blocks Back until a definitive outcome allows retry.
 - Reject backup ZIP archives with duplicate member names before restoring
