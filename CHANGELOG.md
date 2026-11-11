@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Fix Settings Access-tab observers accumulating after each dialog closes.
+
 - Test text-source files across the repository for accidental NUL bytes
   after repairing the legacy autostart script.
 - The setup review plan scrolls on an 800x480 display while wizard
