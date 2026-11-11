@@ -30,7 +30,8 @@ def test_quiesce_before_copy(tmp_path, state, stop_rc, after, show_rc, expected,
     unit = tmp_path / 'unit'
     if unit_present:
         unit.touch()
-    runtime = tmp_path / 'run'; (runtime / '1000').mkdir(parents=True)
+    runtime = tmp_path / 'run'
+    (runtime / '1000').mkdir(parents=True)
     sock = socket.socket(socket.AF_UNIX)
     if endpoint:
         path = runtime / '1000' / endpoint

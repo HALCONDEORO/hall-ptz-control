@@ -482,11 +482,11 @@ RSYNC_EXCLUDES=(
 # not unload a running service. Any identifiable but unreachable manager
 # blocks the copy. Never start a user GUI from this root installer.
 _stop_session_guis() {
-    local runtime_root="$1" bus uid user state managers entry name load active rest path
+    local runtime_root="$1" bus uid user state managers entry name _load active rest path
     local -A manager_uids=()
     managers="$(systemctl list-units --all --plain --no-legend 'user@*.service')" \
         || error "Cannot enumerate user managers; refusing to replace GUI code."
-    while read -r name load active rest; do
+    while read -r name _load active rest; do
         if [[ "${name}" =~ ^user@([0-9]+)\.service$ ]]; then
             uid="${BASH_REMATCH[1]}"
             case "${active}" in
