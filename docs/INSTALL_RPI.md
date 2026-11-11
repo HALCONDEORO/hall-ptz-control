@@ -781,3 +781,20 @@ rollback plan known
 installation notes saved
 MVP validation report completed when claiming release-candidate readiness
 ```
+
+### Updating a running session-owned GUI
+
+The product installer stops `khptz-gui.service` in every identified live user manager
+before copying application code, including when switching from user mode to
+system mode. Managers are discovered from systemd user@ units and both session-bus and
+systemd/private sockets, even when the on-disk GUI unit has been removed.
+An inaccessible manager, failed stop or unconfirmed stop blocks
+the copy. Readiness-only (`--check`) and developer installs do not stop it.
+
+Session GUIs deliberately stay stopped after both success and failure. After a
+successful user-mode install, reopen the controller shortcut or log into the
+desktop again. After a failure, preserve the first error and have the partial
+install reviewed before reopening the GUI. A system-mode install does not
+restart the old session GUI. Existing system-service restart behavior is
+unchanged. This stop/verification flow has local inert-manager regression tests;
+it has not yet been validated on a physical Pi with an active desktop session.
