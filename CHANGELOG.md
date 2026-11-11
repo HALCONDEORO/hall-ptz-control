@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Reject backup ZIP archives with duplicate member names before restoring
+  files, including dry-run validation.
 - Add an always-available STOP ALL button that retires queued camera moves,
   stops configured cameras and shows partial failures without a modal dialog.
 - deduplicate repeated PiP feedback before moving cameras.
