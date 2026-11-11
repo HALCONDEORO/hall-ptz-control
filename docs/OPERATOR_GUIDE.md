@@ -2,12 +2,18 @@
 
 This guide describes safety API contracts, not a verified GUI checklist.
 `RuntimeSafetyService` defines STOP and STOP ALL; `SafetyResetService` defines
-runtime cleanup. The operator GUI now has a red STOP ALL button below the camera
-controls. It stays accessible without an active session or a connected camera;
+runtime cleanup. In ADMIN mode, the GUI has a red STOP ALL button below the camera
+controls. Within ADMIN it stays accessible without an active session or a connected camera;
 failed requests show a temporary red notice below it. Confirm the physical result.
 Safety Reset is still a service contract, not a verified GUI control. Do not plan
 an emergency response around an unverified button or command. The GUI's camera
 close choices are described below.
+
+USER mode hides STOP ALL and has no separate per-camera STOP button. Releasing
+the joystick still requests STOP for the camera it was moving; this is not an
+all-camera stop or a promise to cancel an automatic preset recall. Rehearse
+STOP ALL in ADMIN before live use and make the venue's physical fallback
+available to USER operators without requiring a password.
 
 A successful software result does not confirm physical stopping. Network loss,
 a disconnected camera or a rejected command can prevent delivery. Rehearse the
@@ -124,7 +130,7 @@ fail to reach hardware. Recheck the result and the actual equipment every time.
 
 ## Which contract applies?
 
-STOP ALL has the GUI route described above. The other service-level choices are
+STOP ALL has the ADMIN-only GUI route described above. The other service-level choices are
 for support and development unless their installed route has been demonstrated.
 In particular, Safety Reset has no verified operator GUI control.
 

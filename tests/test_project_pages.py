@@ -179,3 +179,12 @@ def test_first_screen_explains_product_audience_and_validation_state():
     assert 'VISCA-over-IP cameras' in hero
     assert hero.index('Target hardware validation is still pending') < hero.index('href="#install"')
     assert 'summary-band' not in page
+
+
+def test_public_page_explains_user_and_admin_stop_routes():
+    text = (ROOT / 'docs/index.html').read_text()
+    assert 'USER mode has no STOP ALL button' in text
+    assert 'Releasing the joystick requests a stop' in text
+    assert 'Rehearse the red STOP ALL button in ADMIN mode' in text
+    assert 'physical fallback available without a password' in text
+    assert 'USER-mode simulation' in text
