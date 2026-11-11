@@ -167,6 +167,7 @@ class RestoreService:
         with zipfile.ZipFile(zip_path, "r") as zf:
             manifest = self._load_manifest(zf)
             self._validate_zip_names(zf)
+            self._validate_zip_integrity(zf)
             self._verify_hashes(zf, manifest)
 
             included_in_manifest = set(manifest.get("included", []))
@@ -198,6 +199,7 @@ class RestoreService:
         with zipfile.ZipFile(zip_path, "r") as zf:
             manifest = self._load_manifest(zf)
             self._validate_zip_names(zf)
+            self._validate_zip_integrity(zf)
             self._verify_hashes(zf, manifest)  # raises RestoreError on mismatch
 
             included_in_manifest = set(manifest.get("included", []))
@@ -314,6 +316,16 @@ class RestoreService:
                     f"expected {expected_hash!r}, got {actual_hash!r}. "
                     "The backup may be corrupt. Restore aborted."
                 )
+
+    @staticmethod
+    def _validate_zip_integrity(zf: zipfile.ZipFile) -> None:
+        """Check all member CRCs before writes, including old unhashed backups."""
+        try:
+            bad_member = zf.testzip()
+        except zipfile.BadZipFile as exc:
+            raise RestoreError(f"Backup ZIP is corrupt: {exc}") from exc
+        if bad_member is not None:
+            raise RestoreError(f"Corrupt backup member '{bad_member}'. Restore aborted.")
 
     def _validate_zip_names(self, zf: zipfile.ZipFile) -> None:
         for name in zf.namelist():
