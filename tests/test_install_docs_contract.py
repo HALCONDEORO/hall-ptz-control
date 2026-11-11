@@ -148,7 +148,7 @@ def test_offline_install_preparation_is_documented():
     es = (ROOT / "docs/INSTALL_RPI_ES.md").read_text()
     assert "## Sites without internet access (offline installs)" in en
     start = en.index("## Sites without internet access")
-    end = en.index("## Get the approved build")
+    end = en.index("## 1. Choose the reviewed build")
     section = en[start:end]
     assert "x11-xserver-utils" in section and "python3-yaml" in section
     # Severity must be accurate: only WARN for xhost, FAIL for python3-yaml.
