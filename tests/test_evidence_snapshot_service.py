@@ -204,3 +204,36 @@ def test_restore_service_captures_evidence_before_restore(tmp_path):
     from application.restore_service import RestoreError
     with pytest.raises(RestoreError):
         svc.restore(tmp_path / "does_not_exist.zip")
+
+
+def test_capture_redacts_notes_and_collector_errors_in_memory_and_disk(tmp_path, monkeypatch):
+    resolver = _make_resolver(tmp_path)
+
+    def broken_build_info(*args, **kwargs):
+        raise RuntimeError("password=SYNTHETIC_ERROR_MARKER")
+
+    monkeypatch.setattr("runtime.build_info.build_info", broken_build_info)
+    snap = EvidenceSnapshotService(path_resolver=resolver).capture(
+        "restore", notes="password=SYNTHETIC_NOTE_MARKER")
+
+    memory = json.dumps(snap.to_dict())
+    persisted = (resolver.log_dir / "evidence" / f"{snap.snapshot_id}.json").read_text()
+    for marker in ("SYNTHETIC_ERROR_MARKER", "SYNTHETIC_NOTE_MARKER"):
+        assert marker not in memory
+        assert marker not in persisted
+    assert snap.errors
+    assert json.loads(persisted)["snapshot_id"] == snap.snapshot_id
+
+
+def test_capture_redaction_failure_uses_safe_placeholder(tmp_path, monkeypatch):
+    resolver = _make_resolver(tmp_path)
+
+    def broken_guard(*args, **kwargs):
+        raise RuntimeError("synthetic guard failure")
+
+    monkeypatch.setattr("domain.redaction.RedactionGuard.redact_text", broken_guard)
+    snap = EvidenceSnapshotService(path_resolver=resolver).capture(
+        "restore", notes="password=SYNTHETIC_NOTE_MARKER")
+
+    assert "SYNTHETIC_NOTE_MARKER" not in json.dumps(snap.to_dict())
+    assert not snap.is_clean()

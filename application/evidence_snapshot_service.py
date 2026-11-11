@@ -158,6 +158,17 @@ class EvidenceSnapshotService:
             errors=errors,
         )
 
+        # Notes and collector exceptions are free text, not trusted metadata.
+        # Redact before returning OR persisting so both consumers are safe.
+        from application.redaction_service import RedactionService
+        redactor = RedactionService()
+        notes_result = redactor.redact_text(snapshot.notes)
+        snapshot.notes = notes_result.value
+        error_results = [redactor.redact_text(message) for message in snapshot.errors]
+        snapshot.errors = [result.value for result in error_results]
+        if not notes_result.is_clean or any(not result.is_clean for result in error_results):
+            snapshot.errors.append("Snapshot text redaction failed; safe placeholders used")
+
         self._persist(snapshot)
         return snapshot
 
