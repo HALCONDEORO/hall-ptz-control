@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Include runtime endpoint overrides in installation fingerprints. Existing
+  baselines with an overlay can show `changed_since_validation` until explicit
+  revalidation; baselines are never renewed automatically. Installations
+  without an overlay retain their existing config hash.
+
 - Warranty assessment stays UNKNOWN when doctor diagnostics cannot run.
   Support hints request a diagnostic retry rather than falsely claiming
   the validated baseline is missing or encouraging a replacement mark.
