@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Test text-source files across the repository for accidental NUL bytes
+  after repairing the legacy autostart script.
 - Legacy autostart cleanup uses the intended NUL escape in its process guard.
 - Simulated camera moves ignore arrivals superseded by a later recall or stop.
 - Warn when a seat rename cannot save its existing camera preset, while
