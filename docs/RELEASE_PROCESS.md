@@ -18,7 +18,7 @@ Use predictable names:
 
 ```text
 v0.1.0-rc1
-v0.1.0-installable-mvp
+v1.2.1 (candidate; target Pi acceptance pending)
 v0.1.1-hotfix
 v0.2.0
 ```
@@ -26,7 +26,7 @@ v0.2.0
 The current commercial release target is:
 
 ```text
-v0.1.0-installable-mvp
+v1.2.1 (candidate; target Pi acceptance pending)
 ```
 
 ## MVP Release Gate
