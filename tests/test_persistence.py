@@ -596,8 +596,7 @@ class TestImportBackupAtomic:
         assert not (app_dir / 'PTZ1IP.txt').exists()
 
     def test_import_does_not_corrupt_on_partial_zip(self, tmp_path, isolated):
-        """Si un archivo del ZIP es JSON inválido, los anteriores ya restaurados
-        quedan intactos pero la excepción se lanza para el archivo corrupto."""
+        """Invalid JSON aborts before restoring earlier members."""
         import data_paths
         import zipfile
         zip_path = tmp_path / 'partial.zip'
@@ -607,8 +606,8 @@ class TestImportBackupAtomic:
 
         with pytest.raises(json.JSONDecodeError):
             data_paths.import_backup(zip_path)
-        # El primer archivo debería haberse restaurado antes del error
-        assert (isolated / 'chairman_presets.json').exists()
+        # Validate the entire ZIP before the first replacement.
+        assert not (isolated / 'chairman_presets.json').exists()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

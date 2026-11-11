@@ -189,6 +189,7 @@ def import_backup(zip_path: Path, app_dir: Path | None = None) -> list[str]:
 
     - Archivos JSON (raíz del ZIP): se validan como JSON y se restauran a CONFIG_DIR.
     - Archivos TXT (carpeta 'config/' del ZIP): se restauran al directorio de la app.
+    - Validate all recognized content before changing any files.
     - Crea .bak del archivo existente antes de sobreescribir.
     - Usa escritura atómica (.tmp → os.replace) para evitar corrupción parcial.
     - Devuelve la lista de nombres restaurados (sin prefijo de carpeta).
@@ -220,13 +221,21 @@ def import_backup(zip_path: Path, app_dir: Path | None = None) -> list[str]:
                 f"TXT esperados (en carpeta config/): {', '.join(sorted(valid_txt))}."
             )
 
-        # Restaurar JSON de datos → CONFIG_DIR
+        # Validate ALL members before changing the first file.
+        # A corrupt later JSON/TXT must not leave a partial restore.
+        payloads: dict[str, str] = {}
         for name in json_found:
             raw = zf.read(name).decode('utf-8')
-            decoded = json.loads(raw)  # valida JSON antes de tocar disco
+            decoded = json.loads(raw)
             if not isinstance(decoded, dict):
                 raise ValueError(f"{name} debe contener un objeto JSON")
+            payloads[name] = raw
+        for zip_name in txt_found:
+            payloads[zip_name] = zf.read(zip_name).decode('utf-8').strip()
 
+        # Restaurar JSON de datos → CONFIG_DIR
+        for name in json_found:
+            raw = payloads[name]
             dst = CONFIG_DIR / name
             if dst.exists():
                 shutil.copy2(dst, dst.with_suffix('.bak'))
@@ -246,7 +255,7 @@ def import_backup(zip_path: Path, app_dir: Path | None = None) -> list[str]:
         # Restaurar TXT de configuración → directorio de la app
         for zip_name in txt_found:
             name = zip_name[len('config/'):]  # quitar prefijo de carpeta
-            raw = zf.read(zip_name).decode('utf-8').strip()
+            raw = payloads[zip_name]
 
             dst = app_dir / name
             if dst.exists():
