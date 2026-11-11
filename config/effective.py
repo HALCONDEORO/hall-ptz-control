@@ -123,7 +123,33 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
                                  atem_pip_nudge=atem_pip_nudge)
     with _overlay_transaction(path):
         base = load_config(config_path)
-        raw = _read(path) if path.exists() else {'schema_version': 1}
+        def _discard_corrupt_overlay(exc: Exception) -> dict:
+            # Loading already ignores an unusable overlay and falls back to
+            # base YAML. Preserve the file for diagnosis using the json_io
+            # .corrupt.<timestamp> convention, then start from an empty overlay.
+            logger.warning(
+                'Runtime camera overrides unusable (%s) - preserving and starting fresh',
+                exc,
+            )
+            try:
+                from datetime import datetime
+                corrupt = path.with_name(
+                    f"{path.stem}.corrupt.{datetime.now().strftime('%Y%m%d_%H%M%S')}{path.suffix}"
+                )
+                path.rename(corrupt)
+            except OSError:
+                pass
+            return {'schema_version': 1}
+
+        raw = {'schema_version': 1}
+        if path.exists():
+            try:
+                raw = _read(path)
+            except ValueError as exc:
+                # ValueError covers JSONDecodeError and UnicodeDecodeError.
+                # Propagate OSError: a transient read failure must not discard
+                # otherwise valid overrides.
+                raw = _discard_corrupt_overlay(exc)
         # Camera IDs belong to the current base configuration. A repaired or
         # renamed base may retire IDs; do not make every future save fail on
         # those orphaned entries, or carry their addresses onto another role.
@@ -134,8 +160,15 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
                 logger.warning('Discarding %d retired camera override entries', len(orphaned))
                 raw['cameras'] = {key: value for key, value in raw['cameras'].items()
                                   if key in known_ids}
-        # Do not silently erase corrupt overrides while claiming an update succeeded.
-        _merge(base, raw)
+        # Validate the existing overlay before applying new values. Loading
+        # already ignores invalid overlays, so preserve one for diagnosis and
+        # start fresh. The final merge still validates new values and may reject
+        # conflicts without erasing them.
+        if path.exists():
+            try:
+                _merge(base, raw)
+            except ValueError as exc:
+                raw = _discard_corrupt_overlay(exc)
         if cam_ip is not None or cam_visca_id is not None:
             if type(cam_index) is not int or not 0 <= cam_index < len(base.cameras):
                 raise ValueError('Unknown camera index')

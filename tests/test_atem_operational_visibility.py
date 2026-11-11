@@ -25,12 +25,15 @@ def test_operational_atem_shows_only_available_controls():
     panel.show.assert_not_called()
 
 
-def test_fake_disconnection_does_not_keep_a_dead_button_visible():
+def test_fake_disconnection_keeps_demo_reconnect_reachable():
+    # #921: in demo/sim the panel owns the Reconnect control, so a
+    # disconnected FakeATEM must not hide the button nor close the panel.
     button, dot, panel = Mock(), Mock(), Mock()
     fake = SimpleNamespace(get_status=lambda: SimpleNamespace(connected=False))
-    apply_atem_button_state(button, dot, panel, ATEMState.CONNECTED, fake, operative=False)
-    button.setVisible.assert_called_with(False)
-    panel.hide.assert_called_once()
+    apply_atem_button_state(button, dot, panel, ATEMState.DISCONNECTED, fake, operative=False)
+    button.setVisible.assert_called_with(True)
+    button.setEnabled.assert_called_with(True)
+    panel.hide.assert_not_called()
 
 
 def test_settings_binding_tracks_verification_loss_and_recovery_in_real_qt():

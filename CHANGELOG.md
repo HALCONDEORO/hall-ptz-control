@@ -21,6 +21,24 @@ This project uses a simple versioning approach while it is still in early produc
 
 - The setup review plan scrolls on an 800x480 display while wizard
   navigation buttons remain reachable.
+- Starting a seat-name drag cancels its pending long-press preset SET
+  so moving a name does not overwrite a camera position.
+- Demo guards and diagnostics protect the service production directory
+  as well as the legacy user directory.
+- PiP writes report network failures as NETWORK_ERROR and keep healthy
+  connections open after non-network library errors.
+- Demo ATEM controls stay reachable while disconnected so operators can reconnect the virtual switcher.
+- Runtime ATEM IP edits start or replace the monitor instead of polling a stale endpoint.
+- Legacy backup imports reject duplicate archive member names before
+  overwriting current files or their recovery backups.
+- Report unsupported ATEM PiP state once instead of failing silently on
+  every monitor poll, and expose the unsupported capability.
+- Preserve corrupt runtime overlays for diagnosis and allow endpoint updates
+  to recover from the base configuration.
+- Legacy autostart cleanup uses the intended NUL escape in its process guard.
+- Simulated camera moves ignore arrivals superseded by a later recall or stop.
+- Warn when a seat rename cannot save its existing camera preset, while
+  keeping the in-memory rename available for the next persistence retry.
 - Setup keeps watching an unresolved provisioning request after timeout or
   unreadable results and blocks Back until a definitive outcome allows retry.
 - Reject backup ZIP archives with duplicate member names before restoring

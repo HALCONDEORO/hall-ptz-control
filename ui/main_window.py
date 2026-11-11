@@ -829,7 +829,13 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             self._btn_atem.setChecked(False)
 
     def _toggle_atem_panel(self) -> None:
-        if self._atem_panel is None or not self.atem_operational():
+        if self._atem_panel is None:
+            self._close_atem_panel()
+            return
+        # Demo/sim (FakeATEM): the panel stays reachable even disconnected —
+        # it owns the Reconnect control (#921). Live hardware requires a
+        # verified operational monitor.
+        if self._fake_atem is None and not self.atem_operational():
             self._close_atem_panel()
             return
         visible = self._atem_panel.isVisible()
@@ -1322,6 +1328,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         if is_fake_atem_mode(sim_active=_sim.is_active()):
             from adapters.fake_atem import FakeATEM
+            # Fake mode owns the ATEM surface: drop any stale monitor
+            # reference so atem_operational() gates on the FakeATEM alone.
+            self._atem_monitor = None
             self._fake_atem = FakeATEM()
             self._fake_atem.connect()
             self._fake_atem.add_program_changed_callback(
@@ -1447,8 +1456,16 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         old_monitor = self._atem_monitor
         if old_monitor is None:
-            # FakeATEM / no-ATEM path — nothing to stop or replace.
             self._atem_restart_pending = False
+            # No monitor yet: the restart path doubles as the start path when
+            # an ATEM is configured at runtime (first-time setup from
+            # Settings, Scan/Reconnect buttons). Demo/sim is excluded — the
+            # FakeATEM owns the surface and replacing it here would orphan
+            # the demo panel's reference.
+            if self._fake_atem is None and self._atem_is_configured():
+                self._atem_dispatcher.mark_reconnecting()
+                self._start_atem_monitor()
+                logger.info("ATEMMonitor started after runtime configuration")
             return
 
         self._disconnect_atem_monitor_signals(old_monitor)
