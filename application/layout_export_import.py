@@ -165,7 +165,7 @@ class LayoutExportImportService:
             return "Missing 'schema_version' in layout file"
         try:
             version = int(version)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return f"Invalid 'schema_version': {version!r}"
         if version > SCHEMA_VERSION:
             return (
