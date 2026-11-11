@@ -12,6 +12,13 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Changed
 
+- Show STOP ALL only in ADMIN, including inline role changes. Keep underlying
+  stop services and joystick-release stopping unchanged. USER has no separate
+  all-camera stop button; document ADMIN rehearsal and a password-free physical
+  fallback. Refresh the USER-mode simulation screenshot.
+
+### Changed
+
 - Break website installation into reviewed-build, readiness, install and setup
   stages while preserving every command and its stop/identity checks.
 

@@ -154,8 +154,10 @@ on the actual equipment before live use.
 3. Treat a green connection indicator as transport information. Queue admission
    is not a physical motion confirmation. A timeout or failed save is not success;
    do not repeatedly press SET to make the indicator change.
-4. Rehearse the red **STOP ALL** button below the camera controls and the close
-   choices before live use. STOP ALL requests stops for configured cameras even
+4. In ADMIN mode, rehearse the red **STOP ALL** button below the camera controls and the close
+   choices before live use. USER mode hides this button; joystick release still
+   requests a stop for the moved camera, not all cameras. Keep the physical
+   fallback available without admin access. STOP ALL requests stops for configured cameras even
    without an active session; a failure notice means a camera may still be moving.
    Confirm the physical result. Safety Reset is a service contract, not a verified
    GUI control. Read the [safety contracts and limits](docs/OPERATOR_GUIDE.md).

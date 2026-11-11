@@ -20,5 +20,9 @@ def test_documented_stop_all_route_matches_current_gui():
     assert 'red STOP ALL button below the camera' in guide
     assert 'without an active session or a connected camera' in guide
     assert 'Safety Reset is still a service contract' in guide
+    assert 'USER mode hides STOP ALL' in guide
+    assert 'ADMIN mode' in guide
+    assert 'physical fallback' in guide
+    assert 'USER mode hides this button' in readme
     assert 'red **STOP ALL** button below the camera controls' in readme
     assert 'Confirm the physical result' in readme

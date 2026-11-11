@@ -19,13 +19,10 @@ without a modal dialog stealing the joystick.  A single QTimer hides
 the notice; a new failure restarts it, so the notice for the latest
 failure always survives a full timeout.
 
-Placement matters: the PTZ block (_motion_widget) is disabled when no
-camera is connected, and the controls container is hidden in that state,
-but STOP ALL must always be available — a runaway camera is exactly the
-case where connection state is uncertain.  The button therefore lives in
-the panel's outer layout, outside both subtrees, stays visible with or
-without a session, and needs no confirmation dialog: it is non-
-destructive (no standby, no state clear, no ATEM policy) and idempotent.
+The button is visible only in ADMIN mode. Within that role it stays outside
+connection/session-disabled subtrees, so uncertain transport does not hide it.
+USER mode retains joystick-release stopping, but has no dedicated all-camera
+stop button. Visibility is a UI choice, not a restriction on the safety service.
 """
 
 from __future__ import annotations
@@ -36,6 +33,7 @@ from PyQt5 import QtCore
 from PyQt5.QtWidgets import QLabel, QPushButton
 
 from core.events import EventType
+from domain.call_set_policy import OperatingMode
 
 logger = logging.getLogger(__name__)
 
@@ -105,4 +103,15 @@ def connect_stop_all(window) -> QPushButton:
     anchor = panel._no_camera_label
     layout.insertWidget(layout.indexOf(anchor) + 1, btn)
     layout.insertWidget(layout.indexOf(btn) + 1, notice)
+    access = window._access_mode_svc
+
+    def update_visibility(mode):
+        btn.setVisible(mode == OperatingMode.ADMIN)
+        if mode != OperatingMode.ADMIN:
+            notice.hide()
+            hide_timer.stop()
+
+    update_visibility(access.mode)
+    access.subscribe(update_visibility)
+    btn.destroyed.connect(lambda: access.unsubscribe(update_visibility))
     return btn
