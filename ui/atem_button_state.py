@@ -35,7 +35,7 @@ def apply_atem_button_state(btn, dot, panel, state, fake_atem, *, operative=Fals
             dot.setStyleSheet(_DOT_GREEN if connected else _DOT_RED)
             btn.setToolTip(
                 "ATEM switcher panel" if connected
-                else "ATEM virtual desconectado — Reconnect en el panel")
+                else "Virtual ATEM disconnected - use Reconnect in the panel")
         return
     visible = bool(panel is not None and operative)
     btn.setVisible(visible)
