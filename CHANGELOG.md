@@ -19,6 +19,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Setup device checks show the next remediation step alongside each check
+  when it is not already included in the detail text.
+
 - Redact evidence-snapshot notes and collector error text before returning
   or persisting them. Redaction failures use safe placeholders and mark the
   snapshot unclean; structured metadata keeps its existing contract.
