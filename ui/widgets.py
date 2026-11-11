@@ -205,12 +205,12 @@ class PresetActionMixin:
                 self.init_preset_actions(preset, call_cb, set_cb)
 
     Long press duration is LONG_PRESS_MS. Movement does NOT cancel the timer —
-    touchscreen fingers always drift during a hold; only the 2-second threshold
+    touchscreen fingers always drift during a hold; only the 1-second threshold
     discriminates tap from long-press.
     Right-click suppresses the default context menu.
     """
 
-    LONG_PRESS_MS: int = 2000
+    LONG_PRESS_MS: int = 1000
 
     def init_preset_actions(
         self,

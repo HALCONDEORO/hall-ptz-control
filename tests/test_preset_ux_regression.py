@@ -156,7 +156,7 @@ class _PresetMixinStub:
     Long press is fired manually by calling _simulate_long_press().
     """
 
-    LONG_PRESS_MS = 800
+    LONG_PRESS_MS = 1000
 
     def __init__(self, preset_number: int, call_cb, set_cb):
         self._preset_number = preset_number
