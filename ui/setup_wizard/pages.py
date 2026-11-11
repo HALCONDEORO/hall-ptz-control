@@ -129,6 +129,8 @@ class DeviceCheckPage(_BasePage):
         for c in self._checks:
             mark = "OK" if c.ok else ("WARN" if c.warn_only else "FAIL")
             lines.append(f"[{mark}] {c.label}: {c.detail}")
+            if c.remediation and c.remediation not in c.detail:
+                lines.append(f"  Next step: {c.remediation}")
         self._results.setText("\n".join(lines))
         self.completeChanged.emit()
 
