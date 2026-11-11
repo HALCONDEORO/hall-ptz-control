@@ -37,6 +37,9 @@ for forbidden in sudo useradd install chown chmod find cp rm curl wget ssh; do
     eval "$forbidden() { echo FORBIDDEN_HOST_COMMAND >&2; return 98; }"
 done
 systemctl() {
+    # This harness covers system-service recovery, not live user managers.
+    # The dedicated quiesce tests exercise enumeration and user stop failures.
+    [[ "$1" != "list-units" ]] || return 0
     printf 'systemctl:%s\n' "$*" >> "$EVENTS"
     case "$1" in
         is-active) [[ "$ACTIVE" == 1 ]] ;;
@@ -55,7 +58,8 @@ rsync() {
         return "$COPY_RC"
     fi
 }
-''' + TRAP + '\n' + COPY + r'''
+''' + TRAP + '\n' + COPY.replace('_stop_session_guis /run/user',
+        '_stop_session_guis "$REPO_ROOT/no-user-managers"') + r'''
 printf 'AFTER_COPY\n' >> "$EVENTS"
 # The full installer disarms the abort trap after its planned service restart.
 # This copy-only harness ends here; do not pretend that later installation ran.
