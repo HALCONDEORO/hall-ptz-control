@@ -204,6 +204,15 @@ class TestNextCameraAnswer:
         assert not added.ip.endswith(".0")
         assert added.ip != "10.0.0.255"
 
+    def test_next_ip_never_offers_the_broadcast_address(self):
+        # RED on main: with the last camera on .254, the first free candidate
+        # was x.x.x.255 — the /24 broadcast address.
+        from application.provisioning_service import next_camera_answer
+        added = next_camera_answer([self._cam(ip="192.0.2.254")])
+        assert not added.ip.endswith(".255")
+        assert not added.ip.endswith(".0")
+        assert added.ip == "192.0.2.1"
+
     def test_added_camera_has_a_display_name(self):
         from application.provisioning_service import next_camera_answer
         assert next_camera_answer([self._cam()]).name == "Comments"
