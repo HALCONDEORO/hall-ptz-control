@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Demo guards and diagnostics protect the service production directory
+  as well as the legacy user directory.
 - PiP writes report network failures as NETWORK_ERROR and keep healthy
   connections open after non-network library errors.
 - Demo ATEM controls stay reachable while disconnected so operators can reconnect the virtual switcher.

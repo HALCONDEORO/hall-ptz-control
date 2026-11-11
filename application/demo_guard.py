@@ -7,14 +7,15 @@
 # config/data paths. Call DemoGuard.apply() once at startup before any I/O.
 #
 # Data directory isolation:
-#   Production: ~/.config/khptz/          (KHPTZ_DATA_DIR or default)
+#   Production: /var/lib/khptz/           (KHPTZ_DATA_DIR or the service default)
+#   Legacy:     ~/.config/khptz/          (pre-move installs, read-migrate only)
 #   Demo:       ~/.config/khptz-demo/     (always; cannot be overridden by env)
 #
 # Protected production paths (never touched in demo mode):
 #   config.yaml, PTZ1IP.txt, PTZ2IP.txt, Cam1ID.txt, Cam2ID.txt,
 #   ATEMIP.txt, Contact.txt, password.enc, room_layout.json,
 #   chairman_presets.json, seat_names.json, schedule.json
-#   (from the production data dir ~/.config/khptz/)
+#   (under ANY production data dir: /var/lib/khptz or the legacy ~/.config/khptz)
 
 from __future__ import annotations
 
@@ -28,6 +29,11 @@ logger = logging.getLogger(__name__)
 
 _DEMO_DATA_DIR = Path.home() / ".config" / "khptz-demo"
 _PRODUCTION_DATA_DIR = Path.home() / ".config" / "khptz"
+# The service-mode production data dir (runtime/path_resolver.py). The runtime
+# data contract moved here from ~/.config/khptz; BOTH are production state and
+# neither may be touched from demo mode. demo_reset_service keeps the same pair.
+_PRODUCTION_SERVICE_DATA_DIR = Path("/var/lib/khptz")
+_PRODUCTION_DATA_DIRS = (_PRODUCTION_DATA_DIR, _PRODUCTION_SERVICE_DATA_DIR)
 
 # Legacy .txt files that live in the app directory
 _PROTECTED_TXT_NAMES = frozenset({
@@ -74,7 +80,11 @@ class DemoGuard:
     ) -> None:
         self._mode = mode
         self._demo_dir = (demo_data_dir or _DEMO_DATA_DIR).resolve()
-        self._prod_dir = (production_data_dir or _PRODUCTION_DATA_DIR).resolve()
+        if production_data_dir is not None:
+            self._prod_dirs = (Path(production_data_dir).resolve(),)
+        else:
+            self._prod_dirs = tuple(p.resolve() for p in _PRODUCTION_DATA_DIRS)
+        self._prod_dir = self._prod_dirs[0]
         self._app_dir = (app_dir or Path.cwd()).resolve()
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -121,9 +131,10 @@ class DemoGuard:
             return  # path is inside demo dir — safe
         except ValueError:
             pass
-        # Only block if the path is under a protected root (prod dir or app dir).
-        # Protected filenames in unrelated directories are not blocked.
-        for root in (self._prod_dir, self._app_dir):
+        # Only block if the path is under a protected root (any production
+        # data dir, or the app dir). Protected filenames in unrelated
+        # directories are not blocked.
+        for root in (*self._prod_dirs, self._app_dir):
             try:
                 resolved.relative_to(root)
                 raise DemoModeViolation(
