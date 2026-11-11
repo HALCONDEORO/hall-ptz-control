@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Stop and verify session-owned GUIs in identified live user managers before
+  product code replacement, including user-to-system mode changes. Refuse the
+  copy if a manager or stop cannot be verified. GUIs stay stopped on success
+  or failure; reopen only after a successful install or review of a failure.
+  Physical Pi desktop-session validation remains outstanding.
 - Clarify operator safety documentation: STOP ALL has a GUI route, Safety
   Reset remains a service contract, and software success does not confirm
   physical stopping. Keep partial-failure and hardware-validation limits clear.
