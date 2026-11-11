@@ -20,6 +20,22 @@ This project uses a simple versioning approach while it is still in early produc
 ### Fixed
 
 - Simulated camera moves ignore arrivals superseded by a later recall or stop.
+- Warn when a seat rename cannot save its existing camera preset, while
+  keeping the in-memory rename available for the next persistence retry.
+- Setup keeps watching an unresolved provisioning request after timeout or
+  unreadable results and blocks Back until a definitive outcome allows retry.
+- Reject backup ZIP archives with duplicate member names before restoring
+  files, including dry-run validation.
+- Add an always-available STOP ALL button that retires queued camera moves,
+  stops configured cameras and shows partial failures without a modal dialog.
+- deduplicate repeated PiP feedback before moving cameras.
+- keep production PiP state tied to monitor telemetry.
+- ATEM monitoring ends a session after thirty consecutive poll failures so
+  the supervisor can reconnect, including when the link drops with cached input.
+- A disconnected ATEM monitor becomes eligible for a supervisor retry after
+  thirty seconds instead of remaining permanently treated as healthy.
+- ATEM writes report DISCONNECTED when the underlying link is down instead
+  of claiming success for commands the library did not send.
 - The setup wizard no longer suggests an address ending in .255 when
   proposing the next camera address in the same subnet.
 - Installer mirrors preserve simulation state and saved production endpoints.
@@ -43,6 +59,8 @@ This project uses a simple versioning approach while it is still in early produc
   cached program input as a live connection.
 - An unavailable data directory no longer aborts data_paths at import time,
   before startup logging and crash handling can be installed.
+- Returning to the wizard installation page resumes the active provisioning
+  request instead of starting a second one; completed attempts remain retryable.
 - Restore rejects malformed manifest structures with a controlled error before
   creating a safety backup or restoring data, including in dry-run mode.
 - test_config_validators prefers real PyQt5 modules over leaving stubs in

@@ -493,6 +493,52 @@ class TestATEMSupervisorHealth:
             state=ATEMState.ERROR,
         ) is False
 
+    def test_disconnected_terminal_retries_after_cooldown(self):
+        """DISCONNECTED terminal caduca: el switcher pudo encenderse tarde.
+
+        La app agota sus intentos en ~22 s (backoffs 2/5/15), pero el switcher
+        puede tardar mas en arrancar o encenderse despues. Pasado
+        ATEM_DISCONNECTED_RETRY_AFTER_S el supervisor debe reiniciar el
+        monitor en lugar de darlo por sano para siempre.
+        """
+        from domain.atem_state import (
+            ATEM_DISCONNECTED_RETRY_AFTER_S,
+            is_atem_supervisor_healthy,
+        )
+
+        assert is_atem_supervisor_healthy(
+            is_running=False,
+            restart_pending=False,
+            state=ATEMState.DISCONNECTED,
+            disconnected_elapsed_s=ATEM_DISCONNECTED_RETRY_AFTER_S - 1,
+        ) is True
+        assert is_atem_supervisor_healthy(
+            is_running=False,
+            restart_pending=False,
+            state=ATEMState.DISCONNECTED,
+            disconnected_elapsed_s=ATEM_DISCONNECTED_RETRY_AFTER_S + 1,
+        ) is False
+
+    def test_disconnected_without_elapsed_keeps_legacy_behaviour(self):
+        from domain.atem_state import is_atem_supervisor_healthy
+
+        assert is_atem_supervisor_healthy(
+            is_running=False,
+            restart_pending=False,
+            state=ATEMState.DISCONNECTED,
+        ) is True
+
+    def test_other_terminal_states_never_expire(self):
+        from domain.atem_state import is_atem_supervisor_healthy
+
+        for state in (ATEMState.NOT_CONFIGURED, ATEMState.DEPENDENCY_MISSING):
+            assert is_atem_supervisor_healthy(
+                is_running=False,
+                restart_pending=False,
+                state=state,
+                disconnected_elapsed_s=10_000.0,
+            ) is True
+
     def test_unknown_stopped_state_is_unhealthy(self):
         from domain.atem_state import is_atem_supervisor_healthy
 
