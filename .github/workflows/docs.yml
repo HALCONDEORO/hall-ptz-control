@@ -5,11 +5,19 @@ on:
     paths:
       - "**/*.md"
       - "tests/test_markdown_links.py"
+      - "tests/test_project_pages.py"
+      - "docs/index.html"
+      - "docs/site/**"
+      - "docs/.nojekyll"
       - ".github/workflows/docs.yml"
   pull_request:
     paths:
       - "**/*.md"
       - "tests/test_markdown_links.py"
+      - "tests/test_project_pages.py"
+      - "docs/index.html"
+      - "docs/site/**"
+      - "docs/.nojekyll"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -44,5 +52,5 @@ jobs:
           pip install "pytest>=8,<9"
 
       - name: Check Markdown links
-        run: python -m pytest tests/test_markdown_links.py
+        run: python -m pytest tests/test_markdown_links.py tests/test_project_pages.py
 
