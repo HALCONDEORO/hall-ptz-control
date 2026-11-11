@@ -14,3 +14,5 @@
 .architecture-section.advanced-section summary{color:var(--white)}
 
 .hero-actions .hero-status{font-size:14px;line-height:1.5;max-width:340px;margin:0 0 16px;color:var(--body)}
+
+.support-report h3{color:var(--ink)}.support-report ol{padding-left:22px;margin:16px 0;font-size:14px}.support-report li{margin-bottom:10px}.support-report .text-link{margin-top:16px}
