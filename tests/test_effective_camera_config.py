@@ -360,3 +360,30 @@ def test_shared_overlay_lock_mode_and_inode_survive_updates(paths):
         assert lock.stat().st_ino == first.st_ino
     finally:
         os.umask(old_umask)
+
+
+def test_patch_recovers_from_corrupt_overlay(paths):
+    """Preserve corrupt overlays and keep endpoint updates available."""
+    config, overlay = paths
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text('{ no json', encoding='utf-8')
+
+    patch_runtime_config(config, overlay_path=overlay, cam_index=1, cam_ip='192.0.2.22')
+
+    settings = load_effective_config(config, overlay)
+    assert settings.cameras[1].ip == '192.0.2.22'
+    assert settings.cameras[0].ip == '192.0.2.11'
+    # Keep the corrupt file for diagnosis.
+    assert list(overlay.parent.glob('camera_overrides.corrupt.*.json'))
+
+
+@pytest.mark.parametrize('raw', ['[1,2]', '{"schema_version":2}', '{"cameras":[]}'])
+def test_patch_recovers_from_structurally_invalid_overlay(paths, raw):
+    """Parseable but invalid JSON must not block endpoint updates."""
+    config, overlay = paths
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text(raw, encoding='utf-8')
+    patch_runtime_config(config, overlay_path=overlay, cam_index=0, cam_ip='192.0.2.21')
+    settings = load_effective_config(config, overlay)
+    assert settings.cameras[0].ip == '192.0.2.21'
+    assert list(overlay.parent.glob('camera_overrides.corrupt.*.json'))

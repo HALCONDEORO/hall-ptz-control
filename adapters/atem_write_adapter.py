@@ -348,9 +348,17 @@ class ATEMWriteAdapter:
                 ok=False, command="set_pip_enabled",
                 error_code="API_NOT_FOUND", message=str(exc),
             )
-        except Exception as exc:
+        except OSError as exc:
             self._mark_disconnected()
-            logger.warning("[ATEM-write] set_pip_enabled error: %s", exc)
+            logger.warning("[ATEM-write] set_pip_enabled network error: %s", exc)
+            return AtemCommandResult(
+                ok=False, command="set_pip_enabled",
+                error_code="NETWORK_ERROR", message=str(exc),
+            )
+        except Exception as exc:
+            # Transient non-network error — same contract as the reads and the
+            # other commands: do NOT tear down a connection that may be fine.
+            logger.warning("[ATEM-write] set_pip_enabled unexpected error: %s", exc)
             return AtemCommandResult(
                 ok=False, command="set_pip_enabled",
                 error_code="ERROR", message=str(exc),
@@ -372,7 +380,15 @@ class ATEMWriteAdapter:
         Never blocks or calls connect() — callers must use connect_async() first.
         """
         with self._lock:
-            return self._atem if self._connected else None
+            atem = self._atem if self._connected else None
+            if atem is not None and getattr(atem, "connected", True) is False:
+                # PyATEMMax drops the link silently and retries by itself; its
+                # exec*/set* calls then return without sending anything. Report
+                # DISCONNECTED instead of a false "success" for CUT/AUTO/...
+                # The instance is kept so the library's own reconnect recovers.
+                self._last_error = "ATEM link lost (switcher unreachable)"
+                return None
+            return atem
 
     def _mark_disconnected(self) -> None:
         with self._lock:

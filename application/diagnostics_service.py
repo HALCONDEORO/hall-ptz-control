@@ -856,22 +856,29 @@ class DiagnosticsService:
             f"[DEMO] Runtime data path: {self._data_dir} (isolated from production)",
         ))
 
-        # Production config protection
-        from application.demo_guard import _PRODUCTION_DATA_DIR
-        prod_dir = _PRODUCTION_DATA_DIR.resolve()
+        # Production config protection. Check against EVERY production data
+        # dir - the legacy ~/.config/khptz AND the service-mode /var/lib/khptz.
+        # Comparing only against the legacy path made this check a tautology
+        # on product installs: the demo dir never equals the legacy path, so
+        # it reported "protected: yes" unconditionally while naming a path the
+        # appliance no longer uses.
+        from application.demo_guard import _PRODUCTION_DATA_DIRS
+        prod_dirs = [p.resolve() for p in _PRODUCTION_DATA_DIRS]
         demo_dir = self._data_dir.resolve()
-        protected = demo_dir != prod_dir
-        if protected:
+        collision = next((p for p in prod_dirs if demo_dir == p), None)
+        if collision is None:
             results.append(CheckResult(
                 "demo_production_protected",
                 Status.OK,
-                f"[DEMO] Production config protected: yes ({prod_dir} not in use)",
+                "[DEMO] Production config protected: yes "
+                f"({', '.join(str(p) for p in prod_dirs)} not in use)",
             ))
         else:
             results.append(CheckResult(
                 "demo_production_protected",
                 Status.FAIL,
-                f"[DEMO] Production config NOT protected: data dir is the production path ({prod_dir})",
+                "[DEMO] Production config NOT protected: data dir is the "
+                f"production path ({collision})",
             ))
 
         # ATEM automation mode — always disarmed in demo

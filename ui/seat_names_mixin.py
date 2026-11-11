@@ -12,10 +12,13 @@
 #   self._chairman_btn (ChairmanButton)
 #   getattr(self, f"Seat{N}")  (GoButton / SpecialDragButton / ChairmanButton)
 
+import logging
 from typing import Optional
 
 from config import save_names_data
 from ui.widgets import GoButton, SpecialDragButton
+
+logger = logging.getLogger(__name__)
 
 
 class SeatNamesController:
@@ -92,7 +95,24 @@ class SeatNamesController:
                         btn.set_name(new_name, emit_signal=False)
 
             # Migrar preset de Chairman si la persona renombrada tenía uno.
-            self._w._preset_svc.rename(old_name, new_name)
+            # A missing preset and a failed disk save both return False.
+            # Warn only if a preset existed. Keep the pending in-memory map;
+            # the next whole-map save retries it (see persistence retry tests).
+            had_preset = self._w._preset_svc.has_preset(old_name)
+            persisted = self._w._preset_svc.rename(old_name, new_name)
+            if had_preset and not persisted:
+                logger.warning(
+                    "Preset for '%s' renamed in memory but not saved to disk",
+                    new_name,
+                )
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    self._w,
+                    "Position preset not saved",
+                    f'The saved camera position for "{new_name}" could not be '
+                    "written to disk.\nIt may be lost when the app restarts; "
+                    "save the position again to keep it.",
+                )
 
         save_names_data(self._w._names_list, self._w._seat_names)
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -202,3 +203,27 @@ class TestProductionIsolation:
         for name in _ALL_PROTECTED_NAMES:
             assert not (prod_dir / name).exists(), \
                 f"apply() must not create {name} in production dir"
+
+
+class TestServiceProductionDir:
+    """/var/lib/khptz is production state too: the default guard must cover it."""
+
+    def test_assert_safe_blocks_service_dir(self):
+        guard = DemoGuard(mode=RuntimeMode.DEMO,
+                          demo_data_dir=Path.home() / ".config" / "khptz-demo-test")
+        with pytest.raises(DemoModeViolation):
+            guard.assert_safe(Path("/var/lib/khptz/config.yaml"))
+
+    def test_assert_safe_blocks_service_dir_json(self):
+        guard = DemoGuard(mode=RuntimeMode.DEMO,
+                          demo_data_dir=Path.home() / ".config" / "khptz-demo-test")
+        with pytest.raises(DemoModeViolation):
+            guard.assert_safe(Path("/var/lib/khptz/room_layout.json"))
+
+    def test_explicit_production_dir_keeps_single_root(self, tmp_path):
+        # An explicit production_data_dir replaces the default pair (tests use
+        # tmp paths), so /var/lib/khptz is not blocked in that configuration.
+        guard = DemoGuard(mode=RuntimeMode.DEMO,
+                          demo_data_dir=tmp_path / "demo",
+                          production_data_dir=tmp_path / "prod")
+        guard.assert_safe(Path("/var/lib/khptz/config.yaml"))
