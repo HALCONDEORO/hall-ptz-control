@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Validate ZIP member CRCs before modern restore writes or safety-backup
+  creation, in both real and dry-run paths, including old unhashed archives.
+  This adds an archive read pass, not disk-failure rollback or complete
+  normalization of manifest/decompression errors.
+
 - Reject unrepresentable layout schema versions as failed imports rather
   than raising OverflowError; existing layout and import-backup bytes remain
   unchanged on this validation error.
