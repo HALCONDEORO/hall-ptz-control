@@ -10,6 +10,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+### Changed
+
+- Put troubleshooting after operation, ahead of optional ATEM and contributor
+  architecture details. Keep advanced content in labelled native disclosures.
+
 ## 1.2.1 - Release candidate
 
 Prepared for validation on 2026-11-11. Not yet certified on the target Pi.
