@@ -409,10 +409,6 @@ if [[ "${DEV_MODE}" == "false" ]]; then
     install -d -m 2750 "${CONFIG_DIR}"
     chown root:"${APP_USER}" "${CONFIG_DIR}"
 
-    # runtime-writable directories owned by khptz
-    install -d -m 750 -o "${APP_USER}" -g "${APP_USER}" "${DATA_DIR}"
-    install -d -m 750 -o "${APP_USER}" -g "${APP_USER}" "${LOG_DIR}"
-    install -d -m 750 -o "${APP_USER}" -g "${APP_USER}" "${BACKUP_DIR}"
 else
     # Developer layout: use legacy data dir
     install -d -m 755 -o "${APP_USER}" "${INSTALL_DIR}"
@@ -534,6 +530,12 @@ _stop_session_guis() {
 
 if [[ "${DEV_MODE}" == "false" ]]; then
     _stop_session_guis /run/user
+    # Do not revoke a running desktop GUI's group-write access if quiescence
+    # fails. User-mode permissions are restored in the GUI-assets stage below.
+    # runtime-writable directories owned by khptz
+    install -d -m 750 -o "${APP_USER}" -g "${APP_USER}" "${DATA_DIR}"
+    install -d -m 750 -o "${APP_USER}" -g "${APP_USER}" "${LOG_DIR}"
+    install -d -m 750 -o "${APP_USER}" -g "${APP_USER}" "${BACKUP_DIR}"
 fi
 
 if [[ "${REPO_ROOT}" == "${INSTALL_DIR}" ]]; then
