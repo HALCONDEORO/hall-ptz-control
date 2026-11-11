@@ -350,7 +350,7 @@ _pid_is_khptz_managed() {
     local pid="$1" cgroup=""
     [[ "${pid}" =~ ^[0-9]+$ ]] || return 1
     [[ -r "/proc/${pid}/cgroup" ]] || return 1
-    cgroup="$(tr -d ' ' < "/proc/${pid}/cgroup" 2>/dev/null || true)"
+    cgroup="$(tr -d '\0' < "/proc/${pid}/cgroup" 2>/dev/null || true)"
     [[ "${cgroup}" == *"khptz-gui.service"* || "${cgroup}" == *"khptz-control.service"* ]]
 }
 

@@ -97,11 +97,26 @@ class TestInstallingPageHandlesAnUnreachableChannel:
         assert "rebooted" in block.lower()
 
     def test_timer_is_not_started_after_a_failed_begin(self, source):
-        """Polling for a result that can never arrive would leave the operator
-        watching a spinner until the 660s timeout."""
-        block = source[source.index("class InstallingPage"):]
-        guard = block.index("except OSError")
-        start = block.index("self._timer.start(")
-        assert guard < start, "the timer starts before the failure path returns"
-        between = block[guard:start]
-        assert "return" in between
+        """Exercise the actual failure path without depending on source order."""
+        import os
+        import subprocess
+        import sys
+        script = r'''
+from PyQt5.QtWidgets import QApplication
+from PyQt5 import sip
+from ui.setup_wizard import SetupWizard
+app=QApplication([])
+class FailedHandoff:
+    poll_interval_s=60
+    def begin(self,answers):raise OSError("channel unavailable")
+    def poll(self):raise AssertionError("must not poll a failed begin")
+w=SetupWizard(handoff=FailedHandoff())
+p=next(w.page(i) for i in w.pageIds() if type(w.page(i)).__name__=="InstallingPage")
+p.initializePage()
+assert not p._timer.isActive()
+assert not p.isComplete()
+assert "channel unavailable" in p._status.text()
+w.reject();sip.delete(w);app.processEvents()
+'''
+        result=subprocess.run([sys.executable,'-c',script],cwd=Path(__file__).resolve().parents[1],env=dict(os.environ,QT_QPA_PLATFORM='offscreen'),capture_output=True,text=True,timeout=15)
+        assert result.returncode==0,result.stdout+result.stderr

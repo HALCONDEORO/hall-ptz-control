@@ -49,6 +49,13 @@ class FakeCamera(CameraPort):
         self._saved_presets: set[int] = set()
         self._last_error = ""
         self._lock = threading.Lock()
+        # Move generation. Every command that starts or cancels a move bumps
+        # this counter, and a delayed arrival only applies its result while it
+        # is still the latest generation. Without it, two overlapping moves
+        # can complete out of order (last recall loses) and a move cancelled
+        # by stop()/standby() still "arrives" afterwards — states no real
+        # camera can produce.
+        self._move_generation = 0
 
     # ── CameraPort implementation ─────────────────────────────────────────────
 
@@ -64,6 +71,7 @@ class FakeCamera(CameraPort):
             self._powered = False
             self._moving = False
             self._last_error = ""
+            self._move_generation += 1   # cancel any pending arrival
         logger.info("[DEMO] FakeCamera %s standby", self._camera_id)
         return True
 
@@ -88,6 +96,7 @@ class FakeCamera(CameraPort):
         with self._lock:
             self._moving = False
             self._last_error = ""
+            self._move_generation += 1   # cancel any pending arrival
         logger.info("[DEMO] FakeCamera %s stop", self._camera_id)
         return True
 
@@ -121,16 +130,23 @@ class FakeCamera(CameraPort):
         """Set moving=True, then after move_delay_s set current_preset and moving=False."""
         if self._move_delay <= 0.0:
             with self._lock:
+                self._move_generation += 1
                 self._moving = False
                 self._current_preset = preset
             return
 
         with self._lock:
+            self._move_generation += 1
+            generation = self._move_generation
             self._moving = True
 
         def _arrive():
             time.sleep(self._move_delay)
             with self._lock:
+                if generation != self._move_generation:
+                    # Superseded by a newer recall or cancelled by
+                    # stop()/standby(): the newer command owns the state.
+                    return
                 self._moving = False
                 self._current_preset = preset
 

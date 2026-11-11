@@ -186,6 +186,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         self._app_ctrl              = _ctx.app_ctrl
         self._camera_target_resolver = _ctx.camera_target_resolver
         self._layout_svc            = _ctx.layout_svc
+        self._runtime_safety_svc    = _ctx.runtime_safety_svc
 
         self._session         = SessionController(self)
         self._dialogs         = DialogsController(self)
@@ -213,6 +214,9 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         self._atem_state: ATEMState = ATEMState.NOT_CONFIGURED
         self._atem_restart_pending = False
+        # Marca temporal del DISCONNECTED terminal actual: el supervisor lo usa
+        # para reintentar el ATEM pasado ATEM_DISCONNECTED_RETRY_AFTER_S.
+        self._atem_disconnected_at: float | None = None
         self._atem_monitor = None
         self._fake_atem = None
         self._demo_atem_panel = None
@@ -878,11 +882,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         Llamado desde AtemAdminPanel cuando el operador activa/desactiva el PiP.
         """
         if self._atem_write_adapter is not None:
-            self._atem_write_adapter.set_pip_enabled(state)
+            result = self._atem_write_adapter.set_pip_enabled(state)
+            if not result.ok:
+                logger.warning("ATEM PiP request failed: %s", result.message)
+            return  # Only monitor telemetry confirms the production state.
         else:
             from domain.atem_state import ATEMPiPState
             self._atem_dispatcher.on_pip_changed(ATEMPiPState(enabled=state, source=None))
-        # Actualización optimista; el monitor confirmará en el siguiente poll.
+        # Demo has no hardware telemetry; update its local state immediately.
         self._pip_active = state
         self._notify_pip_state(state)
 
@@ -918,6 +925,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             speed_provider=lambda: self._zoom_to_speed(self.ZoomSlider.value()),
         )
         self._right_panel.set_joystick_mode('platform')
+        from ui.stop_all_wiring import connect_stop_all
+        connect_stop_all(self)
         self._update_focus_ui()
         self._update_exposure_ui()
 
@@ -1301,6 +1310,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         import adapters.sim_mode as _sim
         from domain.atem_runtime_policy import is_fake_atem_mode
         self._atem_state = None
+        self._atem_disconnected_at = None
         self._atem_verified_monitor = None
         self._atem_dispatcher.reset_input_tracking()
 
@@ -1352,6 +1362,11 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             return
         if state != ATEMState.CONNECTED:
             self._atem_verified_monitor = None
+        if state is ATEMState.DISCONNECTED:
+            if self._atem_state is not ATEMState.DISCONNECTED:
+                self._atem_disconnected_at = time.monotonic()
+        else:
+            self._atem_disconnected_at = None
         self._atem_state = state
         self._atem_dispatcher.on_atem_state_changed(state)
         self._right_panel.set_atem_state(state)
@@ -1414,10 +1429,14 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
     def _atem_monitor_is_healthy(self) -> bool:
         if self._atem_monitor is None:
             return True  # FakeATEM / no-ATEM path: never needs restart
+        elapsed = None
+        if self._atem_disconnected_at is not None:
+            elapsed = time.monotonic() - self._atem_disconnected_at
         return is_atem_supervisor_healthy(
             is_running=self._atem_monitor.isRunning(),
             restart_pending=self._atem_restart_pending,
             state=self._atem_state,
+            disconnected_elapsed_s=elapsed,
         )
 
     def _do_restart_atem_monitor(self):
@@ -1437,8 +1456,16 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         old_monitor = self._atem_monitor
         if old_monitor is None:
-            # FakeATEM / no-ATEM path — nothing to stop or replace.
             self._atem_restart_pending = False
+            # No monitor yet: the restart path doubles as the start path when
+            # an ATEM is configured at runtime (first-time setup from
+            # Settings, Scan/Reconnect buttons). Demo/sim is excluded — the
+            # FakeATEM owns the surface and replacing it here would orphan
+            # the demo panel's reference.
+            if self._fake_atem is None and self._atem_is_configured():
+                self._atem_dispatcher.mark_reconnecting()
+                self._start_atem_monitor()
+                logger.info("ATEMMonitor started after runtime configuration")
             return
 
         self._disconnect_atem_monitor_signals(old_monitor)

@@ -284,6 +284,7 @@ class _ATEMEditDialog(QDialog):
             if result.code == "PARTIAL_OK":
                 QMessageBox.warning(self, 'Change not saved',
                     'Applied for this session only. Saving failed; changes will be lost after restart.')
+                _ATEMEditDialog._restart_atem_monitor(self)
                 self.accept()
                 return
             if result.code != "OK":
@@ -296,4 +297,17 @@ class _ATEMEditDialog(QDialog):
             self._err.setText('Configuration service unavailable. Nothing saved.')
             return
 
+        _ATEMEditDialog._restart_atem_monitor(self)
         self.accept()
+
+    def _restart_atem_monitor(self):
+        """Ask the main window to (re)start the ATEM monitor on the new IP.
+
+        Camera edits reconnect their worker; the ATEM edit must do the same
+        or the running monitor keeps polling the previous address while the
+        UI shows the new one. Guarded: tests and demo harnesses may not
+        provide the restart hook.
+        """
+        restart = getattr(self._mw, '_do_restart_atem_monitor', None)
+        if callable(restart):
+            restart()
