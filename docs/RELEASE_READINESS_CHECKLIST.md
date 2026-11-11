@@ -9,6 +9,15 @@ marked NOT_APPLICABLE or NOT_TESTED in automation.
 
 ---
 
+## Current candidate: 1.2.1
+
+The evidence below is a historical May 2026 record for another build, not
+validation of 1.2.1. Its PASS marks must not be carried into a new release.
+Current acceptance and limitations are tracked in [1.2.1 release notes](releases/1.2.1.md).
+No target-Pi acceptance has been recorded for this candidate here.
+
+---
+
 ## Evidence record — build 3.38.2 (commit 8012002)
 
 | Field | Value |
