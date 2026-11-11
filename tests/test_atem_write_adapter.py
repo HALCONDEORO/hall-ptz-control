@@ -359,8 +359,21 @@ class TestSetPipEnabled:
         inst.setPIPEnabled.side_effect = OSError("broken pipe")
         result = adapter.set_pip_enabled(True)
         assert result.ok is False
-        assert result.error_code == "ERROR"
+        assert result.error_code == "NETWORK_ERROR"   # same code as cut/auto/preview
         assert adapter._connected is False   # network error does disconnect
+
+    def test_transient_error_does_not_disconnect(self):
+        """A non-network write failure must not tear down the TCP connection.
+
+        Same contract as the reads (test_transient_read_error_does_not_disconnect)
+        and as cut/auto/set_preview_input: only OSError marks the link down.
+        """
+        adapter, inst, _ = _connected_adapter()
+        inst.setPIPEnabled.side_effect = RuntimeError("transient library state")
+        result = adapter.set_pip_enabled(True)
+        assert result.ok is False
+        assert result.error_code == "ERROR"
+        assert adapter._connected is True   # still connected
 
 
 # ── AtemWritePort protocol compliance ────────────────────────────────────────
