@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Redact evidence-snapshot notes and collector error text before returning
+  or persisting them. Redaction failures use safe placeholders and mark the
+  snapshot unclean; structured metadata keeps its existing contract.
+
 - Include runtime endpoint overrides in installation fingerprints. Existing
   baselines with an overlay can show `changed_since_validation` until explicit
   revalidation; baselines are never renewed automatically. Installations
