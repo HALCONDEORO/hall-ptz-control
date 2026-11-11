@@ -348,9 +348,17 @@ class ATEMWriteAdapter:
                 ok=False, command="set_pip_enabled",
                 error_code="API_NOT_FOUND", message=str(exc),
             )
-        except Exception as exc:
+        except OSError as exc:
             self._mark_disconnected()
-            logger.warning("[ATEM-write] set_pip_enabled error: %s", exc)
+            logger.warning("[ATEM-write] set_pip_enabled network error: %s", exc)
+            return AtemCommandResult(
+                ok=False, command="set_pip_enabled",
+                error_code="NETWORK_ERROR", message=str(exc),
+            )
+        except Exception as exc:
+            # Transient non-network error — same contract as the reads and the
+            # other commands: do NOT tear down a connection that may be fine.
+            logger.warning("[ATEM-write] set_pip_enabled unexpected error: %s", exc)
             return AtemCommandResult(
                 ok=False, command="set_pip_enabled",
                 error_code="ERROR", message=str(exc),

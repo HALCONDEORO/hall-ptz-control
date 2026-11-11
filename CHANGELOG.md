@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- PiP writes report network failures as NETWORK_ERROR and keep healthy
+  connections open after non-network library errors.
 - Demo ATEM controls stay reachable while disconnected so operators can reconnect the virtual switcher.
 - Runtime ATEM IP edits start or replace the monitor instead of polling a stale endpoint.
 - Legacy backup imports reject duplicate archive member names before
