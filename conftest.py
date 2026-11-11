@@ -38,6 +38,21 @@ try:
     import PyQt5.QtCore  # noqa: F401
     import PyQt5.QtGui  # noqa: F401
     import PyQt5.QtWidgets  # noqa: F401
+    # QtSvg needs the same protection: several test files stub
+    # sys.modules["PyQt5.QtSvg"].QSvgRenderer when it is not already loaded,
+    # and the fake renderer then breaks every later real svg_icon() call in
+    # the process (ui/styles.py::_render_icon -> renderer.render).
+    import PyQt5.QtSvg  # noqa: F401
+    # ui.widgets / ui.platform_icons need it too: several test files inject a
+    # bare stub into sys.modules["ui.widgets"] (guarded the same way), and a
+    # stubbed base class then breaks every later real consumer in the process
+    # (ChairmanButton without setGeometry in test_main_window_smoke).
+    import ui.widgets  # noqa: F401
+    import ui.platform_icons  # noqa: F401
+    # Same guard pattern: test_ui_misc_buttons.py stubs these two with partial
+    # fakes (e.g. sim_mode without is_active), which breaks later real users.
+    import adapters.sim_mode  # noqa: F401
+    import application.camera_discovery  # noqa: F401
 except ImportError:
     pass
 

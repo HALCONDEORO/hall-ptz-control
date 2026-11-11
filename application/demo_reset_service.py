@@ -60,11 +60,18 @@ class DemoResetError(RuntimeError):
 
 _PRODUCTION_PATH = Path.home() / ".config" / "khptz"
 
+# Service-install production data dir — the RuntimePathResolver production
+# default.  The guard only listed the legacy per-user path above, so on a
+# provisioned Pi `khptz demo reset` with the production profile resolved the
+# "demo" directory to /var/lib/khptz and overwrote the LIVE room layout,
+# seat names and chairman presets with the demo templates.
+_PRODUCTION_SERVICE_PATH = Path("/var/lib/khptz")
+
 
 def _production_paths() -> list[Path]:
-    """Return all recognized production data directories (legacy + env overrides)."""
-    paths = [_PRODUCTION_PATH]
-    for var in ("KHPTZ_DATA_DIR", "KHPTZ_DATA_DIR"):
+    """Return all recognized production data directories (legacy + service + env overrides)."""
+    paths = [_PRODUCTION_PATH, _PRODUCTION_SERVICE_PATH]
+    for var in ("KHPTZ_DATA_DIR",):
         val = os.environ.get(var, "").strip()
         if val:
             p = Path(val)
