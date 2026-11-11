@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Disable automatic ATEM discovery and the TCP-based Scan action rather than
+  treating TCP reachability as switcher detection. Both buttons remain visible
+  but disabled; enter the IP manually and use Reconnect ATEM with monitor status.
+
 - ATEM status and diagnostics use the live library link state instead of
   reporting a stale completed handshake as connected. Preserve the client
   for library-managed reconnection and restore inputs when the link returns.

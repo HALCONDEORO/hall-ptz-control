@@ -3,18 +3,8 @@
 # Licensed under the MIT License. See LICENSE in the repository root.
 # tests/test_config_pages_atem_tab.py — ui/config_pages/atem_tab.py had no coverage
 #
-# The ATEM tab is where a switcher gets found, assigned and re-checked on site.
-# The untested behaviour that matters:
-#
-#   - an assignment that could not be persisted must be reported as temporary,
-#     exactly like the camera tab: the switcher works until the next reboot.
-#   - the reachability probe must never run on the GUI thread (a TCP connect to
-#     an absent switcher blocks for the full timeout) and must report failure
-#     with the address it tried, which is the only clue an installer gets.
-#   - the status pill must follow the monitor, including the states it reaches on
-#     its own after the tab was built.
-#   - assigning is locked during a live session, and the tab must stop listening
-#     to the main window once the dialog is destroyed.
+# Real tab widgets: manual IP editing and monitor status remain available;
+# unsupported discovery/TCP probes must never claim a switcher was ruled out.
 
 from __future__ import annotations
 
@@ -24,7 +14,6 @@ pytest.importorskip("PyQt5")
 
 from tests.config_pages_harness import (          # noqa: E402
     button_named, buttons, has_text, label_texts, make_harness, panel_layout,
-    run_threads_inline,
 )
 
 
@@ -34,44 +23,6 @@ def configured_atem(monkeypatch):
     monkeypatch.setattr(config.ATEM, "ip", "172.16.1.50", raising=False)
 
 
-@pytest.fixture
-def discovery(monkeypatch):
-    import application.camera_discovery as camera_discovery
-
-    state = {"found": ["172.16.1.51", "172.16.1.52"], "error": None}
-
-    def _discover():
-        if state["error"] is not None:
-            raise state["error"]
-        return state["found"]
-
-    monkeypatch.setattr(camera_discovery, "discover_atem_switchers", _discover)
-    return state
-
-
-@pytest.fixture
-def no_socket(monkeypatch):
-    """Answer the reachability probe without touching the network."""
-    import ui.config_pages.atem_tab as tab
-
-    state = {"reachable": True, "targets": []}
-
-    class _Conn:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-    def _create_connection(address, timeout=None):
-        state["targets"].append(address)
-        if not state["reachable"]:
-            raise OSError("timed out")
-        return _Conn()
-
-    monkeypatch.setattr(tab.socket, "create_connection", _create_connection)
-    return state
-
 
 def build(monkeypatch, *, is_on=False, sim_active=False, visible=True,
           state=None, last_error="", inline=True):
@@ -79,14 +30,8 @@ def build(monkeypatch, *, is_on=False, sim_active=False, visible=True,
     mw._atem_monitor.state = state
     mw._atem_monitor.last_error = last_error
     import ui.config_pages.atem_tab as tab
-    if inline:
-        run_threads_inline(monkeypatch, tab)
     tab.build_atem_tab(dialog, layout, mw, is_on, sim_active, panel_layout)
     return dialog, mw, layout
-
-
-def use_buttons(layout) -> list:
-    return [b for b in buttons(layout) if b.text() in {"→ Use", "✓ Set"}]
 
 
 def pill_text(layout) -> str:
@@ -116,13 +61,13 @@ class TestSwitcherCard:
         dialog, mw, layout = build(monkeypatch)
         assert "172.16.1.50" in label_texts(layout)
 
-    def test_discovery_is_offered_for_an_unknown_switcher(self, monkeypatch):
+    def test_discovery_is_explicitly_unavailable(self, monkeypatch):
         dialog, mw, layout = build(monkeypatch)
-        assert button_named(layout, "Discover switchers")
+        assert not button_named(layout, "Discover switchers").isEnabled()
 
-    def test_a_reachability_probe_is_offered(self, monkeypatch):
+    def test_unverified_tcp_probe_is_disabled(self, monkeypatch):
         dialog, mw, layout = build(monkeypatch)
-        assert button_named(layout, "Scan").isEnabled()
+        assert not button_named(layout, "Scan").isEnabled()
 
 
 class TestStatusPill:
@@ -162,183 +107,23 @@ class TestStatusPill:
         assert not has_text(layout, "Last error")
 
 
-class TestDiscovery:
-    def test_found_switchers_are_listed(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        assert "172.16.1.51" in label_texts(layout)
-        assert has_text(layout, "2 switcher(s) found")
-
-    def test_an_empty_network_says_so(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        discovery["found"] = []
-        button_named(layout, "Discover switchers").click()
-        assert has_text(layout, "No ATEM switchers found")
-
-    def test_a_failing_scan_degrades_to_none_found(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        discovery["error"] = OSError("network is unreachable")
-        button_named(layout, "Discover switchers").click()
-        assert has_text(layout, "No ATEM switchers found")
-
-    def test_the_button_always_comes_back(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        discovery["error"] = OSError("boom")
-        btn = button_named(layout, "Discover switchers")
-        btn.click()
-        assert btn.isEnabled()
-        assert btn.text() == "Discover switchers"
-
-    def test_nothing_is_written_to_a_closed_dialog(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch, visible=False)
-        button_named(layout, "Discover switchers").click()
-        assert "172.16.1.51" not in label_texts(layout)
-
-    def test_discovery_is_locked_during_a_live_session(self, monkeypatch, discovery):
-        """Repointing the switcher mid-event cuts the program feed the
-        automation follows."""
-        dialog, mw, layout = build(monkeypatch, is_on=True)
-        assert not button_named(layout, "Discover switchers").isEnabled()
-
-    def test_the_scan_runs_off_the_gui_thread(self, monkeypatch, discovery):
-        import ui.config_pages.atem_tab as tab
-        started = []
-
-        class _Thread:
-            def __init__(self, target=None, daemon=None):
-                started.append(daemon)
-
-            def start(self):
-                pass
-
-        monkeypatch.setattr(tab, "threading", type("T", (), {"Thread": _Thread}))
-        dialog, mw, layout = make_harness()
-        tab.build_atem_tab(dialog, layout, mw, False, False, panel_layout)
-        button_named(layout, "Discover switchers").click()
-        assert started == [True]
-
-
-class TestAssignment:
-    def test_the_service_owns_the_write(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert mw._camera_config.atem_ips == ["172.16.1.51"]
-
-    def test_a_saved_assignment_says_so(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert dialog.toasts == [("ATEM → 172.16.1.51 assigned and saved", "ok")]
-
-    def test_an_unpersisted_assignment_warns_that_it_is_temporary(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        mw._camera_config.result = type("R", (), {"ok": True, "code": "PARTIAL"})()
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert dialog.toasts == [("ATEM → 172.16.1.51 assigned (this session only)", "warn")]
-
-    def test_a_missing_service_still_reports_honestly(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        mw._camera_config = None
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert dialog.toasts[0][1] == "warn"
-
-    def test_the_card_shows_the_new_ip(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert "172.16.1.51" in label_texts(layout)
-
-    def test_the_monitor_is_restarted_on_the_new_address(self, monkeypatch, discovery):
-        """Without this the panel shows a switcher it is not talking to."""
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert mw.restarts == 1
-
-    def test_the_pill_moves_to_connecting(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        use_buttons(layout)[0].click()
-        assert pill_text(layout) == "● Connecting…"
-
-    def test_the_used_button_is_marked_and_spent(self, monkeypatch, discovery):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Discover switchers").click()
-        btn = use_buttons(layout)[0]
-        btn.click()
-        assert btn.text() == "✓ Set"
-        assert not btn.isEnabled()
-
-
-class TestReachabilityProbe:
-    def test_disabled_without_a_configured_switcher(self, monkeypatch):
-        """There is nothing to probe, and the reason must be visible."""
-        import config
-        monkeypatch.setattr(config.ATEM, "ip", "", raising=False)
-        dialog, mw, layout = build(monkeypatch)
-        btn = button_named(layout, "Scan")
-        assert not btn.isEnabled()
-        assert "Configure the ATEM IP" in btn.toolTip()
-
-    def test_it_probes_the_control_port(self, monkeypatch, no_socket):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan").click()
-        assert no_socket["targets"] == [("172.16.1.50", 9910)]
-
-    def test_a_reachable_switcher_restarts_the_monitor(self, monkeypatch, no_socket):
-        dialog, mw, layout = build(monkeypatch)
-        button_named(layout, "Scan").click()
-        assert mw.restarts == 1
-        assert pill_text(layout) == "● Connecting…"
-
-    def test_an_unreachable_switcher_is_reported_with_its_address(self, monkeypatch, no_socket):
-        """The address is the whole diagnostic value of the probe."""
-        dialog, mw, layout = build(monkeypatch)
-        no_socket["reachable"] = False
-        button_named(layout, "Scan").click()
-        assert has_text(layout, "No response from 172.16.1.50:9910")
-        assert pill_text(layout) == "● Disconnected"
-
-    def test_an_unreachable_switcher_does_not_restart_the_monitor(self, monkeypatch, no_socket):
-        dialog, mw, layout = build(monkeypatch)
-        no_socket["reachable"] = False
-        button_named(layout, "Scan").click()
+class TestUnsupportedProbes:
+    @pytest.mark.parametrize('is_on', [True, False])
+    @pytest.mark.parametrize('sim_active', [True, False])
+    def test_no_probe_can_run_or_repoint_switcher(self, monkeypatch, is_on, sim_active):
+        dialog, mw, layout = build(monkeypatch, is_on=is_on, sim_active=sim_active)
+        for name in ('Discover switchers', 'Scan'):
+            btn = button_named(layout, name)
+            assert not btn.isEnabled()
+            btn.click()
         assert mw.restarts == 0
+        assert mw._camera_config.atem_ips == []
+        assert has_text(layout, 'enter the switcher IP manually')
+        assert 'Reconnect ATEM' in button_named(layout, 'Scan').toolTip()
 
-    def test_the_button_always_comes_back(self, monkeypatch, no_socket):
+    def test_manual_ip_edit_is_still_present(self, monkeypatch):
         dialog, mw, layout = build(monkeypatch)
-        no_socket["reachable"] = False
-        btn = button_named(layout, "Scan")
-        btn.click()
-        assert btn.isEnabled()
-        assert btn.text() == "Scan"
-
-    def test_simulation_never_touches_the_network(self, monkeypatch, no_socket):
-        dialog, mw, layout = build(monkeypatch, sim_active=True)
-        button_named(layout, "Scan").click()
-        assert no_socket["targets"] == []
-        assert mw.restarts == 1
-
-    def test_the_probe_runs_off_the_gui_thread(self, monkeypatch, no_socket):
-        """socket.create_connection blocks for the full 3 s timeout."""
-        import ui.config_pages.atem_tab as tab
-        started = []
-
-        class _Thread:
-            def __init__(self, target=None, daemon=None):
-                started.append(daemon)
-
-            def start(self):
-                pass
-
-        monkeypatch.setattr(tab, "threading", type("T", (), {"Thread": _Thread}))
-        dialog, mw, layout = make_harness()
-        tab.build_atem_tab(dialog, layout, mw, False, False, panel_layout)
-        button_named(layout, "Scan").click()
-        assert started == [True]
+        assert any(b.isEnabled() and not b.text() and not b.icon().isNull() for b in buttons(layout))
 
 
 class TestReconnect:

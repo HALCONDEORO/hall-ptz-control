@@ -148,20 +148,16 @@ def discover_cameras(subnet: str = '', exclude_ips=()) -> List[str]:
 #  DESCUBRIMIENTO DE SWITCHERS ATEM
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Blackmagic ATEM switchers escuchan en el puerto 9910 (mismo puerto que sondea
-# el diagnóstico de red y el botón "Scan"). Descubrirlos permite al técnico
-# encontrar la IP sin conocerla de antemano.
+# ATEM control uses UDP 9910. TCP reachability cannot identify a switcher.
 ATEM_PORT = 9910
 
 
 def discover_atem_switchers(subnet: str = '') -> List[str]:
-    """
-    Escanea la subred /24 en el puerto de control ATEM (9910) y devuelve las
-    IPs que responden, ordenadas.
+    """Automatic discovery is unavailable until an ATEM handshake is verified.
 
-    Reutiliza la subred de las cámaras (get_camera_subnet) porque en la mayoría
-    de instalaciones el switcher está en la misma red que las cámaras.
+    An empty list would incorrectly imply that a scan ruled out switchers.
+    Keep the legacy entry point explicit for callers instead of probing TCP.
     """
-    if not subnet:
-        subnet = get_camera_subnet()
-    return tcp_scan(subnet, port=ATEM_PORT)
+    raise NotImplementedError(
+        "ATEM discovery unsupported; enter the switcher IP manually"
+    )
