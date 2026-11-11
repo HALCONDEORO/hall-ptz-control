@@ -1437,7 +1437,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             if self._fake_atem is None and self._atem_is_configured():
                 self._atem_dispatcher.mark_reconnecting()
                 self._start_atem_monitor()
-                logger.info("ATEMMonitor arrancado tras configuración en caliente")
+                logger.info("ATEMMonitor started after runtime configuration")
             return
 
         self._disconnect_atem_monitor_signals(old_monitor)
