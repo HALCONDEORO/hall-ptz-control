@@ -232,3 +232,42 @@ class TestSplashCompatibility:
 
         assert splash.TestResult is TestResult
         assert splash.BootStatistics is BootStatistics
+
+
+class TestWallClockJumps:
+    """Boot durations must come from a monotonic clock.
+
+    The target hardware (Raspberry Pi) often has no RTC: the wall clock can
+    jump hours or days when NTP first syncs, typically DURING the boot test
+    sequence these measurements cover. A duration taken from time.time()
+    across that jump records hours of phantom boot time and poisons the
+    persisted history and its averages.
+    """
+
+    def test_forward_ntp_jump_does_not_inflate_phase_duration(self, monkeypatch):
+        wall = [1_700_000_000.0]
+        monkeypatch.setattr("application.boot_metrics.time.time", lambda: wall[0])
+        result = TestResult("cameras")
+        wall[0] += 2 * 3600  # NTP syncs mid-phase: +2h wall jump
+        result.finish(True)
+        assert result.duration_ms < 60_000  # real elapsed: milliseconds, not 2h
+
+    def test_backward_clock_jump_does_not_zero_or_negate_duration(self, monkeypatch):
+        wall = [1_700_000_000.0]
+        monkeypatch.setattr("application.boot_metrics.time.time", lambda: wall[0])
+        result = TestResult("cameras")
+        wall[0] -= 3600  # clock set backwards mid-phase
+        result.finish(True)
+        assert result.duration_ms >= 0
+        assert result.duration_ms < 60_000
+
+
+def test_splash_boot_duration_uses_monotonic_clock():
+    """Guard: the boot duration recorded by the splash must not mix clocks.
+
+    Catches both a wall-clock duration (NTP-jump vulnerable) and a mixed
+    monotonic-start / wall-end subtraction, which produces garbage.
+    """
+    src = Path("ui/splash_screen.py").read_text(encoding="utf-8")
+    assert "time.monotonic() - self.boot_start_time" in src
+    assert "time.time() - self.boot_start_time" not in src

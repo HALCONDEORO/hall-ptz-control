@@ -12,6 +12,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Added
 
+- A separate CI contract checks the pinned ATEM library on loopback,
+  including its unsupported PiP API without guessing keyer writes.
 - Offline camera and panel self-test (`python -m runtime.cli selftest --json`)
   built on the scripted VISCA simulator, run in CI before the unit tests.
 
@@ -19,6 +21,27 @@ This project uses a simple versioning approach while it is still in early produc
 
 - ATEM monitoring ends a session after thirty consecutive poll failures so
   the supervisor can reconnect, including when the link drops with cached input.
+- A disconnected ATEM monitor becomes eligible for a supervisor retry after
+  thirty seconds instead of remaining permanently treated as healthy.
+- ATEM writes report DISCONNECTED when the underlying link is down instead
+  of claiming success for commands the library did not send.
+- The setup wizard no longer suggests an address ending in .255 when
+  proposing the next camera address in the same subnet.
+- Installer mirrors preserve simulation state and saved production endpoints.
+- Boot duration metrics use a monotonic clock so wall-clock corrections
+  do not corrupt measured startup durations.
+- The extracted main-window budget is capped at 1700 lines, below the
+  previous 1792-line ceiling, leaving room for approved reconnect safety work.
+- VISCA watchdog logic is extracted from the main window with regression
+  tests, reducing its size limit without changing the intended behavior.
+- Each logging handler receives its own repeat filter so file logs do not
+  lose records already seen by the console; startup tests isolate filter state.
+- Test setup preloads real Qt and shared UI modules so later tests do not
+  inherit partial stubs installed during collection.
+- Demo reset refuses service-install production data paths before creating
+  or overwriting files, including nested directories.
+- The shutdown intent dialog is extracted from the main window with
+  focused regression tests, keeping its existing choices and behavior.
 - Startup loads the saved ATEM address from effective settings before the
   monitor starts, instead of requiring it to be entered again in Settings.
 - ATEM polling detects a dropped link instead of continuing to report
