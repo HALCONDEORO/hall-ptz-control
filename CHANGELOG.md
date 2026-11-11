@@ -19,6 +19,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Clear absent graphical-session variables from the systemd user manager
+  before importing current values and starting the GUI service. Abort if
+  clearing fails. This does not validate Pi login behavior or a GUI kept
+  alive after logout through linger.
+
 - Network diagnostics no longer use a TCP probe to judge UDP ATEM health.
   The default check reports advisory `not_run` and directs users to the app
   monitor. A healthy ATEM can therefore still show a verification-not-run
