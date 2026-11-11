@@ -52,13 +52,24 @@ def install_repeated_message_filter(
     logger: logging.Logger | None = None,
     *,
     summary_every: int = 10,
-) -> RepeatedMessageFilter:
+) -> list[RepeatedMessageFilter]:
+    """Attach a repeated-message summary filter to every handler of *logger*.
+
+    Each handler gets its OWN RepeatedMessageFilter instance: the filter's
+    dedup state (_last_key/_repeat_count) is per instance, so sharing one
+    instance across handlers makes the first handler consume the "first
+    occurrence" and every later handler drop that record as a "repeat" —
+    in production the rotating file log lost the WARNING/ERROR records the
+    console had just emitted.
+    """
     target = logger or logging.getLogger()
-    rate_filter = RepeatedMessageFilter(summary_every=summary_every)
     handlers = target.handlers or logging.getLogger().handlers
+    installed: list[RepeatedMessageFilter] = []
     for handler in handlers:
+        rate_filter = RepeatedMessageFilter(summary_every=summary_every)
         handler.addFilter(rate_filter)
-    return rate_filter
+        installed.append(rate_filter)
+    return installed
 
 
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"

@@ -464,6 +464,16 @@ fi
 RSYNC_EXCLUDES=(
     --exclude='.git' --exclude='__pycache__' --exclude='*.pyc'
     --exclude='.pytest-runtime' --exclude='venv' --exclude='.venv'
+    # sim state is operator data, not code: while simulation mode is active
+    # sim_mode.py writes sim_ip_backup.json (the is_active() marker and only
+    # record of the real camera/ATEM addresses) plus the loopback values into
+    # PTZ1IP.txt/PTZ2IP.txt, all inside the install dir. --delete must not
+    # erase them, or an upgrade/rollback silently disables simulation mode
+    # and the next boot hydrates the cameras from config.yaml — the real
+    # hardware the operator had isolated.
+    --exclude='sim_ip_backup.json'
+    --exclude='PTZ1IP.txt'
+    --exclude='PTZ2IP.txt'
 )
 
 if [[ "${REPO_ROOT}" == "${INSTALL_DIR}" ]]; then
@@ -492,6 +502,7 @@ elif [[ "${DEV_MODE}" == "false" ]]; then
     # mix of two versions. Safe here because /opt/khptz holds only application
     # code: config, data, logs and backups all live outside it (see
     # docs/RUNTIME_PATH_CONTRACT.md), so nothing customer-owned can be deleted.
+    # The one exception, sim_mode's state files, are excluded above.
     info "Installing application to ${INSTALL_DIR} (exact mirror of this release)..."
     rsync -a --delete "${RSYNC_EXCLUDES[@]}" "${REPO_ROOT}/" "${INSTALL_DIR}/"
 else

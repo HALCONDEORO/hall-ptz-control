@@ -7,9 +7,13 @@ import json
 from pathlib import Path
 
 
+import pytest
+
 from application.demo_reset_service import (
+    DemoResetError,
     DemoResetService,
     _PRODUCTION_PATH,
+    _PRODUCTION_SERVICE_PATH,
 )
 
 
@@ -48,6 +52,33 @@ class TestDemoResetSafety:
         result = svc.reset()
         assert not result.success
         assert "production" in result.error.lower()
+
+    def test_refuses_service_install_production_path(self):
+        """/var/lib/khptz is the RuntimePathResolver production default (#600 follow-up)."""
+        with pytest.raises(DemoResetError, match="production"):
+            DemoResetService._assert_safe_path(_PRODUCTION_SERVICE_PATH, None)
+
+    def test_refuses_child_of_service_install_production_path(self):
+        with pytest.raises(DemoResetError, match="production"):
+            DemoResetService._assert_safe_path(_PRODUCTION_SERVICE_PATH / "subdir", None)
+
+    def test_reset_refuses_service_install_path_before_touching_disk(
+        self, tmp_path, monkeypatch
+    ):
+        """reset() must refuse the service-install dir without creating anything.
+
+        The constant is monkeypatched to a tmp path so the real /var/lib/khptz
+        is never touched: if the guard regressed, a root CI would otherwise
+        write demo templates into live production data.
+        """
+        import application.demo_reset_service as drs
+        fake_prod = tmp_path / "var_lib_khptz"
+        monkeypatch.setattr(drs, "_PRODUCTION_SERVICE_PATH", fake_prod)
+        svc = drs.DemoResetService(demo_data_dir=fake_prod)
+        result = svc.reset()
+        assert not result.success
+        assert "production" in result.error.lower()
+        assert not fake_prod.exists()
 
     def test_allows_active_demo_dir_when_production_dirs_are_explicit(self, tmp_path, monkeypatch):
         templates = _make_templates(tmp_path)
