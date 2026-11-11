@@ -10,6 +10,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+## 1.2.1 - Release candidate
+
+Prepared for validation on 2026-11-11. Not yet certified on the target Pi.
+See `docs/releases/1.2.1.md` for release gates and known limitations.
+
 ### Added
 
 - Add a static English project website with installation/operator/support
