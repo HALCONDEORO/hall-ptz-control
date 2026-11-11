@@ -7,4 +7,8 @@
 
 .walkthrough>p.muted{color:var(--body)}
 
+.advanced-section{padding-block:32px}.advanced-section summary{cursor:pointer;font-size:20px;font-weight:600;color:var(--ink);min-height:48px;padding-block:10px}.advanced-section details[open]>summary{margin-bottom:24px}
+
+.architecture-section.advanced-section summary{color:var(--white)}
+
 .hero-actions .hero-status{font-size:14px;line-height:1.5;max-width:340px;margin:0 0 16px;color:var(--body)}

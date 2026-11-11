@@ -152,6 +152,15 @@ def test_install_requires_reviewed_revision_before_privileged_steps():
     assert 'Do not continue if checkout fails' in install
 
 
+def test_help_precedes_optional_contributor_content():
+    text = (ROOT / 'docs/index.html').read_text()
+    assert text.index('id="operate"') < text.index('id="help"') < text.index('id="atem"') < text.index('id="architecture"')
+    atem = text.split('id="atem"', 1)[1].split('</section>', 1)[0]
+    architecture = text.split('id="architecture"', 1)[1].split('</section>', 1)[0]
+    assert '<details><summary>Optional ATEM integration and licence checks</summary>' in atem
+    assert '<details><summary>For contributors: project architecture</summary>' in architecture
+    assert 'GPL' in atem and 'Dependency decision and release gates' in atem
+
 def test_first_screen_explains_product_audience_and_validation_state():
     page = (ROOT / 'docs/index.html').read_text()
     hero = page.split('<section class="hero wrap">', 1)[1].split('</section>', 1)[0]
