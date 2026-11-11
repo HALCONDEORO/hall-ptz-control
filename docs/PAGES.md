@@ -21,12 +21,12 @@ python3 -m pytest tests/test_project_pages.py tests/test_markdown_links.py
 ```
 
 The screenshot is a real `MainWindow` capture in local USER-mode simulation,
-refreshed on 11 November 2026 with the ADMIN-only STOP ALL visibility change.
+refreshed on 11 November 2026 with the quiet offline Help entry below Admin Mode.
 It uses the repository background (`ui/khptz_background.jpg`) and is 1920 × 1080.
 The view contains numbered seats, no assigned names or device addresses.
 Temporary app/config/data directories and simulated connection indicators were
-used; camera workers and timers were stopped before capture. STOP ALL is hidden
-in USER and visible after ADMIN elevation. This is not a physical camera test.
+used; no real equipment was connected. The main STOP ALL button is hidden
+in USER and visible after ADMIN elevation; Help offers STOP BOTH CAMERAS to USER. This is not a physical camera test.
 Re-review replacements before committing them.
 
 ## Live GitHub Pages

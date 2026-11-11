@@ -26,3 +26,12 @@ def test_documented_stop_all_route_matches_current_gui():
     assert 'USER mode hides this button' in readme
     assert 'red **STOP ALL** button below the camera controls' in readme
     assert 'Confirm the physical result' in readme
+
+
+def test_offline_help_route_is_documented_without_physical_guarantees():
+    root = Path(__file__).resolve().parents[1]
+    for relative in ('README.md', 'docs/OPERATOR_GUIDE.md'):
+        text = (root / relative).read_text()
+        assert 'STOP BOTH CAMERAS' in text
+        assert 'without confirmation' in text
+        assert 'physical' in text

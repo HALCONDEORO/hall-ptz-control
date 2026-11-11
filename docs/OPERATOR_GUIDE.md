@@ -9,7 +9,12 @@ Safety Reset is still a service contract, not a verified GUI control. Do not pla
 an emergency response around an unverified button or command. The GUI's camera
 close choices are described below.
 
-USER mode hides STOP ALL and has no separate per-camera STOP button. Releasing
+USER mode hides STOP ALL in the main control panel. Open the quiet `?` in the
+bottom-right corner below Admin Mode to use offline Help. Its STOP BOTH CAMERAS
+button uses the same queued-movement cancellation and runtime STOP service,
+without confirmation. Opening Help does not send camera commands. It offers
+eight user tutorials and read-only status/version; X closes it. This is a
+help entry, not a conspicuous emergency-stop control. Releasing
 the joystick still requests STOP for the camera it was moving; this is not an
 all-camera stop or a promise to cancel an automatic preset recall. Rehearse
 STOP ALL in ADMIN before live use and make the venue's physical fallback
@@ -137,7 +142,8 @@ with No. Verify touch behavior on the actual screen before live use.
 
 ## Which contract applies?
 
-STOP ALL has the ADMIN-only GUI route described above. The other service-level choices are
+The main STOP ALL button has the ADMIN-only GUI route described above;
+Help also offers STOP BOTH CAMERAS to USER. The other service-level choices are
 for support and development unless their installed route has been demonstrated.
 In particular, Safety Reset has no verified operator GUI control.
 

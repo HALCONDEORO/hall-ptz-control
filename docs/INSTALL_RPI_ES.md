@@ -98,7 +98,9 @@ distribución ni demuestra compatibilidad física. Revisa
 Sigue la salida del instalador: reinicia e inicia sesión en el escritorio, o
 ejecuta `khptz setup` allí. No uses contraseñas por defecto.
 
-STOP ALL solo aparece en ADMIN. En USER no hay otro botón STOP dedicado; soltar
+STOP ALL solo aparece en ADMIN en el panel principal. En USER, `?` debajo de
+Admin Mode abre la ayuda offline con STOP BOTH CAMERAS sin confirmación. Abrir
+la ayuda no envía órdenes; la parada no garantiza entrega ni resultado físico. Soltar
 el joystick pide parar la cámara que estaba moviendo, no todas ni un preset
 automático. Ensaya STOP ALL en ADMIN y deja el respaldo físico de la sala
 disponible sin contraseña. Un comando aceptado no demuestra parada física.
