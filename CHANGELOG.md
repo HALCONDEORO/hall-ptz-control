@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Clarify operator safety documentation: STOP ALL has a GUI route, Safety
+  Reset remains a service contract, and software success does not confirm
+  physical stopping. Keep partial-failure and hardware-validation limits clear.
+
 - Exclude exact canonical KHPTZ startup filenames from legacy readiness
   warnings while continuing to detect legacy entries such as hallptz.desktop.
 
