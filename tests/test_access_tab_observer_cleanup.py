@@ -6,7 +6,6 @@ observers on the process-lifetime AccessModeService.
 """
 import subprocess
 import sys
-import textwrap
 
 
 def test_access_tab_unsubscribes_on_dialog_close():
