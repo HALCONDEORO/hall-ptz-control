@@ -19,6 +19,7 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- deduplicate repeated PiP feedback before moving cameras.
 - keep production PiP state tied to monitor telemetry.
 - ATEM monitoring ends a session after thirty consecutive poll failures so
   the supervisor can reconnect, including when the link drops with cached input.
