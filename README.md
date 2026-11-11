@@ -140,9 +140,12 @@ Use a disposable development checkout, not a live hall configuration. Follow the
 3. Treat a green connection indicator as transport information. Queue admission
    is not a physical motion confirmation. A timeout or failed save is not success;
    do not repeatedly press SET to make the indicator change.
-4. Learn [STOP, STOP ALL and the close options](docs/OPERATOR_GUIDE.md) before
-   relying on them. If a camera keeps moving without a network connection, use
-   the venue's physical fallback rather than assuming software STOP arrived.
+4. Rehearse the red **STOP ALL** button below the camera controls and the close
+   choices before live use. STOP ALL requests stops for configured cameras even
+   without an active session; a failure notice means a camera may still be moving.
+   Confirm the physical result. Safety Reset is a service contract, not a verified
+   GUI control. Read the [safety contracts and limits](docs/OPERATOR_GUIDE.md).
+   Use the venue's physical fallback rather than assuming software STOP arrived.
 
 VISCA presets are stored in camera memory. `chairman_presets.json` maps names to
 personal preset slots; `room_layout.json` stores the seating layout. A backup of
