@@ -15,6 +15,9 @@ This project uses a simple versioning approach while it is still in early produc
 - Break website installation into reviewed-build, readiness, install and setup
   stages while preserving every command and its stop/identity checks.
 
+- Put troubleshooting after operation, ahead of optional ATEM and contributor
+  architecture details. Keep advanced content in labelled native disclosures.
+
 - Explain the project, room-operator audience and pending hardware validation
   on the first screen. Remove the repeated feature-summary band.
 
