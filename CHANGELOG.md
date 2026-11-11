@@ -19,6 +19,7 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Simulated camera moves ignore arrivals superseded by a later recall or stop.
 - Warn when a seat rename cannot save its existing camera preset, while
   keeping the in-memory rename available for the next persistence retry.
 - Setup keeps watching an unresolved provisioning request after timeout or
