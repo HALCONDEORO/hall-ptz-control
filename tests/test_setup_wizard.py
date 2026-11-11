@@ -204,6 +204,15 @@ class TestNextCameraAnswer:
         assert not added.ip.endswith(".0")
         assert added.ip != "10.0.0.255"
 
+    def test_next_ip_never_offers_the_broadcast_address(self):
+        # RED on main: with the last camera on .254, the first free candidate
+        # was x.x.x.255 — the /24 broadcast address.
+        from application.provisioning_service import next_camera_answer
+        added = next_camera_answer([self._cam(ip="192.0.2.254")])
+        assert not added.ip.endswith(".255")
+        assert not added.ip.endswith(".0")
+        assert added.ip == "192.0.2.1"
+
     def test_added_camera_has_a_display_name(self):
         from application.provisioning_service import next_camera_answer
         assert next_camera_answer([self._cam()]).name == "Comments"
@@ -312,8 +321,10 @@ class _FakeHandoff:
     def __init__(self, result=None):
         self._result = result
         self.began_with = None
+        self.begin_calls = 0
 
     def begin(self, answers):
+        self.begin_calls += 1
         self.began_with = answers
 
     def poll(self):
@@ -344,6 +355,45 @@ class TestInstallingPage:
         page._poll_once()
         assert page.isComplete() is True
         assert "complete" in page._status.text().lower()
+
+    def test_reentry_while_in_flight_does_not_begin_again(self, _qapp):
+        """Back + Next mid-install resumes polling; it must not re-begin().
+
+        ProvisionHandoff.begin(): "This does not make retries safe while an
+        earlier operation is active; callers must establish its outcome
+        before submitting another request."
+        """
+        from ui.setup_wizard import SetupWizard
+
+        handoff = _FakeHandoff(result=None)  # still running
+        wizard = SetupWizard(handoff=handoff)
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        assert handoff.begin_calls == 1
+
+        page.cleanupPage()       # operator pressed Back mid-install
+        page.initializePage()    # ... and Next again
+        assert handoff.begin_calls == 1
+        assert page.isComplete() is False
+        page._timer.stop()
+
+    def test_reentry_after_failure_begins_again(self, _qapp):
+        # The designed retry path stays open: once a failure landed,
+        # Back + Next submits fresh answers.
+        from application.provision_handoff import HandoffResult
+        from ui.setup_wizard import SetupWizard
+
+        handoff = _FakeHandoff(result=HandoffResult(ok=False, error="boom"))
+        wizard = SetupWizard(handoff=handoff)
+        page = _page(wizard, "InstallingPage")
+        page.initializePage()
+        page._poll_once()        # failure landed
+        assert page.isComplete() is False
+
+        page.cleanupPage()
+        page.initializePage()
+        assert handoff.begin_calls == 2
+        page._timer.stop()
 
     def test_failure_keeps_page_incomplete(self, _qapp):
         from application.provision_handoff import HandoffResult
@@ -523,7 +573,7 @@ class TestInstallingPageCloseLifecycle:
 
 
 class TestInstallingTimeoutGuidance:
-    def test_timeout_stops_polling_but_does_not_unlock_next(self, wizard):
+    def test_timeout_keeps_polling_without_unlocking_next(self, wizard):
         from application.provision_handoff import HandoffResult
 
         class TimedOut:
@@ -545,7 +595,7 @@ class TestInstallingTimeoutGuidance:
         wizard.setStartId(pid)
         wizard.show()
         page._poll_once()
-        assert not page._timer.isActive()
+        assert page._timer.isActive()
         assert not page.isComplete()
         assert page._result.timed_out
         assert "do not retry or restart blindly" in page._status.text()

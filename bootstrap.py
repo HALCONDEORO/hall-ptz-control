@@ -18,6 +18,7 @@ from core.state import SystemState
 from core.events import AsyncEventBus
 from application.preset_service import PresetService
 from application.session_service import SessionService
+from application.runtime_safety_service import RuntimeSafetyService
 from application.app_controller import ApplicationController
 from application.call_set_command_policy import CallSetCommandPolicy
 from application.runtime_state_store import RuntimeStateStore
@@ -193,6 +194,8 @@ def build_app_context(cameras, flight_recorder=None) -> AppContext:
         runtime_state_store=runtime_store,
     )
 
+    runtime_safety_svc = RuntimeSafetyService(camera_port, camera_ids=_camera_ids)
+
     controller = Controller(
         state=state,
         bus=bus,
@@ -222,4 +225,5 @@ def build_app_context(cameras, flight_recorder=None) -> AppContext:
         camera_target_resolver=camera_target_resolver,
         runtime_state_store=runtime_store,
         runtime_audit_log=audit_log,
+        runtime_safety_svc=runtime_safety_svc,
     )
