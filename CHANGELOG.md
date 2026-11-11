@@ -10,6 +10,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+### Changed
+
+- Break website installation into reviewed-build, readiness, install and setup
+  stages while preserving every command and its stop/identity checks.
+
 ## 1.2.1 - Release candidate
 
 Prepared for validation on 2026-11-11. Not yet certified on the target Pi.

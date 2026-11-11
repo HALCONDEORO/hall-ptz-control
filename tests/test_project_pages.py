@@ -150,3 +150,14 @@ def test_install_requires_reviewed_revision_before_privileged_steps():
     assert 'git rev-parse HEAD' in before_install
     assert 'read -r -p' in before_install
     assert 'Do not continue if checkout fails' in install
+
+
+def test_install_commands_have_explicit_stages_and_stop_rules():
+    text = (ROOT / 'docs/index.html').read_text()
+    install = text.split('id="install"', 1)[1].split('id="operate"', 1)[0]
+    stages = ['1. Choose the reviewed build', '2. Check readiness', '3. Install only after PASS', '4. Complete setup']
+    assert all(f'<h3>{stage}</h3>' in install for stage in stages)
+    assert [install.index(stage) for stage in stages] == sorted(install.index(stage) for stage in stages)
+    assert 'Do not continue if checkout fails' in install
+    assert 'not the service account' in install
+    assert 'If it fails, stop' in install
