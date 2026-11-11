@@ -183,7 +183,9 @@ def test_first_screen_explains_product_audience_and_validation_state():
 
 def test_public_page_explains_user_and_admin_stop_routes():
     text = (ROOT / 'docs/index.html').read_text()
-    assert 'USER mode has no STOP ALL button' in text
+    assert 'The main STOP ALL button is ADMIN-only' in text
+    assert 'STOP BOTH CAMERAS without confirmation' in text
+    assert 'Opening Help sends no commands' in text
     assert 'Releasing the joystick requests a stop' in text
     assert 'Rehearse the red STOP ALL button in ADMIN mode' in text
     assert 'physical fallback available without a password' in text
@@ -200,7 +202,7 @@ def test_readme_and_publication_notes_match_live_project():
     assert 'git checkout --detach "$APPROVED_REVISION"' in readme
     assert '## Live GitHub Pages' in pages
     assert 'branch `main`, folder **/docs**' in pages
-    assert 'USER has no dedicated' in (ROOT / 'docs/MVP_VALIDATION_REPORT.md').read_text()
+    assert 'USER has STOP BOTH CAMERAS inside offline Help' in (ROOT / 'docs/MVP_VALIDATION_REPORT.md').read_text()
 
 
 def test_support_report_is_actionable_and_private():

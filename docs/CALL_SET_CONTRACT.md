@@ -11,7 +11,17 @@ all modes, input events and hardware states.
 
 ---
 
-## Release rule
+## Current behavior versus historical design
+
+The design below predates the two-role implementation. For current operator
+instructions use [Access roles](ACCESS_ROLES.md) and [Operator guide](OPERATOR_GUIDE.md).
+USER and ADMIN both request SET by a one-second hold (1000 ms) or right click,
+with confirmation. A short tap remains CALL. The role tables and proposals
+below are historical design, not the current permissions or user tutorial.
+`application/call_set_command_policy.py` and the actual UI dispatch are the
+current implementation; do not tell USER operators that SET requires elevation.
+
+## Historical release rule
 
 Do not declare the first installable MVP release, first pilot release or
 customer-ready release until:

@@ -10,6 +10,14 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+### Added
+
+- Add offline user Help through a quiet corner question mark below Admin Mode,
+  with eight tutorials, read-only status/version and STOP BOTH CAMERAS without
+  confirmation. Reuse the full queued-movement cancellation and runtime STOP
+  route, keep the main ADMIN-only STOP ALL button and its permissions unchanged,
+  and report delivery separately from unverified physical stopping.
+
 ### Changed
 
 - Shorten preset long-press SET to one second for USER and ADMIN. Keep

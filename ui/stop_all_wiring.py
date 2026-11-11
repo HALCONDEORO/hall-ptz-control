@@ -21,8 +21,8 @@ failure always survives a full timeout.
 
 The button is visible only in ADMIN mode. Within that role it stays outside
 connection/session-disabled subtrees, so uncertain transport does not hide it.
-USER mode retains joystick-release stopping, but has no dedicated all-camera
-stop button. Visibility is a UI choice, not a restriction on the safety service.
+USER mode retains joystick-release stopping and can open offline Help for
+STOP BOTH CAMERAS using the same full route. Visibility is a UI choice, not a restriction on the safety service.
 """
 
 from __future__ import annotations
@@ -62,20 +62,25 @@ def _show_notice(notice: QLabel, hide_timer: QtCore.QTimer, text: str) -> None:
     hide_timer.start()  # restart: an earlier failure never hides a later one
 
 
-def _stop_all(window, notice: QLabel, hide_timer: QtCore.QTimer) -> None:
-    """Run the operator STOP ALL action. Never raises into the Qt slot."""
+def request_camera_stop(window):
+    """Retire queued movements, then attempt STOP for every configured camera."""
     bus = getattr(window, "_bus", None)
     if bus is not None:
-        # Logical cameras 1/2 match the CAMERA_STOP payload convention used
-        # by JoystickAdapter and the controller's emergency lane.
         for cam in (1, 2):
             bus.emit(EventType.CAMERA_STOP, camera=cam)
     service = getattr(window, "_runtime_safety_svc", None)
     if service is None:
         logger.warning("STOP ALL pressed but RuntimeSafetyService is not wired")
+        return None
+    return service.stop_all_cameras()
+
+
+def _stop_all(window, notice: QLabel, hide_timer: QtCore.QTimer) -> None:
+    """Run the operator STOP ALL action. Never raises into the Qt slot."""
+    result = request_camera_stop(window)
+    if result is None:
         _show_notice(notice, hide_timer, "STOP ALL: safety service unavailable")
         return
-    result = service.stop_all_cameras()
     if result.ok:
         notice.hide()
         hide_timer.stop()
@@ -114,4 +119,6 @@ def connect_stop_all(window) -> QPushButton:
     update_visibility(access.mode)
     access.subscribe(update_visibility)
     btn.destroyed.connect(lambda: access.unsubscribe(update_visibility))
+    from ui.operator_help import connect_operator_help
+    connect_operator_help(window)
     return btn

@@ -62,7 +62,9 @@ wins:
 
 The screenshot was generated from the current application in an isolated local
 USER-mode simulation on 11 November 2026, using the repository background.
-STOP ALL is visible only in ADMIN; joystick-release stopping remains in USER. It contains no
+The main STOP ALL button is visible only in ADMIN. USER can open the quiet `?`
+below Admin Mode for offline guides and STOP BOTH CAMERAS, without confirmation.
+Joystick-release stopping remains unchanged. It contains no
 personal names or device addresses. Connection indicators are simulated, not a
 hardware-validation result.
 
@@ -175,7 +177,9 @@ on the actual equipment before live use.
    is not a physical motion confirmation. A timeout or failed save is not success;
    do not repeatedly press SET to make the indicator change.
 4. In ADMIN mode, rehearse the red **STOP ALL** button below the camera controls and the close
-   choices before live use. USER mode hides this button; joystick release still
+   choices before live use. USER mode hides this button; offline Help (`?` below
+   Admin Mode) offers STOP BOTH CAMERAS without confirmation. Opening Help sends
+   no commands. Both routes attempt stopping, not physical confirmation; joystick release still
    requests a stop for the moved camera, not all cameras. Keep the physical
    fallback available without admin access. STOP ALL requests stops for configured cameras even
    without an active session; a failure notice means a camera may still be moving.

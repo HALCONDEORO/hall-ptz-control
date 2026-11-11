@@ -21,7 +21,9 @@
 ## Smoke matrix
 
 This is a blank template, not recorded hardware acceptance. STOP ALL is available
-only in ADMIN. USER has no dedicated per-camera/all-camera STOP button; joystick
+only in ADMIN. USER has STOP BOTH CAMERAS inside offline Help (`?` below Admin Mode),
+without confirmation. Rehearse opening Help, sending STOP and using X to close;
+opening Help alone must not send commands. Check the physical result. Joystick
 release requests STOP for the moved camera, not automatic preset cancellation.
 Confirm an accessible physical fallback before testing. Safety Reset remains a
 service contract without a verified operator GUI control.
