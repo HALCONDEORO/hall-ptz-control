@@ -19,6 +19,8 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Starting a seat-name drag cancels its pending long-press preset SET
+  so moving a name does not overwrite a camera position.
 - Installer mirrors preserve simulation state and saved production endpoints.
 - Boot duration metrics use a monotonic clock so wall-clock corrections
   do not corrupt measured startup durations.
