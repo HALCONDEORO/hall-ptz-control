@@ -186,6 +186,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         self._app_ctrl              = _ctx.app_ctrl
         self._camera_target_resolver = _ctx.camera_target_resolver
         self._layout_svc            = _ctx.layout_svc
+        self._runtime_safety_svc    = _ctx.runtime_safety_svc
 
         self._session         = SessionController(self)
         self._dialogs         = DialogsController(self)
@@ -918,6 +919,8 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
             speed_provider=lambda: self._zoom_to_speed(self.ZoomSlider.value()),
         )
         self._right_panel.set_joystick_mode('platform')
+        from ui.stop_all_wiring import connect_stop_all
+        connect_stop_all(self)
         self._update_focus_ui()
         self._update_exposure_ui()
 
