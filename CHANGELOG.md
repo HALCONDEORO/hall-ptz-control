@@ -28,6 +28,8 @@ See `docs/releases/1.2.1.md` for release gates and known limitations.
 
 ### Fixed
 
+- Use body-text ink for the historical video disclaimer so its small text
+  meets the 4.5:1 contrast threshold against the walkthrough background.
 - Make the website installation instructions select an approved tag or full
   commit SHA in detached HEAD and show the resolved SHA before installation.
 

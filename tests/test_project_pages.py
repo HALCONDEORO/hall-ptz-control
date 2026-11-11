@@ -127,6 +127,20 @@ def test_setup_scope_and_demo_age_are_visible():
     assert 'Historical UI states' in page
 
 
+def test_walkthrough_disclaimer_has_small_text_contrast():
+    css = (ROOT / 'docs/site/styles.css').read_text()
+    # The local override uses the established body ink, not the lighter muted ink.
+    assert '.walkthrough>p.muted{color:var(--body)}' in css
+    foreground = re.search(r'--body:#([0-9a-f]{6})', css)[1]
+    background = re.search(r'\.use-section\{background:#([0-9a-f]{6})', css)[1]
+
+    def luminance(color):
+        channels = [int(color[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        linear = [v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4 for v in channels]
+        return sum(v * weight for v, weight in zip(linear, (.2126, .7152, .0722)))
+
+    low, high = sorted((luminance(foreground), luminance(background)))
+    assert (high + .05) / (low + .05) >= 4.5
 def test_install_requires_reviewed_revision_before_privileged_steps():
     page = (ROOT / 'docs/index.html').read_text()
     install = page.split('id="install"', 1)[1].split('id="operate"', 1)[0]
