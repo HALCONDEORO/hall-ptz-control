@@ -148,26 +148,10 @@ class TestTcpScan:
 
 
 class TestDiscoverAtemSwitchers:
-
-    def test_discover_atem_scans_control_port_on_camera_subnet(self, monkeypatch):
-        calls = {}
-
-        def fake_tcp_scan(subnet, port=cd.VISCA_PORT):
-            calls["subnet"] = subnet
-            calls["port"] = port
-            return ["172.16.1.10"]
-
-        monkeypatch.setattr(cd, "tcp_scan", fake_tcp_scan)
-
-        assert cd.discover_atem_switchers("172.16.1") == ["172.16.1.10"]
-        assert calls["port"] == cd.ATEM_PORT == 9910
-        assert calls["subnet"] == "172.16.1"
-
-    def test_discover_atem_defaults_to_camera_subnet(self, monkeypatch):
-        monkeypatch.setattr(cd, "CAM1", SimpleNamespace(ip="10.0.5.11"))
-        monkeypatch.setattr(cd, "tcp_scan", lambda subnet, port=cd.VISCA_PORT: [subnet])
-
-        assert cd.discover_atem_switchers() == ["10.0.5"]
+    def test_unsupported_is_not_reported_as_an_empty_scan(self):
+        import pytest
+        with pytest.raises(NotImplementedError, match="discovery unsupported"):
+            cd.discover_atem_switchers()
 
 
 class TestDiscoverCameras:

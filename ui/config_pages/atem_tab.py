@@ -2,23 +2,21 @@
 # Licensed under the MIT License. See LICENSE in the repository root.
 # ui/config_pages/atem_tab.py — ConfigDialog "ATEM" tab (#894 phase 3)
 #
-# ATEM switcher config + discovery + status/scan + the automation card.
+# Manual ATEM IP config + monitor status/reconnect + the automation card.
+# Discovery and Scan remain visible but disabled until verified support exists.
 # Extracted from ConfigDialog._build_ui; self -> dialog; is_on, sim_active and
 # _panel_layout are params. ATEM IP writes route through CameraConfigService.
 
 from __future__ import annotations
 
-import socket
-import threading
 
 from config import ATEM
-from PyQt5.QtCore import QObject, Qt, pyqtSignal
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -26,11 +24,9 @@ from PyQt5.QtWidgets import (
 from ui.config_edit_dialogs import _ATEMEditDialog
 from ui.config_pages.sections import build_atem_automation_section
 from ui.styles import (
-    CARD_BD as _C_CARD_BD,
     ERROR as _C_ERROR,
     ERROR_BD as _C_ERROR_BD,
     ERROR_BG as _C_ERROR_BG,
-    FIELD_BG as _C_FIELD_BG,
     MUTED as _C_MUTED,
     SECONDARY as _C_SECONDARY,
     SUCCESS as _C_SUCCESS,
@@ -39,12 +35,11 @@ from ui.styles import (
     WARNING as _C_WARNING,
     WARNING_BD as _C_WARNING_BD,
     WARNING_BG as _C_WARNING_BG,
-    primary_button_qss,
 )
 
 
 def build_atem_tab(dialog, atem_layout, mw, is_on, sim_active, panel_layout):
-    """Populate the ATEM tab: switcher config, discovery, status and automation."""
+    """Populate the ATEM tab: manual IP, status/reconnect and automation."""
     # ── ATEM: Switcher + Automation stacked in one column ──────────────
     # Single column (not the design's 2-up grid): on this taller dialog body
     # two short side-by-side cards left a huge empty band underneath. Stacking
@@ -77,150 +72,20 @@ def build_atem_tab(dialog, atem_layout, mw, is_on, sim_active, panel_layout):
     _atem_sep.setStyleSheet("background: #F0F1EE; border: none;")
     layout.addWidget(_atem_sep)
 
-    # ── ATEM Discovery ────────────────────────────────────────────────────
-    # Find a switcher when its IP is unknown. The "Scan" button below only
-    # probes the *configured* IP, so without this there was no way to set an
-    # ATEM you didn't already know the address of. Scans the camera subnet on
-    # the ATEM control port (9910) off the GUI thread.
+    # No verified automatic-discovery protocol is available. TCP 9910 is not
+    # evidence for or against a UDP ATEM switcher; never show "none found".
     atem_disc_desc = QLabel(
-        "Don't know the ATEM's IP? Discover switchers on the local network."
+        "Automatic ATEM discovery unavailable; enter the switcher IP manually."
     )
     atem_disc_desc.setWordWrap(True)
     atem_disc_desc.setStyleSheet(
         f"font: 400 12px 'Inter Tight', 'Segoe UI'; color: {_C_MUTED};"
-        " background: transparent;"
     )
     layout.addWidget(atem_disc_desc)
-
-    atem_disc_status = QLabel('')
-    atem_disc_status.setWordWrap(True)
-    atem_disc_status.setStyleSheet(
-        f"font: 12px 'Inter Tight', 'Segoe UI'; color: {_C_SECONDARY};"
-        " padding: 2px 0; background: transparent;"
-    )
-    layout.addWidget(atem_disc_status)
-
-    atem_disc_inner = QWidget()
-    atem_disc_inner.setStyleSheet("background: transparent;")
-    atem_disc_layout = QVBoxLayout(atem_disc_inner)
-    atem_disc_layout.setContentsMargins(0, 0, 0, 0)
-    atem_disc_layout.setSpacing(4)
-
-    atem_disc_scroll = QScrollArea()
-    atem_disc_scroll.setWidgetResizable(True)
-    atem_disc_scroll.setFixedHeight(0)   # hidden until there are results
-    atem_disc_scroll.setFrameShape(QFrame.NoFrame)
-    atem_disc_scroll.setStyleSheet("background: transparent;")
-    atem_disc_scroll.setWidget(atem_disc_inner)
-    layout.addWidget(atem_disc_scroll)
-
     btn_atem_discover = dialog._btn('Discover switchers', variant='primary', icon='search')
+    btn_atem_discover.setEnabled(False)
+    btn_atem_discover.setToolTip('Discovery unsupported: use the IP edit above')
     layout.addWidget(btn_atem_discover, 0, Qt.AlignRight)
-
-    def _atem_clear_results():
-        while atem_disc_layout.count():
-            child = atem_disc_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-
-    def _atem_use_ip(ip: str):
-        """Assign a discovered ATEM IP, persist it and reconnect the monitor."""
-        svc = getattr(mw, '_camera_config', None)
-        result = svc.set_atem_ip(ip) if svc is not None else None
-        persisted = bool(result and result.ok and result.code == "OK")
-        if _atem_val_lbl:
-            _atem_val_lbl.setText(ip)
-        # The configured-IP Scan button is now usable.
-        btn_scan_atem.setEnabled(True)
-        btn_scan_atem.setToolTip('')
-        last_error_lbl.setVisible(False)
-        dialog._toast(
-            f'ATEM → {ip} assigned and saved' if persisted
-            else f'ATEM → {ip} assigned (this session only)',
-            kind='ok' if persisted else 'warn',
-        )
-        mw._do_restart_atem_monitor()
-        _set_atem_status(_ATEMState.CONNECTING)
-
-    def _atem_show_results(found: list):
-        _atem_clear_results()
-        if not found:
-            atem_disc_status.setText('No ATEM switchers found on the network.')
-            atem_disc_scroll.setFixedHeight(0)
-        else:
-            atem_disc_status.setText(f'{len(found)} switcher(s) found:')
-            for ip in found:
-                row_w = QWidget()
-                row_w.setStyleSheet(
-                    f"background: {_C_FIELD_BG}; border-radius: 8px;"
-                    f" border: 1px solid {_C_CARD_BD};"
-                )
-                row_h = QHBoxLayout(row_w)
-                row_h.setContentsMargins(10, 4, 6, 4)
-                row_h.setSpacing(8)
-
-                lbl = QLabel(ip)
-                lbl.setStyleSheet(
-                    "font: 600 13px 'Consolas', 'Segoe UI'; color: #111;"
-                    " background: transparent;"
-                )
-                row_h.addWidget(lbl)
-                row_h.addStretch()
-
-                btn_use = QPushButton('→ Use')
-                btn_use.setFixedHeight(30)
-                btn_use.setFixedWidth(84)
-                btn_use.setStyleSheet(primary_button_qss(radius=7, font_px=12))
-
-                def _on_use(_=False, _ip=ip, _b=btn_use):
-                    _atem_use_ip(_ip)
-                    _b.setText('✓ Set')
-                    _b.setEnabled(False)
-
-                btn_use.clicked.connect(_on_use)
-                row_h.addWidget(btn_use)
-
-                atem_disc_layout.addWidget(row_w)
-
-            atem_disc_scroll.setFixedHeight(min(len(found), 4) * 42)
-
-        btn_atem_discover.setEnabled(True)
-        btn_atem_discover.setText('Discover switchers')
-
-    class _AtemDiscSignal(QObject):
-        finished = pyqtSignal(object)
-
-    dialog._atem_disc_sig = _AtemDiscSignal()
-
-    def _on_atem_disc_finished(found):
-        if not dialog.isVisible():
-            return
-        _atem_show_results(found)
-
-    dialog._atem_disc_sig.finished.connect(_on_atem_disc_finished)
-
-    def _run_atem_disc():
-        from application.camera_discovery import discover_atem_switchers
-        import logging as _logging
-        try:
-            found = discover_atem_switchers()
-        except Exception as exc:  # noqa: BLE001
-            _logging.getLogger(__name__).error("ATEM discovery failed: %s", exc)
-            found = []
-        dialog._atem_disc_sig.finished.emit(found)
-
-    def _on_atem_discover_clicked():
-        _atem_clear_results()
-        atem_disc_scroll.setFixedHeight(0)
-        atem_disc_status.setText('Scanning network for ATEM switchers…')
-        btn_atem_discover.setEnabled(False)
-        btn_atem_discover.setText('Scanning…')
-        threading.Thread(target=_run_atem_disc, daemon=True).start()
-
-    btn_atem_discover.clicked.connect(_on_atem_discover_clicked)
-    # Assigning an IP is locked during a live session, same as the IP edit.
-    dialog._lock_if_live(btn_atem_discover, is_on,
-                       'Stop the session before changing the ATEM IP')
 
     # Separator before the connection-status section
     _atem_sep_disc = QFrame()
@@ -316,60 +181,12 @@ def build_atem_tab(dialog, atem_layout, mw, is_on, sim_active, panel_layout):
 
     dialog.destroyed.connect(_on_dialog_destroyed)
 
-    # ── Botón Scan ATEM ────────────────────────────────────────────────────
-    # Quick reachability probe of the *configured* ATEM IP (TCP 9910, same
-    # convention as the Test tab), run off the GUI thread. If reachable it
-    # kicks a monitor restart so the link is confirmed; otherwise it reports
-    # the failure. Disabled when no ATEM IP is configured — nothing to scan.
-    from config import is_valid_ip as _is_valid_ip_atem
+    # No TCP probe: only the real monitor can confirm an ATEM connection.
     btn_scan_atem = dialog._btn('Scan', variant='ghost', icon='search')
-
-    class _AtemScanSignal(QObject):
-        done = pyqtSignal(bool)
-
-    dialog._atem_scan_sig = _AtemScanSignal()
-
-    def _apply_atem_scan(ok: bool):
-        btn_scan_atem.setEnabled(True)
-        btn_scan_atem.setText('Scan')
-        if ok:
-            last_error_lbl.setVisible(False)
-            mw._do_restart_atem_monitor()
-            _set_atem_status(_ATEMState.CONNECTING)
-        else:
-            _set_atem_status(_ATEMState.DISCONNECTED)
-            import config as _cfg_scan
-            last_error_lbl.setText(
-                f'Last error: No response from {_cfg_scan.ATEM.ip}:9910'
-            )
-            last_error_lbl.setVisible(True)
-
-    dialog._atem_scan_sig.done.connect(_apply_atem_scan)
-
-    def _scan_atem_worker():
-        import config as _cfg_scan
-        if sim_active:
-            ok = True
-        else:
-            try:
-                with socket.create_connection((_cfg_scan.ATEM.ip, 9910), timeout=3):
-                    ok = True
-            except OSError as exc:
-                import logging as _log
-                _log.getLogger(__name__).warning("ATEM scan failed: %s", exc)
-                ok = False
-        dialog._atem_scan_sig.done.emit(ok)
-
-    def _on_scan_atem():
-        btn_scan_atem.setEnabled(False)
-        btn_scan_atem.setText('Scanning…')
-        _set_atem_status(_ATEMState.CONNECTING)
-        threading.Thread(target=_scan_atem_worker, daemon=True).start()
-
-    btn_scan_atem.clicked.connect(_on_scan_atem)
-    if not _is_valid_ip_atem(ATEM.ip):
-        btn_scan_atem.setEnabled(False)
-        btn_scan_atem.setToolTip('Configure the ATEM IP first')
+    btn_scan_atem.setEnabled(False)
+    btn_scan_atem.setToolTip(
+        'TCP scan unavailable for ATEM (UDP); use Reconnect ATEM and monitor status'
+    )
 
     _atem_btn_row = QHBoxLayout()
     _atem_btn_row.addStretch()

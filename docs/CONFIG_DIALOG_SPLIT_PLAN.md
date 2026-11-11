@@ -49,8 +49,10 @@ Already-standalone section builders that move first as warm-up:
   prove the pattern.
 - **Phase 2 — Access + Data**: mostly buttons delegating to services.
 - **Phase 3 — Session**.
-- **Phase 4 — ATEM** (1209–1673): switcher + discovery + automation; writes
-  already go through the service.
+- **Phase 4 — ATEM** (1209–1673): manual switcher IP + status/reconnect +
+  automation; writes already go through the service. Discovery and Scan
+  buttons are visible but disabled because no verified ATEM discovery probe
+  is available.
 - **Phase 5 — Cameras** (574–1208): largest, most careful, done last.
 - **Phase 6 — Shrink the container**: `_build_ui` ends up assembling tabs only.
 
