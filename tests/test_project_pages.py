@@ -161,3 +161,12 @@ def test_install_commands_have_explicit_stages_and_stop_rules():
     assert 'Do not continue if checkout fails' in install
     assert 'not the service account' in install
     assert 'If it fails, stop' in install
+
+def test_first_screen_explains_product_audience_and_validation_state():
+    page = (ROOT / 'docs/index.html').read_text()
+    hero = page.split('<section class="hero wrap">', 1)[1].split('</section>', 1)[0]
+    assert 'Touchscreen camera control.<br><em>For Raspberry Pi.</em>' in hero
+    assert 'For room operators:' in hero
+    assert 'VISCA-over-IP cameras' in hero
+    assert hero.index('Target hardware validation is still pending') < hero.index('href="#install"')
+    assert 'summary-band' not in page

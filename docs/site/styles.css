@@ -8,3 +8,5 @@
 .walkthrough>p.muted{color:var(--body)}
 
 .terminal h3{color:#fff;font-size:18px;margin:26px 0 12px}.terminal .terminal-title+h3{margin-top:18px}
+
+.hero-actions .hero-status{font-size:14px;line-height:1.5;max-width:340px;margin:0 0 16px;color:var(--body)}
