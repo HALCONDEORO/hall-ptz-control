@@ -1,0 +1,62 @@
+# Project website
+
+`docs/index.html` is the English project website. It is a static page with no
+JavaScript, third-party fonts, analytics, cookies or build dependencies. CSS and
+the reviewed demonstration screenshot are in `docs/site/`.
+
+## Preview locally
+
+From the repository root:
+
+```bash
+python3 -m http.server 8000 --directory docs
+```
+
+Open `http://localhost:8000/`. This server is for local preview, not production.
+Check desktop and mobile widths, keyboard navigation, installation commands,
+links and the current product limitations before publishing.
+
+```bash
+python3 -m pytest tests/test_project_pages.py tests/test_markdown_links.py
+```
+
+The screenshot was generated from the real `MainWindow` in local simulation at
+commit `d6b3eff2139b5e3ff15a0e1067be523dafb4c440` on 11 November 2026. It uses the
+current repository background (`ui/khptz_background.jpg`) and is 1920 × 1080.
+The view contains numbered seats, no assigned names or device addresses. Its
+connection state is simulated; it is not proof of working physical hardware.
+Re-review replacements before committing them.
+
+## Publish on GitHub Pages
+
+The website is ready for GitHub Pages using **Deploy from a branch**, branch
+`main`, folder **/docs**. `docs/.nojekyll` keeps it a plain static site. No workflow
+or repository permission change is needed in this patch.
+
+A repository administrator must approve and enable that setting separately after
+the reviewed PR is merged and CI passes. Do not enable Pages, change visibility,
+relax branch protection or grant new permissions as part of a documentation edit.
+Record the actual URL returned by GitHub after activation; do not report an assumed
+URL as a live website.
+
+The public page links technical guides to their repository versions so it does
+not need to duplicate the installation documentation. Update the page's review
+date and source claims when installation targets or ATEM gates change.
+
+## Optional UI walkthrough
+
+`docs/site/ui-walkthrough.mp4` contains four captured `MainWindow` states from
+commit `306c17e6decb3940343e21f98eac07ce79ee4461`, captured on 10 November 2026:
+Platform selected, Comments selected, simulated disconnect, simulated recovery.
+It has no audio and is labelled as simulation on every frame. Temporary app,
+configuration and data directories were used, with loopback simulation targets;
+camera workers and background timers were stopped before capturing the states.
+The UI states were injected for illustration, not observed physical outcomes.
+No camera movement or preset writes were requested.
+
+The website uses native manual video controls, `preload="none"`, no autoplay,
+no looping and a local poster. The four-scene text transcript stays visible.
+The original UI pixels are preserved below a separate caption strip, scaled
+proportionally. Review every frame before replacing the video; omit names,
+device addresses, login/configuration details and private site data. The video
+does not validate CALL, SET, STOP delivery or physical recovery.

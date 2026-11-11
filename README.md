@@ -1,11 +1,15 @@
 # KH PTZ Control
 
-**English** | [Español](#español)
+[Project website](docs/index.html) · [Install](#install) · [Operator guide](docs/OPERATOR_GUIDE.md) · [Troubleshooting](#camera-troubleshooting)
 
-Touchscreen control of VISCA-over-IP PTZ cameras for Kingdom Halls, running on a
-Raspberry Pi. The operator taps a seat on a visual layout of the auditorium and the
-cameras frame that person, so friends commenting from the audience can be seen on the
-hall's displays and on the video stream during the meeting.
+The static project website is included in this repository; see
+[preview and GitHub Pages publication](docs/PAGES.md). A live URL will be added
+after an administrator enables Pages.
+
+Touchscreen control of VISCA-over-IP PTZ cameras on a Raspberry Pi. The operator
+taps a seat on a visual auditorium layout to recall its saved framing, with
+separate Platform and Comments camera roles and manual joystick, zoom, focus
+and exposure controls.
 
 Free and open-source (MIT). This is an installable application under active camera
 stability work. Automated tests and a successful install do not replace physical validation
@@ -15,7 +19,14 @@ licences; see [third-party notices](THIRD_PARTY_NOTICES.md) and the
 [ATEM dependency gate](docs/ATEM_DEPENDENCY_DECISION.md) before sharing an installed
 system or deploying ATEM support.
 
-![KH PTZ Control banner](docs/screenshots/banner.png)
+## Start here
+
+| Your task | Read first | What to check |
+| --- | --- | --- |
+| Install a Raspberry Pi | [Installation guide](docs/INSTALL_RPI.md) | Desktop and X11 ready, readiness PASS, wizard, physical rehearsal |
+| Operate the cameras | [Operator guide](docs/OPERATOR_GUIDE.md) | Selected camera and session, CALL vs SET, STOP and physical fallback |
+| Diagnose a problem | [Troubleshooting](#camera-troubleshooting) | Preserve logs and backups; stop the GUI before standalone diagnostics |
+| Understand the code | [Architecture](docs/ARCHITECTURE.md) | Presentation, use cases, domain, adapters and runtime boundaries |
 
 ## What it does
 
@@ -33,7 +44,7 @@ system or deploying ATEM support.
 - **Simulation mode.** Fake/demo components support operator UI rehearsal without
   camera hardware; they do not validate a full Raspberry Pi installation.
 
-![Operator panel](docs/screenshots/03-panel.png)
+![Current operator screen in local simulation, with the repository background and no personal names or device addresses](docs/site/operator.webp)
 
 ## Safety: STOP is always first
 
@@ -45,16 +56,21 @@ wins:
 - STOP commands travel in a **priority queue** that bypasses every pending movement.
 - If the command queue is full, **new movement commands are dropped — never a STOP**.
 - Closing the app or ending a session requests a stop for configured cameras;
-  confirm the physical result and use the hall's fallback if the network fails.
+  confirm the physical result and use the venue's fallback if the network fails.
 
-## Screenshots
+## Operator screen
 
-| | |
-|---|---|
-| ![Operator login](docs/screenshots/02-login.png) | ![Configuration](docs/screenshots/05-config.png) |
-| ![First-run setup wizard](docs/screenshots/06-wizard.png) | ![Cameras, VISCA and network discovery](docs/screenshots/08-cameras-atem.png) |
-| ![Camera moving: pan/tilt speeds live](docs/screenshots/09-moving.png) | ![STOP: both axes halted, speeds at zero](docs/screenshots/10-stop.png) |
-| ![Splash screen](docs/screenshots/01-splash.png) | |
+The screenshot was generated from the current application in an isolated local
+simulation on 11 November 2026, using the repository background. It contains no
+personal names or device addresses. Connection indicators are simulated, not a
+hardware-validation result.
+
+## What this project does not do
+
+- Guarantee compatibility with every VISCA-over-IP camera or switcher model.
+- Prove physical movement, saving or stopping from a green indicator or CI result.
+- Store the camera's physical preset memory inside a seating-layout backup.
+- Replace equipment rehearsal, a physical fallback or ATEM licence review.
 
 ## Requirements
 
@@ -99,7 +115,7 @@ Run this from the Pi desktop as your normal user. `--wizard-user` names that
 existing desktop user, not the service account created by the installer.
 Run the second command only if readiness passes. For a supervised first installation, use the reviewed, CI-green commit approved
 from `main` and record its full SHA; use the signed-off release tag when available.
-See [the short hall checklist](docs/INSTALL_TODAY_ES.md). CI passing is not a physical Pi validation result.
+See [the short installation checklist](docs/INSTALL_TODAY_ES.md). CI passing is not a physical Pi validation result.
 Exit 20 means configuration is still required; exit 30 means stop and inspect
 the failure. Keep the installer output and never paste passwords into reports.
 
@@ -110,8 +126,8 @@ and login settings. Follow the current wizard prompts; do not use a default pass
 
 The full guide — prerequisites, validation, backup/restore, rollback and
 troubleshooting — is [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).
-New to the project? Start with [docs/FOR_KINGDOM_HALLS.md](docs/FOR_KINGDOM_HALLS.md):
-equipment targets, a checked installation path and a handover checklist.
+New to the project? Follow the [installation checklist](docs/INSTALL_TODAY_ES.md)
+for equipment checks, installation and handover.
 
 ### Try it without cameras (simulation mode)
 
@@ -122,10 +138,9 @@ python3 adapters/sim_mode.py on
 This legacy helper writes loopback camera addresses into local configuration files
 and keeps a backup so `python3 adapters/sim_mode.py off` can restore them. It does
 not start the simulator or prove that ATEM and other integrations are isolated.
-Use a disposable development checkout, not a live hall configuration. Follow the
-[simulation limits and handover checks](docs/FOR_KINGDOM_HALLS.md#training-without-live-equipment).
-
-![Simulation mode: both simulated cameras connected](docs/screenshots/07-simulator.png)
+Use a disposable development checkout, never a live installation. Simulation
+does not prove physical motion, STOP delivery or camera compatibility. Rehearse
+on the actual equipment before live use.
 
 ## Camera operation and presets
 
@@ -152,6 +167,21 @@ personal preset slots; `room_layout.json` stores the seating layout. A backup of
 these files does not copy the physical camera's preset memory. If a map is missing
 or corrupt, preserve the data directory and backups before saving new positions:
 reusing a slot can overwrite a person's previous framing.
+
+## Optional ATEM integration
+
+ATEM is optional. Operational buttons, panels and status stay hidden until the
+configured switcher is connected and a valid program read has been verified.
+Administrator Settings retains IP configuration and diagnostics so an unavailable
+switcher can be configured. Missing ATEM support must leave PTZ control available.
+
+Manual switching and automation have their own role and safety rules. Keep
+automatic switching disabled until its safety review passes. PyATEMMax 1.0b9 is a
+pinned prerelease technical baseline with GPL licence terms, not distribution
+approval or a hardware compatibility guarantee. Review the
+[dependency decision and release gates](docs/ATEM_DEPENDENCY_DECISION.md),
+[third-party notices](THIRD_PARTY_NOTICES.md) and
+[ATEM installation guide](docs/ATEM_INSTALLATION.md) before deployment.
 
 ## Update and rollback
 
@@ -259,9 +289,10 @@ Do not move these into the source checkout. See the
 
 ## Status
 
-Working application, installable MVP candidate. Validate it on your own hardware
-before relying on it in a live meeting: run `khptz doctor`, rehearse a session in
-simulation mode, and record results in `docs/MVP_VALIDATION_REPORT.md`. See
+Installable MVP candidate under active stability work. Stop the GUI before
+standalone camera diagnostics; do not run a second controller against live cameras.
+Rehearse safely, validate the physical equipment, and record results in
+`docs/MVP_VALIDATION_REPORT.md`. Simulation is not physical validation. See
 [docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
 ## Contributing
@@ -275,139 +306,50 @@ boundaries green (`pytest tests/architecture`).
 Original code: MIT, see [LICENSE](LICENSE). Installed dependencies keep their own
 terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
----
 
-<a id="español"></a>
+## Project website
 
-# KH PTZ Control (ES)
+The responsive English website lives at [`docs/index.html`](docs/index.html),
+with static assets in `docs/site/`. It covers installation, operation, ATEM,
+architecture and troubleshooting without external scripts or analytics.
+See [the Pages guide](docs/PAGES.md) for local preview and the separate
+administrator approval needed to publish it. This documentation change does not
+activate GitHub Pages or change repository permissions.
 
-Control por pantalla táctil de cámaras PTZ VISCA-over-IP para Salones del Reino, sobre
-una Raspberry Pi. El operador toca un asiento en un plano visual del auditorio y las
-cámaras encuadran a esa persona, para que los hermanos que comentan desde el público se
-vean en las pantallas del salón y en la transmisión durante la reunión.
 
-Libre y de código abierto (MIT). Aplicación instalable en fase activa de trabajo sobre
-la estabilidad de las cámaras. Las pruebas automáticas no sustituyen la validación
-física de ambas cámaras, los encuadres, STOP y la recuperación en tu equipo. Cualquier salón puede
-usar el código original bajo MIT. Las dependencias de interfaz y las opcionales
-tienen licencias propias; consulta [los avisos](THIRD_PARTY_NOTICES.md) y el [gate de ATEM](docs/ATEM_DEPENDENCY_DECISION.md) antes de distribuir o
-desplegar ese componente.
+## Resumen en español
 
-## Qué hace
+Control táctil de cámaras PTZ VISCA-over-IP en Raspberry Pi. El plano numerado
+permite recuperar encuadres guardados. La captura anterior es una simulación local
+con el fondo actual del proyecto, no una prueba de cámaras físicas.
 
-- **Plano visual de asientos.** Toca un asiento numerado (o una posición de plataforma:
-  presidente, atril, lector) y la cámara seleccionada va al preset guardado.
-- **Dos cámaras.** Una de "Plataforma" y otra de "Comentarios", seleccionables en
-  pantalla.
-- **Presets por asiento.** Modo Call para operar en directo; modo Set para guardar o
-  actualizar el encuadre de cualquier asiento en segundos.
-- **Sesiones.** El horario y los controles explícitos separan la operación normal de
-  la configuración y el cierre. Comprueba el estado de sesión antes de operar.
-- **Acceso de operador.** Una contraseña en pantalla protege los controles; un rol de
-  administrador desbloquea la configuración.
-- **Integración ATEM (opcional).** El estado de las cámaras puede seguir al mezclador.
-- **Modo simulación.** Un simulador de cámaras integrado permite ensayar la interfaz de
-  operador sin hardware de cámaras; no sustituye la validación física de la Pi.
+### Seguridad: STOP primero
 
-## Seguridad: STOP siempre primero
+- Ensaya CALL, SET, STOP y recuperación en ambas cámaras fuera de una reunión.
+- STOP tiene prioridad en la cola, pero la parada física depende de la cámara y
+  de la red. Conoce la alternativa física si se pierde la conexión.
+- SET puede sobrescribir posiciones de la memoria de la cámara. No repitas un
+  guardado fallido ni borres datos como intento de reparación.
+- No abras un segundo controlador o diagnóstico de red junto a la GUI en uso.
+  Revisa y elimina nombres, direcciones y credenciales antes de compartir logs.
 
-Las cámaras se mueven; la seguridad no es negociable. El camino de control está hecho
-para que STOP siempre gane:
+### Requisitos e instalación
 
-- Un comando STOP **encola la parada de pan/tilt y la de zoom juntas, con prioridad**;
-  la parada física depende después de la cámara y de la red.
-- Los STOP viajan en una **cola prioritaria** que adelanta cualquier movimiento
-  pendiente.
-- Si la cola está llena, **se descartan los nuevos comandos de movimiento — nunca un
-  STOP**.
-- Al cerrar la aplicación o terminar una sesión se solicita la parada de las
-  cámaras configuradas. Confirma el resultado físico y usa la alternativa del
-  salón si falla la red.
+Objetivo de instalación: Pi 4 o 5, Raspberry Pi OS Bookworm de 64 bits con
+Escritorio, Python 3.11 del sistema, PyQt5 de `apt`, pantalla táctil y cámaras
+compatibles en una red accesible. Usa una sesión **X11**, no Wayland. Pi 4 con
+Bullseye/Python 3.9.2 es la base heredada; Trixie no está validado.
 
-## Requisitos
+1. Elige una versión o commit revisado y aprobado, y guarda una copia de seguridad
+   antes de modificar una instalación existente.
+2. Desde el escritorio, con tu usuario normal, clona el repositorio y ejecuta
+   `bash install_khptz_rpi.sh --guide`.
+3. Ejecuta la comprobación de preparación con el usuario de escritorio correcto.
+   Instala solo si pasa; si aparece un fallo, para y sigue la instrucción indicada.
+4. Sigue la salida del instalador y el asistente inicial. Valida cámaras, encuadres
+   y STOP físicamente antes de usar el sistema en directo. No uses una contraseña
+   predeterminada. En Bookworm no añadas `--atem` ni `--dev` al instalador.
 
-- Hardware Raspberry Pi con Raspberry Pi OS. Dos objetivos de software, ambos con
-  validación física pendiente:
-  - **Pi 4 o 5 / Bookworm (Debian 12) 64 bits con Escritorio y Python 3.11** - el objetivo de
-    instalación, ensayado en contenedor. Bookworm arranca en Wayland por defecto y
-    la GUI necesita X11: cambia la sesión con `sudo raspi-config` -> Advanced
-    Options -> Wayland -> X11 y reinicia antes de instalar. No uses `--atem` ni
-    `--dev` en Bookworm (PEP 668 bloquea `pip3`).
-  - **Pi 4 / Bullseye (Debian 11) 64 bits con Python 3.9.2** - la base legacy,
-    aún soportada. Trixie sigue sin validar.
-
-  Ver [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md) y
-  [docs/RPI_RUNTIME_BASELINE.md](docs/RPI_RUNTIME_BASELINE.md).
-- Pantalla táctil (la interfaz está pensada para tacto) y red hacia las cámaras.
-- Una o dos cámaras PTZ VISCA-over-IP.
-- El Python del sistema del objetivo elegido (3.11 en Bookworm, 3.9.2 en Bullseye;
-  otras versiones no son objetivos soportados) con PyQt5 (instalado desde `apt` en
-  Raspberry Pi OS).
-
-## Instalación
-
-En un sistema Raspberry Pi OS Bookworm de 64 bits con escritorio y sesión X11
-recién instalado (Bullseye sigue siendo la base legacy; ver [Requisitos](#requisitos)):
-
-```bash
-git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
-cd khptz
-bash install_khptz_rpi.sh --guide
-```
-
-Follow the guide / Sigue la guia. Manual check and install / Comprobacion e instalacion manual:
-
-```bash
-sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
-sudo bash install_khptz_rpi.sh --wizard-user "$USER"
-```
-
-Ejecuta la orden en el escritorio de la Pi como tu usuario normal.
-`--wizard-user` es ese usuario de escritorio ya existente, no la cuenta
-de servicio que crea el instalador.
-Ejecuta la segunda orden solo si pasa la comprobación previa. Para la primera instalación supervisada, usa el commit revisado y aprobado de
-`main`, con CI verde, y anota su SHA completo. Cuando esté disponible usa la
-etiqueta aprobada. Consulta la [lista corta para el salón](docs/INSTALL_TODAY_ES.md).
-CI en verde no valida una Pi física. El código 20 indica configuración pendiente; el 30 exige parar
-y revisar el fallo. Conserva la salida sin incluir contraseñas en los informes.
-
-El instalador crea el usuario de servicio `khptz`, instala dependencias, configura el
-servicio systemd y el arranque automático, e indica el siguiente paso: reiniciar e iniciar sesión en el escritorio,
-o ejecutar allí `khptz setup`. El asistente recoge las IPs, el plano de asientos
-y las opciones de acceso. Sigue sus indicaciones; no uses una contraseña por defecto.
-
-La [lista de instalación en español](docs/INSTALL_RPI_ES.md) cubre preparación,
-asistente y entrega.
-
-La guía completa — requisitos, validación, copia de seguridad/restauración, rollback y
-resolución de problemas — está en [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).
-
-### Probar sin cámaras (modo simulación)
-
-```bash
-python3 adapters/sim_mode.py on
-```
-
-Esta herramienta heredada escribe direcciones de cámara loopback en archivos
-locales y guarda una copia para restaurarlas con `python3 adapters/sim_mode.py off`.
-No inicia el simulador ni demuestra que ATEM u otras integraciones estén aisladas.
-Úsala en un clon de desarrollo desechable, no sobre la configuración de una sala
-en uso. Consulta los [límites del ensayo](docs/FOR_KINGDOM_HALLS.md#training-without-live-equipment).
-
-Consulta también las secciones en inglés sobre [cámaras y presets](#camera-operation-and-presets),
-[actualización y rollback](#update-and-rollback), [diagnóstico](#camera-troubleshooting)
-y [mapa del repositorio](#repository-map).
-
-## Estado
-
-Aplicación funcional, candidata a MVP instalable. Valídala en tu propio hardware antes
-de depender de ella en una reunión en directo: ejecuta `khptz doctor`, ensaya una
-sesión en modo simulación y registra los resultados en
-`docs/MVP_VALIDATION_REPORT.md`.
-
-## Licencia
-
-Código original: MIT, ver [LICENSE](LICENSE). Las dependencias mantienen sus propias
-condiciones; consulta [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-Read-only installation guide / Guia de instalacion de solo lectura: [GUIDED_INSTALL](docs/GUIDED_INSTALL.md).
+Consulta la [guía de instalación en español](docs/INSTALL_RPI_ES.md) y la
+[lista breve de instalación y entrega](docs/INSTALL_TODAY_ES.md). Para ATEM,
+revisa también las licencias y los límites descritos en la sección en inglés.

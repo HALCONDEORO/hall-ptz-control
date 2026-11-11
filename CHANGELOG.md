@@ -12,6 +12,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Added
 
+- Add a static English project website with installation/operator/support
+  routes, a simulation screenshot and manual UI-state walkthrough. Refresh
+  README entry points. GitHub Pages activation remains a separate admin step.
+
 - A separate CI contract checks the pinned ATEM library on loopback,
   including its unsupported PiP API without guessing keyer writes.
 - Offline camera and panel self-test (`python -m runtime.cli selftest --json`)
