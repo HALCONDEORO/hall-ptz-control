@@ -209,7 +209,9 @@ class SplashScreen(QWidget):
         self.tests_passed    = 0
         self.tests_total     = 0
         self.test_results: dict = {}
-        self.boot_start_time = time.time()
+        # Monotonic: on hardware without RTC the wall clock can jump mid-boot
+        # when NTP first syncs, which would corrupt the recorded boot duration.
+        self.boot_start_time = time.monotonic()
         self.diagnostic_mode = False
         self._cam1_status    = 'connecting'
         self._cam2_status    = 'connecting'
@@ -988,7 +990,7 @@ class SplashScreen(QWidget):
                     self._process_test_result(test_name, result)
 
             # Estadísticas de boot
-            duration_ms = int((time.time() - self.boot_start_time) * 1000)
+            duration_ms = int((time.monotonic() - self.boot_start_time) * 1000)
             self.boot_stats.record_boot(duration_ms, self.tests_passed, self.tests_total)
 
             summary = self.boot_stats.get_summary()
