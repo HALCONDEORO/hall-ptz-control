@@ -19,6 +19,10 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- ATEM status and diagnostics use the live library link state instead of
+  reporting a stale completed handshake as connected. Preserve the client
+  for library-managed reconnection and restore inputs when the link returns.
+
 - Setup device checks show the next remediation step alongside each check
   when it is not already included in the detail text.
 

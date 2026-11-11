@@ -212,8 +212,10 @@ class ATEMWriteAdapter:
             )
 
     def get_status(self) -> SwitcherStatus:
-        with self._lock:
-            connected = self._connected and self._atem is not None
+        # Use the same live-link gate as commands. The local _connected flag
+        # only records a completed handshake; PyATEMMax can subsequently lose
+        # the link while retaining the client and its stale input cache.
+        connected = self._require_connection() is not None
         program = self.get_program_input() if connected else None
         preview = self.get_preview_input() if connected else None
         return SwitcherStatus(
