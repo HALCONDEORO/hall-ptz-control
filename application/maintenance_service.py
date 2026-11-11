@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.atomic_write import write_text_atomic
 from domain.supportability import MaintenanceResult
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ class MaintenanceService:
         notes: str = "",
         result: MaintenanceResult = MaintenanceResult.PASSED,
     ) -> MaintenanceRecord:
-        """Record a maintenance completion at the current UTC time."""
+        """Persist a maintenance completion; raise OSError if it cannot be saved."""
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         record = MaintenanceRecord(
             completed_at=now,
@@ -206,13 +207,13 @@ class MaintenanceService:
             result=result.value,
         )
         try:
-            self._data_dir.mkdir(parents=True, exist_ok=True)
-            self._state_file.write_text(
+            write_text_atomic(
+                self._state_file,
                 json.dumps(record.to_dict(), indent=2, sort_keys=True, ensure_ascii=False),
-                encoding="utf-8",
             )
         except OSError as exc:
             logger.exception("Could not write maintenance record: %s", exc)
+            raise
         return record
 
     # ── Private ───────────────────────────────────────────────────────────────
