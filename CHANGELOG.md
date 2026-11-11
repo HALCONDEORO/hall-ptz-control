@@ -10,6 +10,11 @@ This project uses a simple versioning approach while it is still in early produc
 
 ## Unreleased
 
+### Changed
+
+- Shorten preset long-press SET to one second for USER and ADMIN. Keep
+  confirmation, short-tap CALL and interrupted/drag gesture cancellation.
+
 ### Documentation
 
 - Add a short version/symptom/checks support-report checklist, keeping private

@@ -128,6 +128,13 @@ fail to reach hardware. Recheck the result and the actual equipment every time.
 
 ---
 
+## Preset touch timing
+
+A short tap recalls a preset (CALL). Hold for one second (1000 ms) to request
+SET, then review and confirm the save. USER and ADMIN use the same threshold;
+a hold alone does not approve overwriting a preset. Cancel an unwanted save
+with No. Verify touch behavior on the actual screen before live use.
+
 ## Which contract applies?
 
 STOP ALL has the ADMIN-only GUI route described above. The other service-level choices are

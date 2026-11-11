@@ -14,7 +14,7 @@ from __future__ import annotations
 # ── Pure-Python stub that mirrors PresetActionMixin logic ────────────────────
 # (No Qt import — avoids sip conflict when running alongside other test files)
 
-_LONG_PRESS_MS = 800   # must match PresetActionMixin.LONG_PRESS_MS
+_LONG_PRESS_MS = 1000   # must match PresetActionMixin.LONG_PRESS_MS
 
 
 class _PresetLogicStub:
@@ -49,8 +49,8 @@ class _PresetLogicStub:
 
 
 class TestPresetActionMixinConfig:
-    def test_long_press_ms_is_800(self):
-        assert _LONG_PRESS_MS == 800
+    def test_long_press_ms_is_1000(self):
+        assert _LONG_PRESS_MS == 1000
 
     def test_long_press_at_least_600(self):
         assert _LONG_PRESS_MS >= 600
