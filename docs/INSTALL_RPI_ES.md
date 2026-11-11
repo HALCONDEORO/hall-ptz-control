@@ -4,7 +4,7 @@ Esta guía resume el flujo en español. La referencia detallada es
 [INSTALL_RPI.md](INSTALL_RPI.md). No autoriza un despliegue: hacen falta permiso
 para el equipo concreto y una versión aprobada.
 
-## Versión de la entrega
+## 1. Elegir la versión aprobada
 
 Usa la etiqueta y el SHA exacto de la release vigente que confirme el responsable
 de la entrega. Comprueba que ambos coinciden antes de instalar. No uses un `main`
@@ -58,7 +58,7 @@ publicada no equivalen a PASS físico de Pi, pantalla o cámaras.
   procedimiento privilegiado revisado. No copies ni borres archivos de
   contraseña para forzar acceso.
 
-## Preparar y comprobar
+## 2. Preparar y comprobar
 
 En el escritorio, como usuario normal, desde un clon del commit exacto aprobado de `main` o su etiqueta aprobada:
 
@@ -72,7 +72,7 @@ sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
 `khptz` del servicio. No continúes con fallos de requisitos. Conserva la salida
 sin contraseñas ni otros secretos.
 
-## Instalar y configurar
+## 3. Instalar solo tras PASS y configurar
 
 Solo tras pasar la comprobación y con permiso para esta instalación:
 
@@ -92,6 +92,17 @@ esté bloqueado por falta de `/etc/khptz/.provisioned`.
 ATEM es opcional. Su paquete publicado tiene licencia GPL; un pin no aprueba su
 distribución ni demuestra compatibilidad física. Revisa
 [ATEM_DEPENDENCY_DECISION.md](ATEM_DEPENDENCY_DECISION.md) antes de añadirlo.
+
+## 4. Completar el asistente y ensayar los controles
+
+Sigue la salida del instalador: reinicia e inicia sesión en el escritorio, o
+ejecuta `khptz setup` allí. No uses contraseñas por defecto.
+
+STOP ALL solo aparece en ADMIN. En USER no hay otro botón STOP dedicado; soltar
+el joystick pide parar la cámara que estaba moviendo, no todas ni un preset
+automático. Ensaya STOP ALL en ADMIN y deja el respaldo físico de la sala
+disponible sin contraseña. Un comando aceptado no demuestra parada física.
+Consulta [OPERATOR_GUIDE.md](OPERATOR_GUIDE.md) para límites y ensayo.
 
 ## Verificar después del asistente
 

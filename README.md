@@ -1,10 +1,10 @@
 # KH PTZ Control
 
-[Project website](docs/index.html) · [Install](#install) · [Operator guide](docs/OPERATOR_GUIDE.md) · [Troubleshooting](#camera-troubleshooting)
+[Project website](https://halcondeoro.github.io/kh-ptz-control/) · [Install](#install) · [Operator guide](docs/OPERATOR_GUIDE.md) · [Troubleshooting](#camera-troubleshooting)
 
-The static project website is included in this repository; see
-[preview and GitHub Pages publication](docs/PAGES.md). A live URL will be added
-after an administrator enables Pages.
+The live website follows the install, use and help path. Optional ATEM and
+architecture details are folded after help. See [local preview and publication
+notes](docs/PAGES.md).
 
 Touchscreen control of VISCA-over-IP PTZ cameras on a Raspberry Pi. The operator
 taps a seat on a visual auditorium layout to recall its saved framing, with
@@ -61,7 +61,8 @@ wins:
 ## Operator screen
 
 The screenshot was generated from the current application in an isolated local
-simulation on 11 November 2026, using the repository background. It contains no
+USER-mode simulation on 11 November 2026, using the repository background.
+STOP ALL is visible only in ADMIN; joystick-release stopping remains in USER. It contains no
 personal names or device addresses. Connection indicators are simulated, not a
 hardware-validation result.
 
@@ -98,30 +99,49 @@ hardware-validation result.
 On a fresh Raspberry Pi OS Bookworm 64-bit Desktop system with an X11 session
 (Bullseye remains the legacy baseline; see [Requirements](#requirements)):
 
+### 1. Choose the reviewed build
+
+Run from the Pi desktop as your normal user. Use the exact tag or full commit
+SHA approved for this installation. Latest `main` is not an approved release.
+
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
+read -r -p "Approved tag or full commit SHA: " APPROVED_REVISION &&
+git checkout --detach "$APPROVED_REVISION" &&
+git rev-parse HEAD &&
 bash install_khptz_rpi.sh --guide
 ```
 
-The guide explains the steps. For the manual readiness check and installation:
+Stop if checkout fails or the displayed SHA is not the approved build.
+Read the guide before proceeding.
+
+### 2. Check readiness
+
+Keep the same terminal open. `--wizard-user` names your existing desktop user,
+not the service account created by the installer.
 
 ```bash
 sudo bash install_khptz_rpi.sh --wizard-user "$USER" --check
+```
+
+If readiness fails, stop and follow its next step. CI passing is not physical
+Pi validation.
+
+### 3. Install only after PASS
+
+```bash
 sudo bash install_khptz_rpi.sh --wizard-user "$USER"
 ```
 
-Run this from the Pi desktop as your normal user. `--wizard-user` names that
-existing desktop user, not the service account created by the installer.
-Run the second command only if readiness passes. For a supervised first installation, use the reviewed, CI-green commit approved
-from `main` and record its full SHA; use the signed-off release tag when available.
-See [the short installation checklist](docs/INSTALL_TODAY_ES.md). CI passing is not a physical Pi validation result.
 Exit 20 means configuration is still required; exit 30 means stop and inspect
 the failure. Keep the installer output and never paste passwords into reports.
 
-The installer creates the `khptz` service user, installs dependencies, sets up the
-systemd service and the autostart session, and prints the next action: reboot and log into the desktop, or run
-`khptz setup` there. The first-run wizard collects room details, camera addresses and login settings. Follow the current wizard prompts; do not use a default password.
+### 4. Complete setup
+
+The installer creates the `khptz` service user, dependencies, systemd service
+and autostart session. Follow its output: reboot and log into the desktop, or run
+`khptz setup` there. The wizard collects room details, camera addresses and login settings. Follow the prompts; do not use a default password.
 
 The full guide — prerequisites, validation, backup/restore, rollback and
 troubleshooting — is [docs/INSTALL_RPI.md](docs/INSTALL_RPI.md).

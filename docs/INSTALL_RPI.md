@@ -177,19 +177,22 @@ runtime either. This excludes `--dev` (requires pip3) and the optional
 ATEM add-on (its `pip` install needs internet): a hall that uses either
 must install them during this preparation phase, not on site.
 
-## Get the approved build
+## 1. Choose the reviewed build
 
-For customer or pilot installs, use the approved release/tag named in the
-installation plan:
+Use the exact approved tag or full commit SHA named in the installation plan:
 
 ```bash
 git clone https://github.com/HALCONDEORO/kh-ptz-control.git khptz
 cd khptz
-git checkout <approved-tag-or-release-branch>
+read -r -p "Approved tag or full commit SHA: " APPROVED_REVISION &&
+git checkout --detach "$APPROVED_REVISION" &&
+git rev-parse HEAD &&
+bash install_khptz_rpi.sh --guide
 ```
 
-Do not install from an arbitrary `main` commit unless an emergency exception
-is explicitly recorded.
+Stop if checkout fails or the displayed SHA is not the approved build.
+Do not install from an arbitrary `main` commit. A candidate SHA for supervised
+QA is not a customer release or a physical-validation result.
 
 > **Keep this checkout on the device.** `install.sh` copies the code into
 > `/opt/khptz` with `--exclude='.git'`, so the install directory is a deployed
@@ -371,7 +374,7 @@ moving to service installation.
 
 ---
 
-## Check Pi readiness before installing
+## 2. Check readiness
 
 Run the installer in check mode to validate all prerequisites without writing
 any files:
@@ -384,7 +387,7 @@ This outputs a PASS/WARN/FAIL report. Resolve any FAIL items before proceeding.
 
 ---
 
-## Install the runtime service
+## 3. Install only after PASS
 
 Use the top-level wrapper from the existing normal desktop account, not a root
 login. `$USER` must name that desktop account, never the `khptz` service account.
@@ -401,7 +404,10 @@ Exit 30 means failure: retain the output and stop before a rerun. Reboot and log
 back into the desktop so new group membership takes effect. Complete the wizard
 before expecting the provision-gated GUI service to be active.
 
-After the wizard completes:
+### 4. Complete setup
+
+Follow the installer output and wizard, then reboot/log into the desktop when
+requested. Do not use a default password. After the wizard completes:
 
 ```bash
 khptz verify-install

@@ -3,6 +3,8 @@
 Esta página conserva el procedimiento de la primera prueba del 10 de noviembre
 de 2026. **No es la guía vigente ni autoriza instalar el SHA histórico de abajo.**
 Ese código es anterior a las correcciones posteriores de cámaras y STOP.
+En la versión actual STOP ALL solo aparece en ADMIN; no interpretar la matriz
+histórica de abajo como una descripción del modo USER vigente.
 Para instalar o actualizar, sigue [INSTALL_RPI_ES.md](INSTALL_RPI_ES.md) y usa
 solo la etiqueta y el SHA que el responsable de la entrega haya aprobado.
 
