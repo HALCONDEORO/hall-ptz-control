@@ -124,7 +124,7 @@ def run_preflight(
             # e.g. the process was started in a directory that has since been
             # removed, or an unreadable mount point.
             checks.append(PreflightCheck(
-                "disk_space", "Free disk space", True, True,
+                "disk_space", "Free disk space", False, True,
                 f"Could not be measured ({exc})",
                 "Check available space manually with: df -h",
             ))
@@ -138,7 +138,7 @@ def run_preflight(
             checks.extend(_rpi_advisory_checks())
         except Exception as exc:  # noqa: BLE001 — advisories are never blocking
             checks.append(PreflightCheck(
-                "rpi_advisories", "Raspberry Pi readiness", True, True,
+                "rpi_advisories", "Raspberry Pi readiness", False, True,
                 f"Advisory checks could not run ({exc})",
                 "Run 'khptz doctor' after setup for a full report",
             ))

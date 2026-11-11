@@ -19,6 +19,9 @@ This project uses a simple versioning approach while it is still in early produc
 
 ### Fixed
 
+- Show unavailable disk-space and Pi-readiness probes as non-blocking
+  warnings, not passed checks. Keep manual-check remediation visible.
+
 - Validate ZIP member CRCs before modern restore writes or safety-backup
   creation, in both real and dry-run paths, including old unhashed archives.
   This adds an archive read pass, not disk-failure rollback or complete
