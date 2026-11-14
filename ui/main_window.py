@@ -714,21 +714,6 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
         from ui.camera_led_wiring import wire_camera_worker
         wire_camera_worker(self, worker)
 
-    def _on_cam_connection_changed(self, ok: bool, ip: str) -> None:
-        """Refleja el estado de conexión del worker en el LED de la cámara.
-
-        Se cablea para CADA worker (incluidos los recreados tras un cambio de
-        IP), de modo que el indicador siga al worker actual y no se quede
-        pegado en el estado del worker de arranque.
-        """
-        try:
-            cam_key = self._cameras.cam_key(ip)
-        except ValueError:
-            return
-        ok = self._cameras.is_connected(ip)  # delivery-time transport snapshot
-        (self.Cam1 if cam_key == 1 else self.Cam2).set_connected(ok)
-        self._update_controls_visibility()
-
     def _on_visca_speed_error(self, ip: str, cmd_type: str) -> None:
         # Shell extraído a ui/visca_watchdog.py (ratchet anti god-object);
         # la decisión es de domain/adaptive_speed. Comportamiento idéntico.

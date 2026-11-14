@@ -31,6 +31,21 @@ from ui.display_freshness import capture_display_generation, display_update_is_c
 class CameraDisplayMixin:
     """Presentation-only bridge used by MainWindow, with no hardware I/O."""
 
+    def _on_cam_connection_changed(self, ok: bool, ip: str) -> None:
+        """Refleja el estado de conexión del worker en el LED de la cámara.
+
+        Se cablea para CADA worker (incluidos los recreados tras un cambio de
+        IP), de modo que el indicador siga al worker actual y no se quede
+        pegado en el estado del worker de arranque.
+        """
+        try:
+            cam_key = self._cameras.cam_key(ip)
+        except ValueError:
+            return
+        ok = self._cameras.is_connected(ip)  # delivery-time transport snapshot
+        (self.Cam1 if cam_key == 1 else self.Cam2).set_connected(ok)
+        self._update_controls_visibility()
+
     @pyqtSlot()
     def _apply_focus_update(self) -> None:
         """Recheck shutdown when queued confirmed focus feedback is delivered."""
