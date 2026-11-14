@@ -118,9 +118,12 @@ def patch_runtime_config(config_path: Path, *, overlay_path: Path | None = None,
                    and config_path.parent.resolve() != Path('/etc/khptz').resolve())
     if overlay_path is None and source_yaml and not path.exists():
         from config.writer import patch_config_yaml
-        return patch_config_yaml(config_path, cam_index=cam_index, cam_ip=cam_ip,
-                                 cam_visca_id=cam_visca_id, atem_ip=atem_ip,
-                                 atem_pip_nudge=atem_pip_nudge)
+        # Atomic replacement alone cannot protect a read-modify-write save:
+        # serialize source-YAML edits just like runtime-overlay edits.
+        with _overlay_transaction(config_path):
+            return patch_config_yaml(config_path, cam_index=cam_index, cam_ip=cam_ip,
+                                     cam_visca_id=cam_visca_id, atem_ip=atem_ip,
+                                     atem_pip_nudge=atem_pip_nudge)
     with _overlay_transaction(path):
         base = load_config(config_path)
         def _discard_corrupt_overlay(exc: Exception) -> dict:
