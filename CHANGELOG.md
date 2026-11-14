@@ -52,6 +52,37 @@ This project uses a simple versioning approach while it is still in early produc
 - Explain the project, room-operator audience and pending hardware validation
   on the first screen. Remove the repeated feature-summary band.
 
+## 1.2.3 - Release candidate
+
+Prepared on 2026-11-14 for operator testing. Target-Pi acceptance and a verified
+external pre-update backup remain pending. See `docs/releases/1.2.3.md`.
+
+### Added
+
+- The zoom percentage is marked unconfirmed (dimmed, `ZOOM ?` caption, tooltip)
+  from settle until a current camera read confirms it; a failed or silent read
+  keeps the mark. No polling was added (#325).
+
+### Changed
+
+- The newest pending preset per camera now supersedes earlier still-pending
+  preset requests; an in-flight recall always completes and STOP, session
+  boundaries and other events are unchanged (#324).
+
+### Fixed
+
+- Concurrent source-YAML camera configuration saves are serialized with the
+  existing per-path transaction lock, so simultaneous saves no longer lose one
+  camera's change (#323).
+
+### Known limits
+
+- Only pending (not-yet-started) presets are superseded; an in-flight recall is
+  never interrupted mechanically. The unconfirmed zoom mark is not a new camera
+  reading. Physical camera behavior remains unverified on the target Pi.
+- The published v1.2.1 and v1.2.2 tags and assets remain unchanged.
+
+
 ## 1.2.2 - Release candidate
 
 Prepared on 2026-11-14 for operator testing. Target-Pi acceptance and a verified
