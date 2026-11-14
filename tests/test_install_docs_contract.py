@@ -186,3 +186,14 @@ def test_dark_screen_troubleshooting_names_the_wayland_remedy():
     assert "acceptance validator all log" not in section
     assert "pantalla oscura" in es
     assert "raspi-config" in es and "loginctl" in es
+
+
+def test_update_guide_requires_explicit_off_device_backup():
+    text = (ROOT / "docs/UPDATE_ROLLBACK.md").read_text()
+    before = text[text.index("## Before any update"):text.index("## Rollback")]
+    assert "Run the backup explicitly BEFORE updating" in before
+    assert "nor `runtime/installer/install.sh` creates a pre-update backup" in before
+    assert "Copy the resulting" in before and "ZIP off the Pi" in before
+    assert "A data ZIP is not an SD-card image" in before
+    assert "it does not undo data-format changes" in before
+    assert "The installer and rollback scripts do this automatically" not in text

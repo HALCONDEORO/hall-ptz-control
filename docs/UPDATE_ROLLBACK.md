@@ -51,17 +51,31 @@ It lives in `/etc/khptz` (not `/opt/khptz`) so it survives every re-deploy.
    ```
 
 2. **Back up config and runtime data.**
-   The installer and rollback scripts do this automatically via `khptz backup`
-   (manifest-based ZIP — see `docs/BACKUP_RESTORE_CONTRACT.md`). For a manual
-   update:
+   Run the backup explicitly BEFORE updating. Neither `install_khptz_rpi.sh`
+   nor `runtime/installer/install.sh` creates a pre-update backup. Only the
+   rollback script creates its own pre-rollback snapshot; that later snapshot
+   does not replace a copy of the working installation taken before an update.
 
    ```bash
-   sudo -u khptz python3 -m runtime.cli backup
+   khptz backup
    ```
 
+   Check the reported result and included/skipped files. Copy the resulting
+   manifest-based ZIP off the Pi and verify the copy before installing. See
+   `docs/BACKUP_RESTORE_CONTRACT.md` for the current archive contract. Older
+   installed versions can have a different file set: verify that version's
+   backup rather than assuming it includes today's runtime overrides.
+
+   A data ZIP is not an SD-card image or a backup of credentials and installed
+   code. Preserve the known-good source revision and installation state too;
+   take a separate device image when full-device recovery is required. Keep
+   backups private, not in public issues.
+
    Config (`/etc/khptz`) and runtime data (`/var/lib/khptz`) live outside the
-   code directory, so re-deploying code in step 4 never touches them — the
-   backup here is a safety net, not a required restore step.
+   code directory. A code rollback leaves those current data files in place;
+   it does not undo data-format changes or establish that older code can read
+   them. Check compatibility before choosing a rollback target. Do not restore
+   an old layout or reset provisioning merely to undo a code update.
 
 3. **Stop the service.**
 
