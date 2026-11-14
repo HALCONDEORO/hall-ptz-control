@@ -80,6 +80,7 @@ class ViscaCameraAdapter:
         self._display_query_lock = threading.RLock()
         self._endpoint_generations: dict[int, int] = {1: 0, 2: 0}
         self._backlight_on: dict[str, bool] = {}
+        self._zoom_refresh_pending: dict[int, tuple[int, Callable[[int], None]]] = {}
         self._ae_refresh_pending: dict[int, tuple[int, Callable[[], None]]] = {}
         self._backlight_toggle_locks = {1: threading.Lock(), 2: threading.Lock()}
         # Speed caps: watchdog in main_window reduces these on VISCA error (#740).
@@ -475,8 +476,11 @@ class ViscaCameraAdapter:
                 update_slider(cached)
                 return
 
-        if not self._mgr.zoom_query_try_acquire(ip):
-            return  # query already in flight
+            if not self._mgr.zoom_query_try_acquire(ip):
+                # A preset/reconnection can retire the read already in flight.
+                # Keep only the latest requested readback, never a polling loop.
+                self._zoom_refresh_pending[camera_key] = (generation, update_slider)
+                return
 
         def _fetch() -> None:
             try:
@@ -497,7 +501,13 @@ class ViscaCameraAdapter:
                         self._mgr.set_zoom(ip, pct)
                         update_slider(pct)
             finally:
-                self._mgr.zoom_query_release(ip)
+                with self._display_query_lock:
+                    self._mgr.zoom_query_release(ip)
+                    pending = self._zoom_refresh_pending.pop(camera_key, None)
+                    retry = (pending is not None and pending[0] ==
+                             self._endpoint_generations.get(camera_key, 0))
+                if retry:
+                    self.refresh_zoom_display(camera_key, pending[1])
 
         threading.Thread(target=_fetch, daemon=True).start()
 

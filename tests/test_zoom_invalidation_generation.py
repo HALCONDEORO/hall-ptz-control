@@ -60,3 +60,39 @@ def test_fresh_post_preset_read_works(monkeypatch):
     pending.pop(0)()
     feedback.assert_called_once_with(25)
     assert manager.get_zoom('192.0.2.1') == 25
+
+
+def test_new_post_preset_read_is_not_lost_behind_old_inflight_query(monkeypatch):
+    adapter, manager, pending = rig(monkeypatch)
+    old, latest, superseded = Mock(), Mock(), Mock()
+    adapter._query_zoom = Mock(return_value=4096)
+    adapter.refresh_zoom_display(1, old)
+    adapter.invalidate_zoom(1)
+    adapter.refresh_zoom_display(1, superseded)
+    adapter.refresh_zoom_display(1, latest)
+    assert len(pending) == 1
+    pending.pop(0)()
+    old.assert_not_called()
+    assert len(pending) == 1, 'Fresh readback was dropped behind retired query'
+    pending.pop(0)()
+    adapter._query_zoom.assert_called_once()
+    superseded.assert_not_called()
+    latest.assert_called_once_with(25)
+    assert manager.get_zoom('192.0.2.1') == 25
+    assert not pending
+
+
+def test_session_cancellation_drops_coalesced_zoom_readback(monkeypatch):
+    adapter, manager, pending = rig(monkeypatch)
+    adapter._query_zoom = Mock(return_value=4096)
+    old, latest = Mock(), Mock()
+    adapter.refresh_zoom_display(1, old)
+    adapter.invalidate_zoom(1)
+    adapter.refresh_zoom_display(1, latest)
+    adapter.cancel_polls('cam1')
+    pending.pop(0)()
+    old.assert_not_called()
+    latest.assert_not_called()
+    adapter._query_zoom.assert_not_called()
+    assert not pending
+    assert manager.get_zoom('192.0.2.1') is None

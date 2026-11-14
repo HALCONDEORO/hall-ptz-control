@@ -139,6 +139,7 @@ class Controller:
     def _invalidate_zoom(self, cam: int) -> None:
         if hasattr(self._camera_port, "invalidate_zoom"):
             self._camera_port.invalidate_zoom(cam)
+            self._bus.emit(EventType.CAMERA_ZOOM_INVALIDATED, camera=cam)
 
     # ─────────────────────────────────────────────────────────────────────
     #  Handlers
@@ -222,7 +223,11 @@ class Controller:
         if self._no_session("camera_home", event.payload):
             return
         cam = event.payload["camera"]
-        self._camera_port.home(self._cam_id(cam))
+        result = self._camera_port.home(self._cam_id(cam))
+        # Home admission is not completion. Re-read observed zoom without
+        # assuming a target value or changing the queued motion semantics.
+        if self._result_ok(result) and self._commit_motion(event, lambda: None):
+            self._invalidate_zoom(cam)
 
     @_motion_handler
     def _on_chairman_assigned(self, event: Event) -> None:

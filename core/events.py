@@ -44,6 +44,7 @@ class EventType(Enum):
 
     # ── Conexión ─────────────────────────────────────────────
     CONNECTION_CHANGED   = auto()   # payload: camera, connected
+    CAMERA_ZOOM_INVALIDATED = auto()  # payload: camera; confirmed preset changed zoom
 
 
 @dataclass

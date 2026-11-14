@@ -520,3 +520,141 @@ def test_recall_blocked_set_flashes_admin_entry_when_gear_hidden(main_window, mo
     monkeypatch.setattr(panel._btn_gear, "isVisible", lambda: False)
     main_window._handle_recall_blocked("operator_no_set", 3)
     assert flashes == [panel._btn_enter_admin]
+
+
+@pytest.fixture
+def zoom_feedback_window(_qapp, sim_mode_active, monkeypatch):
+    # These display tests never open even a synthetic camera TCP socket.
+    from ui.main_window import MainWindow
+    monkeypatch.setattr('simulation.sim_worker.start_simulation', lambda *args: None)
+    monkeypatch.setattr('ui.camera_worker_startup.start_configured_camera_workers', lambda *args: None)
+    window = MainWindow()
+    try:
+        yield window
+    finally:
+        window.close()
+
+
+@pytest.mark.parametrize('selected', [True, False])
+def test_reconnection_retires_old_zoom_and_refreshes_selected_camera(zoom_feedback_window, _qapp, monkeypatch, selected):
+    from unittest.mock import Mock
+
+    window = zoom_feedback_window
+    window.Cam1.setChecked(True)
+    window.session_active = True
+    window._state.session.active = True
+    window._set_zoom_feedback(10)
+    port = window._camera_port
+    monkeypatch.setattr(port, 'zoom_absolute', Mock())
+    monkeypatch.setattr(window._cameras, 'cam_key', lambda ip: 1 if selected else 2)
+    monkeypatch.setattr(port, 'async_refresh_ae_mode', Mock())
+    invalidated = Mock()
+    monkeypatch.setattr(port, 'invalidate_zoom', invalidated)
+    def observed(key, callback):
+        invalidated.assert_called_with(key)
+        callback(77)
+    refresh = Mock(side_effect=observed)
+    monkeypatch.setattr(port, 'refresh_zoom_display', refresh)
+    window._on_cam_connected(True, '192.0.2.1')
+    _qapp.processEvents()
+    invalidated.assert_called_once_with(1 if selected else 2)
+    if selected:
+        refresh.assert_called_once()
+        assert window.ZoomValueLabel.text() == '77%'
+        assert window._right_panel._joystick._ring_pct == 77
+        port.zoom_absolute.assert_not_called()
+        assert not window._zoom_timer.isActive()
+    else:
+        refresh.assert_not_called()
+        assert window.ZoomValueLabel.text() == '10%'
+
+
+@pytest.mark.parametrize('confirmed', [True, False])
+def test_preset_completion_refreshes_zoom_without_camera_reselection(zoom_feedback_window, _qapp, monkeypatch, confirmed):
+    from unittest.mock import Mock
+    from core.events import EventType
+
+    window = zoom_feedback_window
+    window.Cam1.setChecked(True)
+    window.session_active = True
+    window._state.session.active = True
+    window._set_zoom_feedback(10)
+    port = window._camera_port
+    monkeypatch.setattr(port, 'zoom_absolute', Mock())
+    monkeypatch.setattr(port, 'recall_preset', Mock(return_value=confirmed))
+    monkeypatch.setattr(port, 'invalidate_zoom', Mock())
+    def observed(key, callback):
+        port.invalidate_zoom.assert_called_with(key)
+        callback(77)
+    refresh = Mock(side_effect=observed)
+    monkeypatch.setattr(port, 'refresh_zoom_display', refresh)
+    window._bus.emit(EventType.SEAT_SELECTED, camera=1, preset=1)
+    window._bus._queue.join()
+    _qapp.processEvents()
+    _qapp.processEvents()
+    if confirmed:
+        refresh.assert_called_once()
+        assert window.ZoomValueLabel.text() == '77%'
+        assert window._right_panel._joystick._ring_pct == 77
+        port.zoom_absolute.assert_not_called()
+        assert not window._zoom_timer.isActive()
+    else:
+        refresh.assert_not_called()
+        assert window.ZoomValueLabel.text() == '10%'
+
+
+@pytest.mark.parametrize('state', ['inactive', 'closing', 'other_camera'])
+def test_zoom_invalidated_event_cannot_refresh_wrong_context(zoom_feedback_window, monkeypatch, state):
+    from unittest.mock import Mock
+    from core.events import Event, EventType
+    window = zoom_feedback_window
+    window.Cam1.setChecked(True)
+    window.session_active = state != 'inactive'
+    window._shutting_down = state == 'closing'
+    refresh = Mock()
+    monkeypatch.setattr(window, '_refresh_zoom', refresh)
+    window._on_zoom_invalidated(Event(EventType.CAMERA_ZOOM_INVALIDATED,
+        {'camera': 2 if state == 'other_camera' else 1}))
+    refresh.assert_not_called()
+
+
+@pytest.mark.parametrize('admitted,active', [(True, True), (False, True), (True, False)])
+def test_comments_home_button_observes_zoom_without_claiming_home_completion(zoom_feedback_window, _qapp, monkeypatch, admitted, active):
+    from unittest.mock import Mock
+
+    window = zoom_feedback_window
+    window.Cam2.setChecked(True)
+    window.session_active = active
+    window._state.session.active = active
+    window._set_zoom_feedback(10)
+    port = window._camera_port
+    monkeypatch.setattr(port, 'home', Mock(return_value=admitted))
+    monkeypatch.setattr(port, 'invalidate_zoom', Mock())
+    monkeypatch.setattr(port, 'zoom_absolute', Mock())
+    refresh = Mock(side_effect=lambda key, callback: callback(77))
+    monkeypatch.setattr(port, 'refresh_zoom_display', refresh)
+    # Match the live active-session control state before clicking the real button.
+    from domain.call_set_policy import OperatingMode
+    window._access_mode_svc.set_mode(OperatingMode.USER)
+    window.Cam2.set_connected(True)
+    window._update_controls_visibility()
+    window._right_panel._home_btn.setEnabled(True)
+    window._right_panel._home_btn.click()
+    window._bus._queue.join()
+    _qapp.processEvents()
+    _qapp.processEvents()
+    if active:
+        port.home.assert_called_once_with('cam2')
+    else:
+        port.home.assert_not_called()
+    if admitted and active:
+        port.invalidate_zoom.assert_called_once_with(2)
+        refresh.assert_called_once()
+        assert window.ZoomValueLabel.text() == '77%'
+        assert window._right_panel._joystick._ring_pct == 77
+    else:
+        port.invalidate_zoom.assert_not_called()
+        refresh.assert_not_called()
+        assert window.ZoomValueLabel.text() == '10%'
+    port.zoom_absolute.assert_not_called()
+    assert not window._zoom_timer.isActive()
