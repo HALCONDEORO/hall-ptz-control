@@ -67,7 +67,7 @@ class CameraDisplayMixin:
         self._set_zoom_feedback(pct)
 
     def _on_zoom_invalidated(self, event) -> None:
-        """A confirmed preset changed zoom; observe it without another command."""
+        """An explicit camera action retired zoom; read without a zoom command."""
         if (getattr(self, "_shutting_down", False)
                 or not getattr(self, "session_active", False)
                 or event.payload.get("camera") != self._selected_cam_key()):

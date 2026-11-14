@@ -616,3 +616,45 @@ def test_zoom_invalidated_event_cannot_refresh_wrong_context(zoom_feedback_windo
     window._on_zoom_invalidated(Event(EventType.CAMERA_ZOOM_INVALIDATED,
         {'camera': 2 if state == 'other_camera' else 1}))
     refresh.assert_not_called()
+
+
+@pytest.mark.parametrize('admitted,active', [(True, True), (False, True), (True, False)])
+def test_comments_home_button_observes_zoom_without_claiming_home_completion(zoom_feedback_window, _qapp, monkeypatch, admitted, active):
+    from unittest.mock import Mock
+
+    window = zoom_feedback_window
+    window.Cam2.setChecked(True)
+    window.session_active = active
+    window._state.session.active = active
+    window._set_zoom_feedback(10)
+    port = window._camera_port
+    monkeypatch.setattr(port, 'home', Mock(return_value=admitted))
+    monkeypatch.setattr(port, 'invalidate_zoom', Mock())
+    monkeypatch.setattr(port, 'zoom_absolute', Mock())
+    refresh = Mock(side_effect=lambda key, callback: callback(77))
+    monkeypatch.setattr(port, 'refresh_zoom_display', refresh)
+    # Match the live active-session control state before clicking the real button.
+    from domain.call_set_policy import OperatingMode
+    window._access_mode_svc.set_mode(OperatingMode.USER)
+    window.Cam2.set_connected(True)
+    window._update_controls_visibility()
+    window._right_panel._home_btn.setEnabled(True)
+    window._right_panel._home_btn.click()
+    window._bus._queue.join()
+    _qapp.processEvents()
+    _qapp.processEvents()
+    if active:
+        port.home.assert_called_once_with('cam2')
+    else:
+        port.home.assert_not_called()
+    if admitted and active:
+        port.invalidate_zoom.assert_called_once_with(2)
+        refresh.assert_called_once()
+        assert window.ZoomValueLabel.text() == '77%'
+        assert window._right_panel._joystick._ring_pct == 77
+    else:
+        port.invalidate_zoom.assert_not_called()
+        refresh.assert_not_called()
+        assert window.ZoomValueLabel.text() == '10%'
+    port.zoom_absolute.assert_not_called()
+    assert not window._zoom_timer.isActive()
