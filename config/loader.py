@@ -317,7 +317,7 @@ def _load_pip_nudge(raw: Any) -> PiPNudgeSettings:
 
     try:
         pan_speed = int(raw.get("pan_speed", 0))
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ConfigError(
             f"atem.pip_nudge.pan_speed: debe ser un entero, se obtuvo {raw.get('pan_speed')!r}",
             field_path="atem.pip_nudge.pan_speed",
@@ -332,7 +332,7 @@ def _load_pip_nudge(raw: Any) -> PiPNudgeSettings:
 
     try:
         duration_ms = int(raw.get("duration_ms", 0))
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ConfigError(
             f"atem.pip_nudge.duration_ms: debe ser un entero, se obtuvo {raw.get('duration_ms')!r}",
             field_path="atem.pip_nudge.duration_ms",
