@@ -86,6 +86,9 @@ class CameraDisplayMixin:
         ):
             return
         self._set_zoom_feedback(pct)
+        confirm = getattr(getattr(self, "_right_panel", None), "_set_zoom_confirmation", None)
+        if callable(confirm):
+            confirm(True)
 
     def _on_zoom_invalidated(self, event) -> None:
         """An explicit camera action retired zoom; read without a zoom command."""

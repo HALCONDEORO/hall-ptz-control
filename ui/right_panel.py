@@ -330,6 +330,7 @@ class RightPanel:
             "font: 600 12px 'IBM Plex Mono', 'Consolas'; color: #666666;")
 
         zoom_lbl = QLabel('ZOOM', right_col)
+        self._zoom_status_label = zoom_lbl
         zoom_lbl.setAlignment(Qt.AlignCenter)
         zoom_lbl.setStyleSheet(
             "font: 700 8px 'Inter Tight', 'Segoe UI'; color: #AAAAAA; letter-spacing: 1px;")
@@ -390,6 +391,7 @@ class RightPanel:
             # The target shown during a drag is intent, not a camera readback.
             # Even a failed/timed-out command may have moved the lens partially.
             mw._camera_port.invalidate_zoom(1 if camera_id == "cam1" else 2)
+            self._set_zoom_confirmation(False)
             mw._refresh_zoom()
 
         self._zoom_dispatcher.settled.connect(_refresh_observed_zoom)
@@ -428,6 +430,19 @@ class RightPanel:
             attach_sim_debug_panel(bl, mw)
 
         layout.addWidget(block)
+
+    def _set_zoom_confirmation(self, confirmed: bool) -> None:
+        """An intent percentage is not a camera observation after settle."""
+        label = self._mw.ZoomValueLabel
+        color = "#666666" if confirmed else "#AAAAAA"
+        label.setStyleSheet(
+            f"font: 600 12px 'IBM Plex Mono', 'Consolas'; color: {color};")
+        text = "" if confirmed else (
+            "Zoom unconfirmed. Last displayed value, not a camera reading.")
+        label.setToolTip(text)
+        self._zoom_status_label.setText("ZOOM" if confirmed else "ZOOM ?")
+        self._zoom_status_label.setToolTip(text)
+        self._joystick_slot.setToolTip(text)
 
     def _add_separator(self, layout: QVBoxLayout):
         layout.addSpacing(14)
