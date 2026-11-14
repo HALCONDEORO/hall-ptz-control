@@ -139,6 +139,7 @@ class Controller:
     def _invalidate_zoom(self, cam: int) -> None:
         if hasattr(self._camera_port, "invalidate_zoom"):
             self._camera_port.invalidate_zoom(cam)
+            self._bus.emit(EventType.CAMERA_ZOOM_INVALIDATED, camera=cam)
 
     # ─────────────────────────────────────────────────────────────────────
     #  Handlers

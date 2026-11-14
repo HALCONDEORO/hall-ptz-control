@@ -196,6 +196,7 @@ class MainWindow(QMainWindow, CameraDisplayMixin, AtemOperationalMixin):
 
         self._build_ui()
         self._build_overlays()
+        self._bus.subscribe_qt(EventType.CAMERA_ZOOM_INVALIDATED, self._on_zoom_invalidated)
 
         # Crear los workers iniciales (arranca su thread TCP). El cableado de
         # las señales de estado de conexión a los LEDs vive en _on_worker_ready,

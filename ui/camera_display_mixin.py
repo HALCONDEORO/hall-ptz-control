@@ -66,6 +66,14 @@ class CameraDisplayMixin:
             return
         self._set_zoom_feedback(pct)
 
+    def _on_zoom_invalidated(self, event) -> None:
+        """A confirmed preset changed zoom; observe it without another command."""
+        if (getattr(self, "_shutting_down", False)
+                or not getattr(self, "session_active", False)
+                or event.payload.get("camera") != self._selected_cam_key()):
+            return
+        self._refresh_zoom()
+
     def _on_cam_connected(self, ok: bool, ip: str) -> None:
         if not ok or getattr(self, "_shutting_down", False):
             return
@@ -75,6 +83,12 @@ class CameraDisplayMixin:
             # A retired worker may still have a queued connection signal.
             # It must not trigger a query against an unrelated camera slot.
             return
+        # A camera can reconnect after a preset or an external remote changed
+        # its zoom. A pre-disconnection cache is not a new observation.
+        self._camera_port.invalidate_zoom(cam_key)
+        if (getattr(self, "session_active", False)
+                and cam_key == self._selected_cam_key()):
+            self._refresh_zoom()
         window_ref = weakref.ref(self)
         generation = capture_display_generation(self._camera_port, cam_key)
         # The query thread calls this back; hop to the Qt thread and re-check.
