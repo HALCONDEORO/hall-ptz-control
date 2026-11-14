@@ -52,6 +52,28 @@ This project uses a simple versioning approach while it is still in early produc
 - Explain the project, room-operator audience and pending hardware validation
   on the first screen. Remove the repeated feature-summary band.
 
+## 1.2.2 - Release candidate
+
+Prepared on 2026-11-14 for operator testing. Target-Pi acceptance and a verified
+external pre-update backup remain pending. See `docs/releases/1.2.2.md`.
+
+### Fixed
+
+- Read observed zoom after the latest absolute-zoom command settles, including
+  failure or timeout, instead of leaving the requested target on screen (#321).
+- Reject older zoom readbacks after a newer slider intent, and suppress settled
+  feedback after session changes, camera changes, shutdown or a newer debounce.
+
+### Known limits
+
+- Preset requests still use the existing FIFO controller path. A later preset
+  does not immediately supersede an in-flight recall or discard intermediate
+  pending presets. This release does not claim last-preset priority.
+- Physical camera behavior, motion interruption and stopping remain unverified
+  on the target Raspberry Pi. A failed inquiry cannot establish actual zoom.
+- The published v1.2.1 tag and assets remain unchanged.
+
+
 ## 1.2.1 - Release candidate
 
 Prepared for validation on 2026-11-11. Not yet certified on the target Pi.
