@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 class ZoomDispatcher(QObject):
     finished = pyqtSignal()
+    settled = pyqtSignal(str)
 
     def __init__(self, current_session, parent=None):
         super().__init__(parent)
@@ -32,6 +33,7 @@ class ZoomDispatcher(QObject):
         if generation != self._current_session():
             return
         self._running = True
+        self._inflight = request
 
         def run():
             try:
@@ -52,3 +54,5 @@ class ZoomDispatcher(QObject):
         request, self._pending = self._pending, None
         if request is not None:
             self._start(request)
+        elif self._inflight[0] == self._current_session():
+            self.settled.emit(self._inflight[2])

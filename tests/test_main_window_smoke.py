@@ -658,3 +658,22 @@ def test_comments_home_button_observes_zoom_without_claiming_home_completion(zoo
         assert window.ZoomValueLabel.text() == '10%'
     port.zoom_absolute.assert_not_called()
     assert not window._zoom_timer.isActive()
+
+
+@pytest.mark.parametrize('values', [(70,), (70, 10)])
+def test_zoom_readback_cannot_replace_newer_slider_intent(zoom_feedback_window, _qapp, monkeypatch, values):
+    from unittest.mock import Mock
+    window = zoom_feedback_window
+    window._set_zoom_feedback(10)
+    callbacks = []
+    monkeypatch.setattr(window._camera_port, 'refresh_zoom_display',
+                        lambda key, callback: callbacks.append(callback))
+    monkeypatch.setattr(window._camera_port, 'zoom_absolute', Mock())
+    window._refresh_zoom()
+    for value in values:
+        window.ZoomSlider.setValue(value)
+    callbacks[0](23)
+    _qapp.processEvents()
+    assert window.ZoomSlider.value() == values[-1]
+    window._camera_port.zoom_absolute.assert_not_called()
+    window._zoom_timer.stop()

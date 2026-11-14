@@ -383,6 +383,17 @@ class RightPanel:
 
         self._zoom_dispatcher = ZoomDispatcher(_current_zoom_session, block)
 
+        def _refresh_observed_zoom(camera_id):
+            if (_current_zoom_session() is None or mw._zoom_timer.isActive()
+                    or camera_id != ("cam1" if mw.Cam1.isChecked() else "cam2")):
+                return
+            # The target shown during a drag is intent, not a camera readback.
+            # Even a failed/timed-out command may have moved the lens partially.
+            mw._camera_port.invalidate_zoom(1 if camera_id == "cam1" else 2)
+            mw._refresh_zoom()
+
+        self._zoom_dispatcher.settled.connect(_refresh_observed_zoom)
+
         def _send_zoom_absolute():
             port = getattr(mw, '_camera_port', None)
             if port is None or not self._motion_widget.isEnabled():
@@ -395,6 +406,7 @@ class RightPanel:
         def _zoom_value_changed(value):
             mw.ZoomValueLabel.setText(f"{value}%")
             if not mw._zoom_feedback:
+                mw._zoom_intent_generation = getattr(mw, '_zoom_intent_generation', 0) + 1
                 record_activity = getattr(mw, '_record_activity', None)
                 if callable(record_activity):
                     record_activity()
