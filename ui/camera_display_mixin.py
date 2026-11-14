@@ -63,17 +63,23 @@ class CameraDisplayMixin:
         window_ref = weakref.ref(self)
         cam_key = self._selected_cam_key()
         generation = capture_display_generation(self._camera_port, cam_key)
+        intent_generation = getattr(self, '_zoom_intent_generation', 0)
         self._camera_port.refresh_zoom_display(
             cam_key,
             lambda pct: _queue_display_update(
-                window_ref, "_apply_zoom_feedback", cam_key, generation, pct,
+                window_ref, "_apply_zoom_feedback", cam_key, generation, pct, intent_generation,
             ),
         )
 
     @pyqtSlot(int, int, int)
-    def _apply_zoom_feedback(self, cam_key: int, generation: int, pct: int) -> None:
+    @pyqtSlot(int, int, int, int)
+    def _apply_zoom_feedback(self, cam_key: int, generation: int, pct: int,
+                             intent_generation: int = -1) -> None:
         """Queued zoom result: drop it if the camera was reconfigured meanwhile."""
         if getattr(self, "_shutting_down", False):
+            return
+        if (intent_generation != -1
+                and intent_generation != getattr(self, '_zoom_intent_generation', 0)):
             return
         if not display_update_is_current(
             self._camera_port, cam_key, generation, self._selected_cam_key()
