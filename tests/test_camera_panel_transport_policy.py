@@ -34,7 +34,7 @@ with TemporaryDirectory() as root:
     assert panel._controls_widget.isVisible(), 'transport loss hides panel'
     assert not panel._motion_widget.isEnabled()
     assert panel._connection_status_label.isVisible()
-    assert panel._connection_status_label.text() == 'Reconectando...'
+    assert panel._connection_status_label.text() == 'Reconnecting...'
     w.Cam2.click()
     app.processEvents()
     assert panel._controls_widget.isVisible()

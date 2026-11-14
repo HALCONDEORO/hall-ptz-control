@@ -162,7 +162,7 @@ class RightPanel:
         layout.setSpacing(4)
 
         self._add_camera_selector(layout)
-        self._connection_status_label = QLabel('Reconectando...', self._container)
+        self._connection_status_label = QLabel('Reconnecting...', self._container)
         self._connection_status_label.setAlignment(Qt.AlignCenter)
         self._connection_status_label.setMinimumHeight(26)
         status_policy = self._connection_status_label.sizePolicy()
