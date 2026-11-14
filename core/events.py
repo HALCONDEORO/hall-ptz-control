@@ -51,6 +51,7 @@ class EventType(Enum):
 class Event:
     type: EventType
     payload: Dict[str, Any]
+    _preset_superseded: bool = False
 
 
 class _QtDispatchProxy:
@@ -99,6 +100,9 @@ class AsyncEventBus:
         self._worker: Optional[threading.Thread] = None
         self._lifecycle_lock = threading.Lock()
         self._stop_requested = False
+        # Only not-yet-dispatched recalls may be replaced. Admission and worker
+        # claim share the lifecycle lock; in-flight handlers are never retired.
+        self._pending_presets: Dict[Any, Event] = {}
         # One explicit queue-only STOP subscriber; ordinary handlers stay serial.
         self._safety_prepare = None
         self._safety_stop = None
@@ -207,6 +211,16 @@ class AsyncEventBus:
             if self._stop_requested:
                 logger.debug("Discarding event after stop: %s", event_type)
                 return
+            if event_type in (EventType.SESSION_START, EventType.SESSION_END):
+                # Do not merge intents across an explicit session boundary.
+                self._pending_presets.clear()
+            if event_type is EventType.SEAT_SELECTED:
+                # Controller preparation resolves the active camera at emit time.
+                camera = event.payload.get("camera")
+                previous = self._pending_presets.get(camera)
+                if previous is not None:
+                    previous._preset_superseded = True
+                self._pending_presets[camera] = event
             self._queue.put(event)
 
     def register_motion_safety(self, prepare, stop_handler, cancel_handler=None) -> None:
@@ -264,6 +278,13 @@ class AsyncEventBus:
             try:
                 if event is None:  # centinela de parada
                     break
+                with self._lifecycle_lock:
+                    if event.type is EventType.SEAT_SELECTED:
+                        if event._preset_superseded:
+                            continue
+                        camera = event.payload.get("camera")
+                        if self._pending_presets.get(camera) is event:
+                            del self._pending_presets[camera]
                 with self._lock:
                     handlers = list(self._subscribers.get(event.type, []))
                 for handler in handlers:
